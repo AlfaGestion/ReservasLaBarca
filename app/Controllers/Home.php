@@ -111,11 +111,10 @@ class Home extends BaseController
 
         try {
             // Expira slots pendientes vencidos
-            $bookingSlotsModel->where('active', 1)
-                ->where('status', 'pending')
-                ->where('expires_at <', date('Y-m-d H:i:s'))
-                ->set(['active' => 0, 'status' => 'expired'])
-                ->update();
+            $this->expireActiveBookingSlots($bookingSlotsModel, [
+                'status' => 'pending',
+                'expires_at <' => date('Y-m-d H:i:s'),
+            ]);
 
             // 1. Buscamos las reservas candidatas
             $bookingsCandidates = $bookingsModel->groupStart()
@@ -144,10 +143,9 @@ class Home extends BaseController
                 // ORDEN DE BORRADO (Hijos primero, Padre al final)
 
                 // 0. Expirar slots de esas reservas
-                $bookingSlotsModel->whereIn('booking_id', $idsToDelete)
-                    ->where('active', 1)
-                    ->set(['active' => 0, 'status' => 'expired'])
-                    ->update();
+                $this->expireActiveBookingSlots($bookingSlotsModel, [], [
+                    'booking_id' => $idsToDelete,
+                ]);
 
                 // 1. Borrar de la tabla 'payments' (la que dio el error ahora)
                 $paymentsModel->whereIn('id_booking', $idsToDelete)->delete();

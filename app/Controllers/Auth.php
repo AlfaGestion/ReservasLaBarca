@@ -18,31 +18,40 @@ class Auth extends BaseController
         $user = $this->request->getVar('user');
         $password = $this->request->getVar('password');
 
-        $userData = $modelUsers->where("user", $user)->first();
+        $userData = $modelUsers->where('user', $user)->first();
+        $invalidCredentials = redirect()->to('auth/login')->with('msg', [
+            'type' => 'danger',
+            'body' => 'El usuario o la contrasena no son correctos',
+        ]);
 
-        if(isset($userData)){
-            if(password_verify($password, $userData['password'])){
-                $sessionData = [
-                    'id_user'    => $userData['id'],
-                    'user'       => $userData['user'],
-                    'active'     => $userData['active'],
-                    'name'       => $userData['name'],
-                    'superadmin' => $userData['superadmin'],
-                    'logueado'   => true,
-                ];
-
-                session()->set($sessionData);
-
-                return redirect()->to(base_url('abmAdmin'));
-            } else {
-                return redirect()->to('auth/login')->with('msg', ['type' => 'danger', 'body' => 'El usuario o la contraseña no son correctos']);
-            }
-        } else {
-            return redirect()->to('auth/login')->with('msg', ['type' => 'danger', 'body' => 'El usuario o la contraseña no son correctos']);
+        if (! isset($userData)) {
+            return $invalidCredentials;
         }
+
+        if ((int) ($userData['active'] ?? 0) !== 1) {
+            return $invalidCredentials;
+        }
+
+        if (! password_verify($password, $userData['password'])) {
+            return $invalidCredentials;
+        }
+
+        $sessionData = [
+            'id_user'    => $userData['id'],
+            'user'       => $userData['user'],
+            'active'     => $userData['active'],
+            'name'       => $userData['name'],
+            'superadmin' => $userData['superadmin'],
+            'logueado'   => true,
+        ];
+
+        session()->set($sessionData);
+
+        return redirect()->to(base_url('abmAdmin'));
     }
 
-    public function log_out(){
+    public function log_out()
+    {
         session()->destroy();
 
         return redirect()->route('auth/login');
@@ -59,39 +68,71 @@ class Auth extends BaseController
     public function dbRegister()
     {
         $modelUsers = new UsersModel();
+        $redirectOnError = session()->get('logueado') ? 'abmAdmin' : 'auth/register';
+        $redirectOnSuccess = session()->get('logueado') ? 'abmAdmin' : 'auth/login';
+        $isAjaxRequest = $this->request->isAJAX();
 
-        $password = $this->request->getVar('password');
-        $repeat_password = $this->request->getVar('repeat_password');
-        $hash_password = '';
+        $password = (string) $this->request->getVar('password');
+        $repeatPassword = (string) $this->request->getVar('repeat_password');
         $superadmin = $this->request->getVar('superadmin') ? 1 : 0;
-        $user = $this->request->getVar('user');
-        $name = $this->request->getVar('name');
+        $user = trim((string) $this->request->getVar('user'));
+        $name = trim((string) $this->request->getVar('name'));
 
-        if($password == $repeat_password){
-            $hash_password = password_hash($password, PASSWORD_DEFAULT);
-        } else {
-            return redirect()->to('auth/register')->with('msg', ['type' => 'danger', 'body' => 'Las contraseñas no coinciden']);
+        $respondError = function (string $message, int $statusCode = 400) use ($isAjaxRequest, $redirectOnError) {
+            if ($isAjaxRequest) {
+                return $this->response
+                    ->setStatusCode($statusCode)
+                    ->setJSON([
+                        'error' => true,
+                        'message' => $message,
+                        'csrf' => [
+                            'name' => csrf_token(),
+                            'hash' => csrf_hash(),
+                        ],
+                    ]);
+            }
+
+            return redirect()->to($redirectOnError)->with('msg', ['type' => 'danger', 'body' => $message]);
+        };
+
+        if ($password !== $repeatPassword) {
+            return $respondError('Las contrasenas no coinciden');
         }
 
-        if($user == '' || $name == '' || $password == ''){
-            return redirect()->to('auth/register')->with('msg', ['type' => 'danger', 'body' => 'Debe completar todos los datos']);
+        if ($user === '' || $name === '' || $password === '') {
+            return $respondError('Debe completar todos los datos');
         }
-        
+
         $query = [
             'user' => $user,
-            'password' => $hash_password,
+            'password' => password_hash($password, PASSWORD_DEFAULT),
             'superadmin' => $superadmin,
             'name' => $name,
         ];
 
-
         try {
-            $modelUsers->insert($query);
+            $insertId = $modelUsers->insert($query);
         } catch (\Exception $e) {
-            return "Error al insertar datos: ".$e->getMessage();
+            return $respondError('Error al insertar datos: ' . $e->getMessage(), 500);
         }
 
-        return redirect()->to('auth/login')->with('msg', ['type' => 'success', 'body' => 'Usuario creado correctamente']);
-    }
+        if ($isAjaxRequest) {
+            return $this->response->setJSON([
+                'error' => false,
+                'message' => 'Usuario creado correctamente',
+                'user' => [
+                    'id' => $insertId,
+                    'user' => $user,
+                    'name' => $name,
+                    'superadmin' => $superadmin,
+                ],
+                'csrf' => [
+                    'name' => csrf_token(),
+                    'hash' => csrf_hash(),
+                ],
+            ]);
+        }
 
+        return redirect()->to($redirectOnSuccess)->with('msg', ['type' => 'success', 'body' => 'Usuario creado correctamente']);
+    }
 }

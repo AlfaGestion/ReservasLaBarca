@@ -16,6 +16,48 @@ use App\Models\RateModel;
 
 class MercadoPago extends BaseController
 {
+    private function releaseBookingSlot(BookingSlotsModel $bookingSlotsModel, int $slotId): void
+    {
+        $slot = $bookingSlotsModel->find($slotId);
+        if (!$slot) {
+            return;
+        }
+
+        $hasInactiveDuplicate = $bookingSlotsModel
+            ->where('date', $slot['date'])
+            ->where('id_field', $slot['id_field'])
+            ->where('time_from', $slot['time_from'])
+            ->where('time_until', $slot['time_until'])
+            ->where('active', 0)
+            ->where('id !=', $slotId)
+            ->first();
+
+        // La unique key tambien cubre active=0. Si ya existe un historico inactivo
+        // para ese horario, actualizar otro registro a 0 rompe la restriccion.
+        if ($hasInactiveDuplicate) {
+            $bookingSlotsModel->delete($slotId);
+            return;
+        }
+
+        $bookingSlotsModel->update($slotId, ['active' => 0, 'status' => 'cancelled']);
+    }
+
+    private function releaseActiveSlots(BookingSlotsModel $bookingSlotsModel, array $conditions): void
+    {
+        $builder = $bookingSlotsModel->where('active', 1);
+        foreach ($conditions as $field => $value) {
+            $builder->where($field, $value);
+        }
+
+        $slots = $builder->findAll();
+        foreach ($slots as $slot) {
+            $slotId = (int)($slot['id'] ?? 0);
+            if ($slotId > 0) {
+                $this->releaseBookingSlot($bookingSlotsModel, $slotId);
+            }
+        }
+    }
+
     private function getMercadoPagoPaidAmount($paymentId)
     {
         if (empty($paymentId)) {
@@ -98,6 +140,14 @@ class MercadoPago extends BaseController
             return;
         }
 
+        $toEmails = array_values(array_filter(array_map(
+            static fn($email) => filter_var(trim((string) $email), FILTER_VALIDATE_EMAIL) ?: null,
+            explode(';', $toEmail)
+        )));
+        if ($toEmails === []) {
+            return;
+        }
+
         $bookingsModel = new BookingsModel();
         $fieldsModel = new \App\Models\FieldsModel();
         $booking = $bookingsModel->getBooking($bookingId);
@@ -135,11 +185,11 @@ class MercadoPago extends BaseController
         $fromEmail = $emailConfig->fromEmail ?? '';
         $fromName = $emailConfig->fromName ?? 'Reservas';
         if (!is_string($fromEmail) || trim($fromEmail) === '') {
-            $fromEmail = $toEmail;
+            $fromEmail = $toEmails[0];
         }
 
         $email->setFrom($fromEmail, $fromName);
-        $email->setTo($toEmail);
+        $email->setTo($toEmails);
         $subjectName = trim((string)($booking['name'] ?? 'Cliente'));
         $subjectDate = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'Sin fecha';
         $email->setSubject("Reserva: {$subjectName} - {$subjectDate}");
@@ -542,10 +592,9 @@ class MercadoPago extends BaseController
                 if ($data['status'] != 'approved') {
                     // Si el usuario cierra el checkout o falla el pago, anulamos la reserva.
                     $bookingsModel->update($existingBooking['id'], ['approved' => 0, 'annulled' => 1]);
-                    $bookingSlotsModel->where('booking_id', $existingBooking['id'])
-                        ->where('active', 1)
-                        ->set(['active' => 0, 'status' => 'expired'])
-                        ->update();
+                    $this->expireActiveBookingSlots($bookingSlotsModel, [
+                        'booking_id' => $existingBooking['id'],
+                    ]);
                 }
             }
 
@@ -557,7 +606,9 @@ class MercadoPago extends BaseController
                 $intents = session()->get('mp_intents') ?? [];
                 $intent = $intents[$data['preference_id']] ?? null;
                 if ($intent && isset($intent['booking']['slotId'])) {
-                    $bookingSlotsModel->update($intent['booking']['slotId'], ['active' => 0, 'status' => 'expired']);
+                    $this->expireActiveBookingSlots($bookingSlotsModel, [
+                        'id' => $intent['booking']['slotId'],
+                    ]);
                 }
             }
         }
@@ -662,21 +713,19 @@ class MercadoPago extends BaseController
                     ->set(['annulled' => 1, 'approved' => 0])
                     ->update();
 
-                $bookingSlotsModel->whereIn('booking_id', $bookingIds)
-                    ->where('active', 1)
-                    ->set(['active' => 0, 'status' => 'cancelled'])
-                    ->update();
+                foreach ($bookingIds as $currentBookingId) {
+                    $this->releaseActiveSlots($bookingSlotsModel, ['booking_id' => $currentBookingId]);
+                }
             }
 
             if (!empty($slotPairs)) {
                 foreach ($slotPairs as $pair) {
-                    $bookingSlotsModel->where('date', $pair['date'])
-                        ->where('id_field', $pair['id_field'])
-                        ->where('time_from', $pair['time_from'])
-                        ->where('time_until', $pair['time_until'])
-                        ->where('active', 1)
-                        ->set(['active' => 0, 'status' => 'cancelled'])
-                        ->update();
+                    $this->releaseActiveSlots($bookingSlotsModel, [
+                        'date' => $pair['date'],
+                        'id_field' => $pair['id_field'],
+                        'time_from' => $pair['time_from'],
+                        'time_until' => $pair['time_until'],
+                    ]);
 
                     $bookingsModel->where('date', $pair['date'])
                         ->where('id_field', $pair['id_field'])
@@ -692,14 +741,14 @@ class MercadoPago extends BaseController
             if ($prefParcial && isset($intents[$prefParcial])) {
                 $slotId = $intents[$prefParcial]['booking']['slotId'] ?? null;
                 if ($slotId) {
-                    $bookingSlotsModel->update($slotId, ['active' => 0, 'status' => 'cancelled']);
+                    $this->releaseBookingSlot($bookingSlotsModel, (int)$slotId);
                 }
                 unset($intents[$prefParcial]);
             }
             if ($prefTotal && isset($intents[$prefTotal])) {
                 $slotId = $intents[$prefTotal]['booking']['slotId'] ?? null;
                 if ($slotId) {
-                    $bookingSlotsModel->update($slotId, ['active' => 0, 'status' => 'cancelled']);
+                    $this->releaseBookingSlot($bookingSlotsModel, (int)$slotId);
                 }
                 unset($intents[$prefTotal]);
             }

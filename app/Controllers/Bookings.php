@@ -48,6 +48,14 @@ class Bookings extends BaseController
             return;
         }
 
+        $toEmails = array_values(array_filter(array_map(
+            static fn($email) => filter_var(trim((string) $email), FILTER_VALIDATE_EMAIL) ?: null,
+            explode(';', $toEmail)
+        )));
+        if ($toEmails === []) {
+            return;
+        }
+
         $bookingsModel = new BookingsModel();
         $fieldsModel = new FieldsModel();
         $booking = $bookingsModel->getBooking($bookingId);
@@ -85,11 +93,11 @@ class Bookings extends BaseController
         $fromEmail = $emailConfig->fromEmail ?? '';
         $fromName = $emailConfig->fromName ?? 'Reservas';
         if (!is_string($fromEmail) || trim($fromEmail) === '') {
-            $fromEmail = $toEmail;
+            $fromEmail = $toEmails[0];
         }
 
         $email->setFrom($fromEmail, $fromName);
-        $email->setTo($toEmail);
+        $email->setTo($toEmails);
         $subjectName = trim((string)($booking['name'] ?? 'Cliente'));
         $subjectDate = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'Sin fecha';
         $email->setSubject("Reserva: {$subjectName} - {$subjectDate}");
@@ -241,11 +249,10 @@ class Bookings extends BaseController
             $now = date('Y-m-d H:i:s');
 
             // Limpiar locks vencidos para no mostrar falsos bloqueos.
-            $bookingSlotsModel->where('active', 1)
-                ->where('status', 'pending')
-                ->where('expires_at <', $now)
-                ->set(['active' => 0, 'status' => 'expired'])
-                ->update();
+            $this->expireActiveBookingSlots($bookingSlotsModel, [
+                'status' => 'pending',
+                'expires_at <' => $now,
+            ]);
 
             // 1) Reservas reales (tabla bookings): siempre bloquean si no están anuladas.
             $bookings = $bookingsModel->where('date', $fecha)

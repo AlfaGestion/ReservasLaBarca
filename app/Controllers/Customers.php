@@ -6,6 +6,30 @@ use App\Models\CustomersModel;
 
 class Customers extends BaseController
 {
+    private function getDistinctCustomers(?int $limit = null, ?int $offer = null): array
+    {
+        $db = \Config\Database::connect();
+
+        $latestIdsSql = $db->table('customers')
+            ->select('MAX(id) AS id')
+            ->groupBy('phone')
+            ->getCompiledSelect();
+
+        $builder = $db->table('customers c')
+            ->select('c.*')
+            ->join("($latestIdsSql) latest", 'latest.id = c.id', 'inner')
+            ->orderBy('c.id', 'DESC');
+
+        if ($offer !== null) {
+            $builder->where('c.offer', $offer);
+        }
+
+        if ($limit !== null && $limit > 0) {
+            $builder->limit($limit);
+        }
+
+        return $builder->get()->getResultArray();
+    }
 
     public function register()
     {
@@ -147,15 +171,13 @@ class Customers extends BaseController
 
     public function getCustomers()
     {
-        $customersModel = new CustomersModel();
         $limitParam = $this->request->getGet('limit');
         $limit = is_numeric($limitParam) ? (int)$limitParam : 0;
         if ($limit > 0) {
-            // Tope defensivo para evitar consultas excesivas.
             $limit = min($limit, 200);
-            $customers = $customersModel->orderBy('id', 'DESC')->findAll($limit);
+            $customers = $this->getDistinctCustomers($limit);
         } else {
-            $customers = $customersModel->findAll();
+            $customers = $this->getDistinctCustomers();
         }
 
         try {
@@ -167,9 +189,7 @@ class Customers extends BaseController
 
     public function getCustomersWithOffer()
     {
-        $customersModel = new CustomersModel();
-
-        $customers = $customersModel->where('offer', 1)->findAll();
+        $customers = $this->getDistinctCustomers(null, 1);
 
         try {
             return  $this->response->setJSON($this->setResponse(null, null, $customers, 'Respuesta exitosa'));

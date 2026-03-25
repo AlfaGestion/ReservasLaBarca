@@ -7,6 +7,158 @@
 
 <?php echo $this->section('content') ?>
 
+<style>
+    .superadmin-reservas .nav-tabs {
+        border-bottom-color: #cfe0f1;
+    }
+    .superadmin-reservas .nav-tabs .nav-link {
+        color: #2a5378;
+        border-color: transparent transparent #cfe0f1 transparent;
+    }
+    .superadmin-reservas .nav-tabs .nav-link.active {
+        color: #0b63b6;
+        background: #ffffff;
+        border-color: #cfe0f1 #cfe0f1 #ffffff #cfe0f1;
+        font-weight: 600;
+    }
+    .superadmin-reservas .table {
+        --bs-table-bg: #ffffff;
+        --bs-table-striped-bg: #f5f9fd;
+        --bs-table-striped-color: #17324d;
+        --bs-table-color: #17324d;
+        --bs-table-border-color: #d8e6f4;
+    }
+    .superadmin-reservas .table thead th {
+        color: #1f4467;
+    }
+    .superadmin-reservas .table td,
+    .superadmin-reservas .table th {
+        vertical-align: middle;
+    }
+    .superadmin-reservas .card,
+    .superadmin-reservas .modal-content {
+        border-color: #d8e6f4;
+    }
+
+    body.theme-dark .superadmin-reservas {
+        color: #dbe9f8;
+    }
+    body.theme-dark .superadmin-reservas .nav-tabs {
+        border-bottom-color: #345672;
+    }
+    body.theme-dark .superadmin-reservas .nav-tabs .nav-link {
+        color: #b7d4ee;
+        border-color: transparent transparent #345672 transparent;
+    }
+    body.theme-dark .superadmin-reservas .nav-tabs .nav-link.active {
+        color: #dff0ff;
+        background: #182d42;
+        border-color: #345672 #345672 #182d42 #345672;
+    }
+    body.theme-dark .superadmin-reservas .card,
+    body.theme-dark .superadmin-reservas .modal-content,
+    body.theme-dark .superadmin-reservas .nav-tabs,
+    body.theme-dark .superadmin-reservas .tab-content > .tab-pane,
+    body.theme-dark .superadmin-reservas .accordion-item,
+    body.theme-dark .superadmin-reservas .list-group-item {
+        background: #182d42 !important;
+        border-color: #33506e !important;
+        color: #dbe9f8 !important;
+    }
+    body.theme-dark .superadmin-reservas .accordion-button {
+        background: #21374d !important;
+        color: #dbe9f8 !important;
+        border-color: #33506e !important;
+        box-shadow: none;
+    }
+    body.theme-dark .superadmin-reservas .accordion-button:not(.collapsed) {
+        background: #1d344c !important;
+        color: #e7f2ff !important;
+    }
+    body.theme-dark .superadmin-reservas .table,
+    body.theme-dark .superadmin-reservas .table thead th,
+    body.theme-dark .superadmin-reservas .table tbody td,
+    body.theme-dark .superadmin-reservas .table tbody th {
+        color: #dbe9f8;
+    }
+    body.theme-dark .superadmin-reservas .table {
+        --bs-table-bg: #182d42;
+        --bs-table-striped-bg: #21374d;
+        --bs-table-striped-color: #dbe9f8;
+        --bs-table-color: #dbe9f8;
+        --bs-table-border-color: #33506e;
+    }
+    body.theme-dark .superadmin-reservas .form-control,
+    body.theme-dark .superadmin-reservas .form-select,
+    body.theme-dark .superadmin-reservas .form-floating > .form-control,
+    body.theme-dark .superadmin-reservas .form-floating > .form-select,
+    body.theme-dark .superadmin-reservas textarea.form-control,
+    body.theme-dark .superadmin-reservas .input-group-text {
+        background: #193047 !important;
+        border-color: #356fbf !important;
+        color: #e6edf3 !important;
+    }
+    body.theme-dark .superadmin-reservas .form-control:focus,
+    body.theme-dark .superadmin-reservas .form-select:focus,
+    body.theme-dark .superadmin-reservas .form-floating > .form-control:focus,
+    body.theme-dark .superadmin-reservas .form-floating > .form-select:focus,
+    body.theme-dark .superadmin-reservas textarea.form-control:focus {
+        background: #223c56 !important;
+        border-color: #72a7ea !important;
+        box-shadow: 0 0 0 .2rem rgba(114, 167, 234, .18);
+    }
+    body.theme-dark .superadmin-reservas .form-floating > label,
+    body.theme-dark .superadmin-reservas .form-label,
+    body.theme-dark .superadmin-reservas .text-muted,
+    body.theme-dark .superadmin-reservas .small.text-muted,
+    body.theme-dark .superadmin-reservas h1,
+    body.theme-dark .superadmin-reservas h2,
+    body.theme-dark .superadmin-reservas h3,
+    body.theme-dark .superadmin-reservas h4,
+    body.theme-dark .superadmin-reservas h5,
+    body.theme-dark .superadmin-reservas h6,
+    body.theme-dark .superadmin-reservas p,
+    body.theme-dark .superadmin-reservas span,
+    body.theme-dark .superadmin-reservas label,
+    body.theme-dark .superadmin-reservas strong,
+    body.theme-dark .superadmin-reservas li,
+    body.theme-dark .superadmin-reservas a:not(.btn) {
+        color: #dbe9f8 !important;
+    }
+    body.theme-dark .superadmin-reservas .btn-outline-primary {
+        color: #c7dff5;
+        border-color: #4b77a0;
+    }
+    body.theme-dark .superadmin-reservas .btn-outline-primary:hover {
+        color: #ffffff;
+        background: #165ecc;
+        border-color: #165ecc;
+    }
+    body.theme-dark .superadmin-reservas .btn-outline-dark,
+    body.theme-dark .superadmin-reservas .btn-outline-secondary {
+        color: #c7dff5;
+        border-color: #4b77a0;
+        background: transparent;
+    }
+    body.theme-dark .superadmin-reservas .btn-outline-dark:hover,
+    body.theme-dark .superadmin-reservas .btn-outline-dark:focus,
+    body.theme-dark .superadmin-reservas .btn-outline-secondary:hover,
+    body.theme-dark .superadmin-reservas .btn-outline-secondary:focus {
+        color: #ffffff;
+        background: #21374d;
+        border-color: #72a7ea;
+    }
+    body.theme-dark .superadmin-reservas .btn-outline-danger {
+        color: #f1b5bb;
+        border-color: #8d4b56;
+    }
+    body.theme-dark .superadmin-reservas .btn-outline-danger:hover {
+        color: #ffffff;
+        background: #bb2d3b;
+        border-color: #bb2d3b;
+    }
+</style>
+
 <?php if (session('msg')) : ?>
     <div class="alert alert-<?= session('msg.type') ?> alert-dismissible fade show" role="alert">
         <small> <?= session('msg.body') ?> </small>
@@ -14,7 +166,7 @@
     </div>
 <?php endif; ?>
 
-<div class="container">
+<div class="container superadmin-reservas">
     <div class="row">
         <div class="col-12">
             <nav>
@@ -133,6 +285,7 @@
 <script src="<?= base_url(PUBLIC_FOLDER . "assets/js/searchBookings.js?v=" . time()) ?>"></script>
 <script src="<?= base_url(PUBLIC_FOLDER . "assets/js/customers.js?v=" . time()) ?>"></script>
 <script src="<?= base_url(PUBLIC_FOLDER . "assets/js/editReserva.js?v=" . time()) ?>"></script>
+<script src="<?= base_url(PUBLIC_FOLDER . "assets/js/users.js?v=" . time()) ?>"></script>
 
 
 <?php echo $this->endSection() ?>

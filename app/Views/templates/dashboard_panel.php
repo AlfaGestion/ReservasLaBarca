@@ -6,6 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="app-base-url" content="<?= env('app.apiBaseURL', base_url()) ?>">
     <meta name="app-web-base-url" content="<?= base_url() ?>">
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('reservas_theme') === 'dark') {
+                    document.addEventListener('DOMContentLoaded', function () {
+                        document.body.classList.add('theme-dark');
+                    });
+                }
+            } catch (e) {}
+        })();
+    </script>
     <?php echo $this->renderSection('title') ?>
     <title>Home</title>
 
@@ -19,9 +30,9 @@
 
 </head>
 
-<body>
+<body class="site-body">
     <?php echo $this->renderSection('navbar') ?>
-    <nav class="navbar navbar-expand-lg" style="background-color: #ffffff;">
+    <nav class="navbar navbar-expand-lg site-navbar" style="background-color: #ffffff;">
         <div class="container-fluid d-flex justify-content-center align-items-center flex-row">
             <div class="d-flex justify-content-center align-items-center flex-row">
                 
@@ -52,7 +63,7 @@
     <?php echo $this->renderSection('footer') ?>
 
     <div class="container-fluid">
-        <footer class="my-4" style="background-color: #5a5a5a;">
+        <footer class="my-4 site-footer" style="background-color: #5a5a5a;">
             <?php if (session()->logueado) : ?>
                 <ul class="nav justify-content-center border-bottom pb-3 mb-3">
                     <li class="nav-item"><a href="<?= base_url('auth/logOut') ?>" class="nav-link px-2 text-muted">Cerrar sesión</a></li>

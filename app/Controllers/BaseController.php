@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use App\Models\BookingSlotsModel;
 use App\Models\LocalitiesModel;
 use CodeIgniter\Controller;
 use CodeIgniter\HTTP\CLIRequest;
@@ -83,6 +84,44 @@ abstract class BaseController extends Controller
         $existing = $localitiesModel->where('LOWER(name)', $lower)->first();
         if (!$existing) {
             $localitiesModel->insert(['name' => $normalized]);
+        }
+    }
+
+    protected function expireActiveBookingSlots(BookingSlotsModel $bookingSlotsModel, array $where = [], array $whereIn = []): void
+    {
+        $query = $bookingSlotsModel->select('id, date, id_field, time_from, time_until')
+            ->where('active', 1);
+
+        foreach ($where as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        foreach ($whereIn as $field => $values) {
+            if (!empty($values)) {
+                $query->whereIn($field, $values);
+            }
+        }
+
+        $slots = $query->findAll();
+        if (empty($slots)) {
+            return;
+        }
+
+        foreach ($slots as $slot) {
+            $hasInactiveDuplicate = $bookingSlotsModel
+                ->where('active', 0)
+                ->where('date', $slot['date'])
+                ->where('id_field', $slot['id_field'])
+                ->where('time_from', $slot['time_from'])
+                ->where('time_until', $slot['time_until'])
+                ->first();
+
+            if ($hasInactiveDuplicate) {
+                $bookingSlotsModel->delete($slot['id']);
+                continue;
+            }
+
+            $bookingSlotsModel->update($slot['id'], ['active' => 0, 'status' => 'expired']);
         }
     }
 }

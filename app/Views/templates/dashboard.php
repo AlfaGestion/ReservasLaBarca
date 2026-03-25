@@ -6,6 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="app-base-url" content="<?= env('app.apiBaseURL', base_url()) ?>">
     <meta name="app-web-base-url" content="<?= base_url() ?>">
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('reservas_theme') === 'dark') {
+                    document.addEventListener('DOMContentLoaded', function () {
+                        document.body.classList.add('theme-dark');
+                    });
+                }
+            } catch (e) {}
+        })();
+    </script>
     <?php
 
     use App\Models\UploadModel;
@@ -30,19 +41,19 @@ $userBackground = $modelUploads->first();
 
 <?php if ($userBackground) : ?>
 
-    <body style="background: url(<?= base_url(PUBLIC_FOLDER . "assets/images/uploads/" . $userBackground['name']) ?>);">
+    <body class="site-body has-custom-background" style="background-image: url(<?= base_url(PUBLIC_FOLDER . "assets/images/uploads/" . $userBackground['name']) ?>);">
     <?php else : ?>
 
-        <body>
+        <body class="site-body">
         <?php endif; ?>
 
         <?php echo $this->renderSection('navbar') ?>
         <?php if ($userBackground) : ?>
 
-            <nav class="navbar navbar-expand-lg" style="background: url(<?= base_url(PUBLIC_FOLDER . "assets/images/uploads" . $userBackground['name']) ?>);">
+            <nav class="navbar navbar-expand-lg site-navbar">
             <?php else : ?>
 
-                <nav class="navbar navbar-expand-lg" style="background-color: #ffffff;">
+                <nav class="navbar navbar-expand-lg site-navbar">
                 <?php endif; ?>
 
                 <div class="container-fluid">
@@ -76,12 +87,10 @@ $userBackground = $modelUploads->first();
                         </div>
                     <?php endif; ?>
 
-
                     <?php if (session()->logueado) : ?>
                         <span class="me-1"><?= session()->name ?></span>
                         <a href="<?= base_url('auth/logOut') ?>" class="btn btn-danger me-1" type="button" id=""><i class="fa-solid fa-plug-circle-xmark"></i></a>
                     <?php endif; ?>
-                </div>
                 </div>
                 </nav>
 
@@ -92,7 +101,7 @@ $userBackground = $modelUploads->first();
                 <?php echo $this->renderSection('footer') ?>
 
                 <div class="container-fluid">
-                    <footer class="my-4" style="background-color: #5a5a5a;">
+                    <footer class="my-4 site-footer">
                         <?php if (session()->logueado) : ?>
                             <ul class="nav justify-content-center border-bottom pb-3 mb-3">
                                 <li class="nav-item"><a href="<?= base_url('auth/logOut') ?>" class="nav-link px-2 text-muted">Cerrar sesión</a></li>

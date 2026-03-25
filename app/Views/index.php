@@ -43,9 +43,9 @@ $mpKeys = $mpKeysModel->first();
 
 
                     <!-- <p style="color: red; font-weight: bold">CUIDADO! LOS PAGOS EN ESTA VERSIÓN SERÁN PAGOS REALES</p> -->
-                    <div id="closureWelcomeNotice" class="alert alert-warning mx-3 d-none" style="white-space: pre-line;"></div>
+                    <div id="closureWelcomeNotice" class="alert alert-warning mx-3 d-none booking-preline"></div>
                     <div class="d-flex justify-content-center align-items-center mb-3">
-                        <button type="button" class="btn" style="background-color: #f39323;" data-bs-dismiss="modal">Comenzar reserva</button>
+                        <button type="button" class="btn btn-brand" data-bs-dismiss="modal">Comenzar reserva</button>
                     </div>
 
                     </div>
@@ -69,8 +69,8 @@ $mpKeys = $mpKeysModel->first();
             <span style="color: #fff; font-weight: bold; background-color: red; padding: 10px 10px; border-radius: 30px">Hoy las canchas permanecerán cerradas</span>
         </div>
 
-        <div id="closureTopNotice" class="alert alert-warning d-none mt-3" style="white-space: pre-line;"></div>
-        <div id="formBooking" class="">
+        <div id="closureTopNotice" class="alert alert-warning d-none mt-3 booking-preline"></div>
+        <div id="formBooking" class="booking-shell">
             <form action="" id="bookingForm">
 
                 <?php if (session('msg')) : ?>
@@ -161,12 +161,12 @@ $mpKeys = $mpKeysModel->first();
                 </datalist>
 
                 <?php if (session()->logueado) : ?>
-                    <button type="button" class="btn" style="background-color: #f39323;" id="confirmarAdminReserva">Confirmar reserva</button>
+                    <button type="button" class="btn btn-brand" id="confirmarAdminReserva">Confirmar reserva</button>
                 <?php else : ?>
-                    <button type="button" class="btn" style="background-color: #f39323;" id="confirmarReserva">Confirmar reserva</button>
+                    <button type="button" class="btn btn-brand" id="confirmarReserva">Confirmar reserva</button>
                 <?php endif; ?>
 
-                <button type="button" class="btn" style="background-color: #5a5a5a; color: #ffffff" id="cancelarReserva">Cancelar reserva</button>
+                <button type="button" class="btn btn-muted-action" id="cancelarReserva">Cancelar reserva</button>
 
             </form>
         </div>
@@ -183,8 +183,8 @@ $mpKeys = $mpKeysModel->first();
 
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn" style="background-color: #f39323;" id="abonarReservaBoton" data-bs-toggle="modal">Abonar reserva</button>
-                            <button type="button" class="btn" style="background-color: #5a5a5a; color: #ffffff" data-bs-dismiss="modal">Volver</button>
+                            <button type="button" class="btn btn-brand" id="abonarReservaBoton" data-bs-toggle="modal">Abonar reserva</button>
+                            <button type="button" class="btn btn-muted-action" data-bs-dismiss="modal">Volver</button>
                         </div>
                     </div>
                 </div>
@@ -250,7 +250,7 @@ $mpKeys = $mpKeysModel->first();
                             <?php if (session()->logueado) : ?>
                                 <button type="button" class="btn btn-primary" id="confirmBooking">Reservar</button>
                             <?php endif; ?>
-                            <button type="button" class="btn" style="background-color: #5a5a5a; color: #ffffff" id="volverPagoModal">Volver</button>
+                            <button type="button" class="btn btn-muted-action" id="volverPagoModal">Volver</button>
                         </div>
                     </div>
                 </div>
@@ -288,8 +288,8 @@ $mpKeys = $mpKeysModel->first();
                         </div>
                         <div class="modal-body" id="uiConfirmBody"></div>
                         <div class="modal-footer">
-                            <button type="button" class="btn" style="background-color: #5a5a5a; color: #ffffff" id="uiConfirmCancel">Cancelar</button>
-                            <button type="button" class="btn" style="background-color: #f39323;" id="uiConfirmAccept">Aceptar</button>
+                            <button type="button" class="btn btn-muted-action" id="uiConfirmCancel">Cancelar</button>
+                            <button type="button" class="btn btn-brand" id="uiConfirmAccept">Aceptar</button>
                         </div>
                     </div>
                 </div>

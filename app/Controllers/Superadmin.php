@@ -38,11 +38,10 @@ class Superadmin extends BaseController
             ->findAll();
 
         // 2) Expirar esos slots.
-        $bookingSlotsModel->where('active', 1)
-            ->where('status', 'pending')
-            ->where('expires_at <', $now)
-            ->set(['active' => 0, 'status' => 'expired'])
-            ->update();
+        $this->expireActiveBookingSlots($bookingSlotsModel, [
+            'status' => 'pending',
+            'expires_at <' => $now,
+        ]);
 
         if (empty($expiredPendingSlots)) {
             return;
@@ -117,10 +116,9 @@ class Superadmin extends BaseController
         }
 
         // 4) Limpiar registros relacionados y luego la reserva.
-        $bookingSlotsModel->whereIn('booking_id', $idsToDelete)
-            ->where('active', 1)
-            ->set(['active' => 0, 'status' => 'expired'])
-            ->update();
+        $this->expireActiveBookingSlots($bookingSlotsModel, [], [
+            'booking_id' => $idsToDelete,
+        ]);
 
         $paymentsModel->whereIn('id_booking', $idsToDelete)->delete();
         $mercadoPagoModel->whereIn('id_booking', $idsToDelete)->delete();
@@ -129,7 +127,6 @@ class Superadmin extends BaseController
 
     public function index()
     {
-        $bookingsModel = new BookingsModel();
         $fieldsModel = new FieldsModel();
         $rateModel = new RateModel();
         $customersModel = new CustomersModel();
@@ -143,28 +140,9 @@ class Superadmin extends BaseController
         ->where('user !=', 'testuser')
         ->findAll();
 
+        // The bookings table is populated client-side via getActiveBookings().
+        // Loading the full history here makes the admin page too slow.
         $bookings = [];
-
-        foreach ($bookingsModel->getBookings() as $booking) {
-            $reserva = [
-                'id' => $booking['id'],
-                'cancha' => $fieldsModel->getField($booking['id_field'])['name'],
-                'fecha' => date("d/m/Y", strtotime($booking['date'])),
-                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'],
-                'nombre' => $booking['name'],
-                'telefono' => $booking['phone'],
-                'creado_por' => $booking['created_by_name'] ?? $booking['created_by_type'] ?? 'N/D',
-                'editado_por' => $booking['edited_by_name'] ?? null,
-                'editado_en' => $booking['edited_at'] ?? null,
-                'pago_total' => $booking['total_payment'] == 1 ? 'Si' : 'No',
-                'total_reserva' => $booking['total'],
-                'diferencia' => $booking['diference'],
-                'monto_reserva' => $booking['payment'],
-                'metodo_pago' => $booking['payment_method']
-            ];
-
-            array_push($bookings, $reserva);
-        }
 
         $getTime = $timeModel->findAll();
         if ($getTime) {
@@ -203,10 +181,10 @@ class Superadmin extends BaseController
         $closureText = $closureTextRow['valor'] ?? '';
         if (!is_string($closureText) || trim($closureText) === '') {
             $closureText = "Aviso importante\n\n"
-                . "Queremos informarles que el día <fecha> las canchas permanecerán cerradas.\n"
+                . "Queremos informarles que el dÃ­a <fecha> las canchas permanecerÃ¡n cerradas.\n"
                 . "Pedimos disculpas por las molestias que esto pueda ocasionar.\n\n"
                 . "De todas formas, ya pueden reservar normalmente las horas para fechas posteriores.\n"
-                . "Muchas gracias por la comprensión y por seguir eligiéndonos.";
+                . "Muchas gracias por la comprensiÃ³n y por seguir eligiÃ©ndonos.";
         }
         $bookingEmailRow = $configModel->where('clave', 'email_reservas')->first();
         $bookingEmail = $bookingEmailRow['valor'] ?? '';
@@ -554,7 +532,7 @@ class Superadmin extends BaseController
 
         try {
             $cancelModel->insert($payload);
-            return $this->response->setJSON($this->setResponse(null, null, null, 'Cancelación registrada.'));
+            return $this->response->setJSON($this->setResponse(null, null, null, 'CancelaciÃ³n registrada.'));
         } catch (\Exception $e) {
             return $this->response->setJSON($this->setResponse(500, true, null, $e->getMessage()));
         }
@@ -601,7 +579,7 @@ class Superadmin extends BaseController
         $field = $data->cancha ?? 'all';
 
         if (!$id) {
-            return $this->response->setJSON($this->setResponse(400, true, null, 'ID inválido.'));
+            return $this->response->setJSON($this->setResponse(400, true, null, 'ID invÃ¡lido.'));
         }
         if (!$date) {
             return $this->response->setJSON($this->setResponse(400, true, null, 'Debe ingresar una fecha.'));
@@ -686,7 +664,7 @@ class Superadmin extends BaseController
         $id = $data->id ?? null;
 
         if (!$id) {
-            return $this->response->setJSON($this->setResponse(400, true, null, 'ID inválido.'));
+            return $this->response->setJSON($this->setResponse(400, true, null, 'ID invÃ¡lido.'));
         }
 
         $cancelModel = new CancelReservationsModel();
@@ -731,7 +709,7 @@ class Superadmin extends BaseController
                 $configModel->insert(['clave' => 'email_reservas', 'valor' => $emailReservas]);
             }
 
-            return $this->response->setJSON($this->setResponse(null, null, null, 'Configuración guardada.'));
+            return $this->response->setJSON($this->setResponse(null, null, null, 'ConfiguraciÃ³n guardada.'));
         } catch (\Exception $e) {
             return $this->response->setJSON($this->setResponse(500, true, null, $e->getMessage()));
         }
@@ -761,7 +739,7 @@ class Superadmin extends BaseController
             } else {
                 $mpKeysModel->insert($query);
             }
-            return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Datos insertados con éxito: ']);
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Datos insertados con Ã©xito: ']);
         } catch (\Exception $e) {
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Error al insertar datos: ' . $e->getMessage()]);
         }
@@ -770,10 +748,45 @@ class Superadmin extends BaseController
     public function deleteUser($id)
     {
         $usersModel = new UsersModel();
+        $isAjaxRequest = $this->request->isAJAX();
         try {
             $usersModel->update($id, ['active' => 0]);
-            return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Usuario eliminado con éxito: ']);
+            $deletedCurrentUser = (int) session()->get('id_user') === (int) $id;
+
+            if ($deletedCurrentUser) {
+                session()->destroy();
+            }
+
+            if ($isAjaxRequest) {
+                return $this->response->setJSON([
+                    'error' => false,
+                    'message' => 'Usuario eliminado correctamente',
+                    'user' => [
+                        'id' => $id,
+                    ],
+                    'loggedOut' => $deletedCurrentUser,
+                    'csrf' => [
+                        'name' => csrf_token(),
+                        'hash' => csrf_hash(),
+                    ],
+                ]);
+            }
+
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Usuario eliminado correctamente']);
         } catch (\Exception $e) {
+            if ($isAjaxRequest) {
+                return $this->response
+                    ->setStatusCode(500)
+                    ->setJSON([
+                        'error' => true,
+                        'message' => 'Error al eliminar usuario: ' . $e->getMessage(),
+                        'csrf' => [
+                            'name' => csrf_token(),
+                            'hash' => csrf_hash(),
+                        ],
+                    ]);
+            }
+
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Error al eliminar usuario: ' . $e->getMessage()]);
         }
     }
@@ -790,3 +803,4 @@ class Superadmin extends BaseController
         return $response;
     }
 }
+
