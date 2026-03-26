@@ -25,6 +25,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" integrity="sha384-oBqDVmMz9ATKxIep9tiCxS/Z9fNfEXiDAYTujMAeBAsjFuCZSmKbSSUnQlmh/jp3" crossorigin="anonymous"></script>
     <!-- <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js" integrity="sha384-cuYeSxntonz0PPNlHhBs68uyIAVpIIOZZ5JqeqvYYIcEL727kskC66kF92t6Xl2V" crossorigin="anonymous"></script> -->
+    <link rel="stylesheet" href="<?= base_url(PUBLIC_FOLDER . "assets/css/theme.css?v=" . time()) ?>">
     <link rel="stylesheet" href="<?= base_url(PUBLIC_FOLDER . "assets/css/styles.css") ?>">
     <script src="https://kit.fontawesome.com/9bae38f407.js" crossorigin="anonymous"></script>
 
@@ -66,7 +67,7 @@
         <footer class="my-4 site-footer" style="background-color: #5a5a5a;">
             <?php if (session()->logueado) : ?>
                 <ul class="nav justify-content-center border-bottom pb-3 mb-3">
-                    <li class="nav-item"><a href="<?= base_url('auth/logOut') ?>" class="nav-link px-2 text-muted">Cerrar sesión</a></li>
+                    <li class="nav-item"><a href="<?= base_url('auth/logOut') ?>" class="nav-link px-2 text-muted">Cerrar sesion</a></li>
                     <li class="nav-item"><a href="<?= base_url('abmAdmin') ?>" class="nav-link px-2 text-muted">Panel</a></li>
                 </ul>
             <?php else : ?>
@@ -78,7 +79,7 @@
             <?php endif; ?>
 
             <div class="link d-flex justify-content-center align-items-center">
-                <a href="https://alfagestion.com.ar/" target="_blank" class="text-center text-muted">© 2023 - Alfanet</a>
+                <a href="https://alfagestion.com.ar/" target="_blank" class="text-center text-muted">(c) 2023 - Alfanet</a>
             </div>
         </footer>
     </div>
@@ -86,6 +87,7 @@
     <?php echo $this->renderSection('scripts') ?>
 
     <script src="<?= base_url(PUBLIC_FOLDER . "assets/js/config.js?v=" . time()) ?>"></script>
+    <script src="<?= base_url(PUBLIC_FOLDER . "assets/js/theme.js?v=" . time()) ?>"></script>
     <script>
         let sessionUserId = <?= json_encode(session()->id_user) ?>;
         let sessionUserLogued = <?= json_encode(session()->logueado) ?>;

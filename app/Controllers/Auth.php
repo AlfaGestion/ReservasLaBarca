@@ -28,7 +28,7 @@ class Auth extends BaseController
             return $invalidCredentials;
         }
 
-        if ((int) ($userData['active'] ?? 0) !== 1) {
+        if (array_key_exists('active', $userData) && $userData['active'] !== null && (int) $userData['active'] === 0) {
             return $invalidCredentials;
         }
 
@@ -45,6 +45,7 @@ class Auth extends BaseController
             'logueado'   => true,
         ];
 
+        session()->remove('msg');
         session()->set($sessionData);
 
         return redirect()->to(base_url('abmAdmin'));
@@ -108,6 +109,7 @@ class Auth extends BaseController
             'password' => password_hash($password, PASSWORD_DEFAULT),
             'superadmin' => $superadmin,
             'name' => $name,
+            'active' => 1,
         ];
 
         try {
