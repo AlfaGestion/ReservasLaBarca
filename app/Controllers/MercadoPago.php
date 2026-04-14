@@ -16,6 +16,53 @@ use App\Models\RateModel;
 
 class MercadoPago extends BaseController
 {
+    private function createEmailService()
+    {
+        $email = \Config\Services::email();
+        $email->SMTPTimeout = 8;
+
+        return $email;
+    }
+
+    private function sendEmailWithFallback($to, string $subject, string $message): bool
+    {
+        $emailConfig = config('Email');
+        $accounts = $emailConfig->accounts ?? [];
+
+        if ($accounts === []) {
+            $accounts = [[
+                'fromEmail' => $emailConfig->fromEmail,
+                'fromName' => $emailConfig->fromName,
+                'SMTPUser' => $emailConfig->SMTPUser,
+                'SMTPPass' => $emailConfig->SMTPPass,
+            ]];
+        }
+
+        foreach ($accounts as $account) {
+            try {
+                $email = $this->createEmailService();
+                $email->fromEmail = $account['fromEmail'] ?? $emailConfig->fromEmail;
+                $email->fromName = $account['fromName'] ?? $emailConfig->fromName;
+                $email->SMTPUser = $account['SMTPUser'] ?? $emailConfig->SMTPUser;
+                $email->SMTPPass = $account['SMTPPass'] ?? $emailConfig->SMTPPass;
+                $email->setFrom($email->fromEmail, $email->fromName);
+                $email->setTo($to);
+                $email->setSubject($subject);
+                $email->setMessage($message);
+
+                if ($email->send()) {
+                    return true;
+                }
+
+                log_message('error', 'Fallo envio SMTP con ' . ($email->fromEmail ?? 'sin cuenta') . ': ' . $email->printDebugger(['headers']));
+            } catch (\Throwable $e) {
+                log_message('error', 'Fallo envio SMTP con ' . (($account['fromEmail'] ?? '') ?: 'sin cuenta') . ': ' . $e->getMessage());
+            }
+        }
+
+        return false;
+    }
+
     private function releaseBookingSlot(BookingSlotsModel $bookingSlotsModel, int $slotId): void
     {
         $slot = $bookingSlotsModel->find($slotId);
@@ -168,7 +215,6 @@ class MercadoPago extends BaseController
             . "Horario: {$horario}\n"
             . "Cancha: {$fieldName}\n";
 
-        $email = \Config\Services::email();
         $caPath = ROOTPATH . 'cacert.pem';
         if (is_file($caPath)) {
             ini_set('openssl.cafile', $caPath);
@@ -181,23 +227,9 @@ class MercadoPago extends BaseController
                 'allow_self_signed' => true,
             ],
         ]);
-        $emailConfig = config('Email');
-        $fromEmail = $emailConfig->fromEmail ?? '';
-        $fromName = $emailConfig->fromName ?? 'Reservas';
-        if (!is_string($fromEmail) || trim($fromEmail) === '') {
-            $fromEmail = $toEmails[0];
-        }
-
-        $email->setFrom($fromEmail, $fromName);
-        $email->setTo($toEmails);
         $subjectName = trim((string)($booking['name'] ?? 'Cliente'));
         $subjectDate = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'Sin fecha';
-        $email->setSubject("Reserva: {$subjectName} - {$subjectDate}");
-        $email->setMessage($message);
-
-        if (!$email->send()) {
-            log_message('error', 'No se pudo enviar email de reserva: ' . $email->printDebugger(['headers']));
-        }
+        $this->sendEmailWithFallback($toEmails, "Reserva: {$subjectName} - {$subjectDate}", $message);
     }
     public function setPreference()
     {

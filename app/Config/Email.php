@@ -9,6 +9,20 @@ class Email extends BaseConfig
     public string $fromEmail  = 'enviosalfagestion@gmail.com';
     public string $fromName   = 'Reservas';
     public string $recipients = '';
+    public array $accounts = [
+        [
+            'fromEmail' => 'enviosreservaalfagestion@gmail.com',
+            'fromName' => 'Reservas',
+            'SMTPUser' => 'enviosreservaalfagestion@gmail.com',
+            'SMTPPass' => 'ukag ewra bmcl zqpq',
+        ],
+        [
+            'fromEmail' => 'enviosalfagestion@gmail.com',
+            'fromName' => 'Reservas',
+            'SMTPUser' => 'enviosalfagestion@gmail.com',
+            'SMTPPass' => 'vheq qqxs ifrr jlat',
+        ],
+    ];
 
     /**
      * The "user agent"
@@ -48,7 +62,7 @@ class Email extends BaseConfig
     /**
      * SMTP Timeout (in seconds)
      */
-    public int $SMTPTimeout = 30;
+    public int $SMTPTimeout = 8;
 
     /**
      * Enable persistent SMTP connections
