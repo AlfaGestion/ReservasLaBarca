@@ -48,7 +48,11 @@ const allFields = Array.isArray(window.bookingFields) ? window.bookingFields : A
         id: option.value,
         name: option.textContent,
         service_type: option.dataset.serviceType || 'football',
+        duration_minutes: option.dataset.durationMinutes || option.dataset.blockMinutes || 60,
+        slot_interval_minutes: option.dataset.slotIntervalMinutes || option.dataset.blockMinutes || 60,
         block_minutes: option.dataset.blockMinutes || 60,
+        opening_time: option.dataset.openingTime || '',
+        closing_time: option.dataset.closingTime || '',
         value: option.dataset.price || 0,
         ilumination_value: option.dataset.priceLight || option.dataset.price || 0,
         disabled: 0,
@@ -70,6 +74,33 @@ let dataOferta = {
     valor: 0,
     descripcion: '',
     fecha: 0,
+}
+
+function formatPriceAR(value) {
+    return '$ ' + new Intl.NumberFormat('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(Number(value || 0))
+}
+
+function parsePriceAR(value) {
+    if (typeof value === 'number') return value
+    const normalized = String(value || '0')
+        .replace(/\$/g, '')
+        .replace(/\s/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.')
+    return Number(normalized) || 0
+}
+
+function minutesToHuman(minutes) {
+    const total = Math.max(0, Number(minutes || 0))
+    const hours = Math.floor(total / 60)
+    const remainder = total % 60
+    const parts = []
+    if (hours > 0) parts.push(`${hours} hs`)
+    if (remainder > 0) parts.push(`${remainder} min`)
+    return `${total} min (${parts.length ? parts.join(' ') : '0 min'})`
 }
 
 function isEmptyData(data) {
@@ -314,6 +345,7 @@ document.addEventListener('click', async (e) => {
                 additionalQuincho: buildAdditionalQuinchoPayload(),
             }
         } else {
+            const totalAmount = parsePriceAR(inputMonto.value)
             data = {
                 fecha: fecha.value,
                 cancha: cancha.value,
@@ -323,9 +355,9 @@ document.addEventListener('click', async (e) => {
                 telefono: normalizedPhone,
                 localidad: localidad ? localidad.value : '',
                 monto: pagoReserva.value,
-                total: inputMonto.value,
-                parcial: inputMonto.value * rate / 100,
-                diferencia: inputMonto.value - pagoReserva.value,
+                total: totalAmount,
+                parcial: totalAmount * rate / 100,
+                diferencia: totalAmount - parsePriceAR(pagoReserva.value),
                 reservacion: pagoReserva.value,
                 pagoTotal: pagoTotal.checked,
                 metodoDePago: 'Mercado Pago',
@@ -379,11 +411,12 @@ document.addEventListener('click', async (e) => {
         } else if (e.target.id == 'switchPagoTotal') {
             const switchPagoTotal = document.getElementById('switchPagoTotal')
             const rate = await getRate()
+            const totalAmount = parsePriceAR(inputMonto.value)
 
             if (switchPagoTotal.checked) {
-                pagoReserva.value = inputMonto.value
+                pagoReserva.value = formatPriceAR(totalAmount)
             } else {
-                pagoReserva.value = inputMonto.value * rate / 100
+                pagoReserva.value = formatPriceAR(totalAmount * rate / 100)
             }
         } else if (e.target.id == 'abonarReservaBoton') { //Por defecto me va a traer el valor del porcentual
             if (sessionUserLogued) {
@@ -414,12 +447,13 @@ document.addEventListener('click', async (e) => {
                 }
 
                 const rate = await getRate()
-                const mpReady = await setScriptMP(inputMonto.value)
+                const totalAmount = parsePriceAR(inputMonto.value)
+                const mpReady = await setScriptMP(totalAmount)
                 if (!mpReady) {
                     return
                 }
                 modalIngresarPago.show()
-                pagoReserva.value = inputMonto.value * rate / 100
+                pagoReserva.value = formatPriceAR(totalAmount * rate / 100)
             }
 
         } else if (e.target.id == 'confirmBooking') {
@@ -428,10 +462,10 @@ document.addEventListener('click', async (e) => {
             const description = document.getElementById('adminBookingDescription')
             const totalReserva = document.getElementById('adminBookingTotalAmount')
 
-            data.monto = amount.value
+            data.monto = parsePriceAR(amount.value)
             data.metodoDePago = paymentMethod.value
             data.descripcion = description.value
-            data.total = totalReserva.value
+            data.total = parsePriceAR(totalReserva.value)
             data.additionalQuincho = buildAdditionalQuinchoPayload()
 
             saveAdminBooking(data)
@@ -717,7 +751,7 @@ function getFieldById(id) {
 }
 
 function getFieldsByService(serviceType) {
-    return allFields.filter(field => String(field.disabled || '0') !== '1' && (field.service_type || 'football') === serviceType)
+    return allFields.filter(field => String(field.disabled || '0') !== '1' && String(field.service_active ?? '1') !== '0' && String(field.online_available ?? '1') !== '0' && (field.service_type || 'football') === serviceType)
 }
 
 function getQuinchoField() {
@@ -743,16 +777,26 @@ function isNocturnalBooking(nocturnalTime) {
 
 function getCurrentBlockMinutes() {
     const selected = getFieldById(selectCancha?.value)
+    if (selected?.duration_minutes) return Number(selected.duration_minutes)
     if (selected?.block_minutes) return Number(selected.block_minutes)
     return getSelectedServiceType() === 'padel' ? 90 : 60
 }
 
+function getCurrentSlotIntervalMinutes() {
+    const selected = getFieldById(selectCancha?.value) || getFieldsByService(getSelectedServiceType())[0]
+    if (selected?.slot_interval_minutes) return Number(selected.slot_interval_minutes)
+    if (selected?.booking_interval_minutes) return Number(selected.booking_interval_minutes)
+    return getCurrentBlockMinutes()
+}
+
 function getOpeningStartMinutes() {
-    return timeToMinutes(openingTime[0] || '07:00')
+    const field = getFieldById(selectCancha?.value) || getFieldsByService(getSelectedServiceType())[0]
+    return timeToMinutes(field?.opening_time || openingTime[0] || '07:00')
 }
 
 function getOpeningEndMinutes() {
-    const end = timeToMinutes(openingTime[openingTime.length - 1] || '23:00')
+    const field = getFieldById(selectCancha?.value) || getFieldsByService(getSelectedServiceType())[0]
+    const end = timeToMinutes(field?.closing_time || openingTime[openingTime.length - 1] || '23:00')
     const start = getOpeningStartMinutes()
     return end <= start ? end + 1440 : end
 }
@@ -778,7 +822,7 @@ function buildStartTimes(blockMinutes, stepMinutes = blockMinutes) {
 
 function updateTimeOptions() {
     const block = getCurrentBlockMinutes()
-    const starts = buildStartTimes(block, getSelectedServiceType() === 'padel' ? 30 : block)
+    const starts = buildStartTimes(block, getCurrentSlotIntervalMinutes())
     fillTimeSelect(horarioDesde, starts)
     fillTimeSelect(horarioHasta, starts.map(t => minutesToTime(timeToMinutes(t) + block)))
     if (quinchoDesde && quinchoHasta) {
@@ -797,7 +841,8 @@ function updateServiceOptions() {
     getFieldsByService(selectedService).forEach((field) => {
         const option = new Option(field.name, field.id)
         option.dataset.serviceType = field.service_type || 'football'
-        option.dataset.blockMinutes = field.block_minutes || (selectedService === 'padel' ? 90 : 60)
+        option.dataset.blockMinutes = field.duration_minutes || field.block_minutes || (selectedService === 'padel' ? 90 : 60)
+        option.textContent = `${field.name} - ${minutesToHuman(field.duration_minutes || field.block_minutes || 60)}`
         selectCancha.appendChild(option)
     })
     if (selected && Array.from(selectCancha.options).some(opt => opt.value === selected)) {
@@ -1107,9 +1152,9 @@ async function getAmount(field = "1") {
 
         const nocturnalTime = await getNocturnalTime()
         if (isNocturnalBooking(nocturnalTime)) {
-            inputMonto.value = `${calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.ilumination_value)}`
+            inputMonto.value = formatPriceAR(calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.ilumination_value))
         } else {
-            inputMonto.value = `${calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.value)}`
+            inputMonto.value = formatPriceAR(calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.value))
         }
     } catch (error) {
         console.error('Error:', error);
@@ -1347,7 +1392,15 @@ async function fillModal(data) {
     const fecha = convertDateFormat(data.data.fecha)
     const localidadValue = data.data.localidad ? `<li><i class="fa-solid fa-location-dot"></i> <b>Localidad:</b> ${data.data.localidad}</li>` : ''
     const additional = buildAdditionalQuinchoPayload()
-    const additionalText = additional ? `<li><i class="fa-solid fa-plus"></i> <b>Adicional:</b> Quincho de ${additional.horarioDesde} a ${additional.horarioHasta}</li>` : ''
+    const duration = timeToMinutes(data.data.horarioHasta) > timeToMinutes(data.data.horarioDesde)
+        ? timeToMinutes(data.data.horarioHasta) - timeToMinutes(data.data.horarioDesde)
+        : timeToMinutes(data.data.horarioHasta) + 1440 - timeToMinutes(data.data.horarioDesde)
+    const additionalDuration = additional
+        ? (timeToMinutes(additional.horarioHasta) > timeToMinutes(additional.horarioDesde)
+            ? timeToMinutes(additional.horarioHasta) - timeToMinutes(additional.horarioDesde)
+            : timeToMinutes(additional.horarioHasta) + 1440 - timeToMinutes(additional.horarioDesde))
+        : 0
+    const additionalText = additional ? `<li><i class="fa-solid fa-plus"></i> <b>Adicional:</b> Quincho de ${additional.horarioDesde} a ${additional.horarioHasta} (${minutesToHuman(additionalDuration)})</li>` : ''
 
     if (sessionUserLogued) {
         info =
@@ -1356,6 +1409,7 @@ async function fillModal(data) {
             <li><i class="fa-solid fa-calendar-days"></i> <b>Fecha:</b> ${fecha}</li>
             <li><i class="fa-solid fa-futbol"></i> <b>Tipo de reserva:</b> ${data.data.cancha}</li>
             <li><i class="fa-solid fa-clock"></i> <b>Horario:</b> ${normalizeTimeValue(data.data.horarioDesde)} a ${normalizeTimeValue(data.data.horarioHasta)}</li>
+            <li><i class="fa-regular fa-hourglass-half"></i> <b>Duración:</b> ${minutesToHuman(duration)}</li>
             ${additionalText}
             <li><i class="fa-solid fa-user"></i> <b>Nombre:</b> ${data.data.nombre}</li>
             <li><i class="fa-solid fa-phone"></i> <b>Telefono:</b> ${data.data.telefono}</li>
@@ -1369,8 +1423,9 @@ async function fillModal(data) {
             <li><i class="fa-solid fa-calendar-days"></i> <b>Fecha:</b> ${fecha}</li>
             <li><i class="fa-solid fa-futbol"></i> <b>Tipo de reserva:</b> ${data.data.cancha}</li>
             <li><i class="fa-solid fa-clock"></i> <b>Horario:</b> ${normalizeTimeValue(data.data.horarioDesde)} a ${normalizeTimeValue(data.data.horarioHasta)}</li>
+            <li><i class="fa-regular fa-hourglass-half"></i> <b>Duración:</b> ${minutesToHuman(duration)}</li>
             ${additionalText}
-            <i class="fa-regular fa-money-bill-1"></i> <b>Monto:</b> $${amount}</li>
+            <li><i class="fa-regular fa-money-bill-1"></i> <b>Monto:</b> ${amount}</li>
             <li><i class="fa-solid fa-user"></i> <b>Nombre:</b> ${data.data.nombre}</li>
             <li><i class="fa-solid fa-phone"></i> <b>Telefono:</b> ${data.data.telefono}</li>
             ${localidadValue}

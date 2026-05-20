@@ -29,6 +29,7 @@ const fieldFormModal = fieldFormModalElement ? new bootstrap.Modal(fieldFormModa
 const fieldFormModalTitle = document.getElementById('fieldFormModalTitle')
 const fieldFormMessage = document.getElementById('fieldFormMessage')
 const serviceFieldsTableBody = document.getElementById('serviceFieldsTableBody')
+const newServicePanel = document.getElementById('newServicePanel')
 const adminTabs = new bootstrap.Tab(document.getElementById('nav-tab'))
 const toggleCancelReservations = document.getElementById('toggleCancelReservations')
 const cancelReservationsPanel = document.getElementById('cancelReservationsPanel')
@@ -50,6 +51,23 @@ const bookingEmailConfig = document.getElementById('bookingEmailConfig')
 let idBooking
 let editingCancelReservationId = null
 
+function formatPriceAR(value) {
+    return '$ ' + new Intl.NumberFormat('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(Number(value || 0))
+}
+
+function minutesToHuman(minutes) {
+    const total = Math.max(0, Number(minutes || 0))
+    const hours = Math.floor(total / 60)
+    const remainder = total % 60
+    const parts = []
+    if (hours > 0) parts.push(`${hours} hs`)
+    if (remainder > 0) parts.push(`${remainder} min`)
+    return `${total} min (${parts.length ? parts.join(' ') : '0 min'})`
+}
+
 function getLocalDateISO(date = new Date()) {
     const d = new Date(date)
     const year = d.getFullYear()
@@ -63,6 +81,18 @@ const fieldServiceLabels = {
     padel: 'Pádel',
     quincho: 'Quincho',
     eventos: 'Eventos / Confitería',
+}
+
+document.querySelectorAll('#createServiceType option').forEach((option) => {
+    fieldServiceLabels[option.value] = option.textContent
+})
+
+function getServiceTypeOptions() {
+    return Array.from(document.querySelectorAll('[name="createServiceTypeOption"]')).map(option => ({
+        value: option.value,
+        label: fieldServiceLabels[option.value] || option.value,
+        duration: option.dataset.durationMinutes || 60,
+    }))
 }
 
 function escapeHtml(value) {
@@ -102,10 +132,10 @@ function setFieldModalMode(mode) {
         form?.reset()
         const serviceSelect = document.getElementById('createServiceType')
         const blockMinutes = document.getElementById('createBlockMinutes')
-        const footballOption = document.getElementById('createServiceTypeFootball')
-        if (serviceSelect) serviceSelect.value = 'football'
-        if (blockMinutes) blockMinutes.value = 60
-        if (footballOption) footballOption.checked = true
+        const firstOption = document.querySelector('[name="createServiceTypeOption"]')
+        if (serviceSelect && firstOption) serviceSelect.value = firstOption.value
+        if (blockMinutes && firstOption) blockMinutes.value = firstOption.dataset.durationMinutes || 60
+        if (firstOption) firstOption.checked = true
     }
 }
 
@@ -116,9 +146,9 @@ function renderServiceFieldRow(field) {
         <tr data-field-row="${escapeHtml(field.id)}">
             <td>${escapeHtml(field.name)}</td>
             <td>${escapeHtml(fieldServiceLabels[serviceType] || serviceType)}</td>
-            <td>${escapeHtml(field.block_minutes || 60)} min</td>
-            <td>$${escapeHtml(field.value || 0)}</td>
-            <td>$${escapeHtml(field.ilumination_value || 0)}</td>
+            <td>${escapeHtml(minutesToHuman(field.duration_minutes || field.block_minutes || 60))}</td>
+            <td>${formatPriceAR(field.value || 0)}</td>
+            <td>${formatPriceAR(field.ilumination_value || 0)}</td>
             <td>
                 <span class="badge ${disabled ? 'bg-secondary' : 'bg-success'}">
                     ${disabled ? 'Deshabilitado' : 'Activo'}
@@ -206,7 +236,7 @@ document.addEventListener('change', (e) => {
         select.value = serviceTypeOption.value
     }
     if (blockMinutes) {
-        blockMinutes.value = serviceTypeOption.value === 'padel' ? 90 : 60
+        blockMinutes.value = serviceTypeOption.dataset.durationMinutes || (serviceTypeOption.value === 'padel' ? 90 : 60)
     }
 })
 
@@ -259,15 +289,17 @@ document.addEventListener('submit', async (e) => {
 
 document.addEventListener('click', async (e) => {
     if (e.target) {
-        const fieldAction = e.target.closest('#buttonCreateField, #buttonEditField, .field-edit-row')
+        const fieldAction = e.target.closest('#buttonCreateField, .field-edit-row')
         if (fieldAction?.id == 'buttonCreateField') {
+            const servicesPanelIsActive = document.getElementById('services-panel')?.classList.contains('active')
+            if (servicesPanelIsActive && newServicePanel) {
+                newServicePanel.classList.toggle('d-none')
+                if (!newServicePanel.classList.contains('d-none')) {
+                    newServicePanel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }
+                return
+            }
             setFieldModalMode('create')
-            fieldFormModal?.show()
-            return
-        }
-        if (fieldAction?.id == 'buttonEditField') {
-            setFieldModalMode('selectEdit')
-            if (selectEditFields) selectEditFields.value = ''
             fieldFormModal?.show()
             return
         }
@@ -1174,10 +1206,19 @@ function fillDiv(field) {
     let roofedCheck = ''
     if (field.roofed == 1) { roofedCheck = 'checked' }
     const serviceType = field.service_type || 'football'
-    const blockMinutes = field.block_minutes || (serviceType === 'padel' ? 90 : 60)
+    const blockMinutes = field.duration_minutes || field.block_minutes || (serviceType === 'padel' ? 90 : 60)
     const serviceOptionName = `editServiceTypeOption${field.id}`
     const serviceSelectId = `editServiceType${field.id}`
     const blockMinutesId = `editBlockMinutes${field.id}`
+    const serviceOptions = getServiceTypeOptions()
+    const serviceSelectOptions = serviceOptions.map(option => `
+                        <option value="${escapeHtml(option.value)}" ${serviceType === option.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')
+    const serviceRadioOptions = serviceOptions.map(option => {
+        const optionId = `${serviceSelectId}${String(option.value).replace(/[^A-Za-z0-9]/g, '')}`
+        return `
+                        <input class="btn-check" type="radio" name="${serviceOptionName}" id="${optionId}" value="${escapeHtml(option.value)}" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" data-duration-minutes="${escapeHtml(option.duration)}" autocomplete="off" ${serviceType === option.value ? 'checked' : ''}>
+                        <label class="service-type-option" for="${optionId}">${escapeHtml(option.label)}</label>`
+    }).join('')
 
     div = `
         <div class="editFields" id="editFields">
@@ -1196,23 +1237,10 @@ function fillDiv(field) {
                 <div class="mb-3">
                     <label class="form-label d-block mb-2">Tipo de reserva</label>
                     <select class="form-select visually-hidden" name="serviceType" id="${serviceSelectId}" aria-hidden="true" tabindex="-1">
-                        <option value="football" ${serviceType === 'football' ? 'selected' : ''}>Cancha / Fútbol</option>
-                        <option value="padel" ${serviceType === 'padel' ? 'selected' : ''}>Pádel</option>
-                        <option value="quincho" ${serviceType === 'quincho' ? 'selected' : ''}>Quincho</option>
-                        <option value="eventos" ${serviceType === 'eventos' ? 'selected' : ''}>Eventos / Confitería</option>
+${serviceSelectOptions}
                     </select>
                     <div class="service-type-options">
-                        <input class="btn-check" type="radio" name="${serviceOptionName}" id="${serviceSelectId}Football" value="football" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" autocomplete="off" ${serviceType === 'football' ? 'checked' : ''}>
-                        <label class="service-type-option" for="${serviceSelectId}Football">Cancha / Fútbol</label>
-
-                        <input class="btn-check" type="radio" name="${serviceOptionName}" id="${serviceSelectId}Padel" value="padel" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" autocomplete="off" ${serviceType === 'padel' ? 'checked' : ''}>
-                        <label class="service-type-option" for="${serviceSelectId}Padel">Pádel</label>
-
-                        <input class="btn-check" type="radio" name="${serviceOptionName}" id="${serviceSelectId}Quincho" value="quincho" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" autocomplete="off" ${serviceType === 'quincho' ? 'checked' : ''}>
-                        <label class="service-type-option" for="${serviceSelectId}Quincho">Quincho</label>
-
-                        <input class="btn-check" type="radio" name="${serviceOptionName}" id="${serviceSelectId}Eventos" value="eventos" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" autocomplete="off" ${serviceType === 'eventos' ? 'checked' : ''}>
-                        <label class="service-type-option" for="${serviceSelectId}Eventos">Eventos / Confitería</label>
+${serviceRadioOptions}
                     </div>
                 </div>
 

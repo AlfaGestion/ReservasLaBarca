@@ -95,11 +95,11 @@
         <tbody>
 
             <?php foreach ($data as $cobro) : ?>
-                <?php $total = intval($cobro['pago']) + $total ?> 
+                <?php $total = (float)($cobro['pago'] ?? 0) + $total ?> 
                 <tr>
                     <td><?= $cobro['fecha'] ?></td>
                     <td><?= $cobro['usuario'] ?></td>
-                    <td>$<?= $cobro['pago'] ?></td>
+                    <td><?= format_price_ar($cobro['pago']) ?></td>
                     <td><?= $cobro['metodoPago'] ?></td>
                     <td><?= $cobro['cliente'] ?></td>
                     <td><?= $cobro['telefonoCliente'] ?></td>
@@ -109,7 +109,7 @@
         </tbody>
     </table>
 
-    <p>Total de cobros: <strong>$<?= $total ?></strong> </p>
+    <p>Total de cobros: <strong><?= format_price_ar($total) ?></strong> </p>
 
 </body>
 

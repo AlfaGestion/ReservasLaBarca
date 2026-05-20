@@ -87,16 +87,16 @@
         <tbody>
 
             <?php foreach ($data as $cobro) : ?>
-                <?php $total = intval($cobro['reserva']) + $total ?> 
+                <?php $total = (float)($cobro['reserva'] ?? 0) + $total ?> 
                 <tr>
                     <td><?= $cobro['fecha'] ?></td>
-                    <td>$<?= $cobro['reserva'] ?></td>
+                    <td><?= format_price_ar($cobro['reserva']) ?></td>
                 </tr>
             <?php endforeach; ?>
 
         </tbody>
     </table>
 
-    <p>Total de cobros: <strong>$<?= $total ?></strong> </p>
+    <p>Total de cobros: <strong><?= format_price_ar($total) ?></strong> </p>
 </body>
 </html>

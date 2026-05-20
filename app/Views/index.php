@@ -149,7 +149,7 @@ $mpKeys = $mpKeysModel->first();
                     <select class="form-select mb-3 d-none" name="cancha" id="cancha" aria-label="Default floating label">
                         <option value="">Elegí una cancha o espacio</option>
                         <?php foreach ($fields as $field) : ?>
-                            <option value="<?= $field['id'] ?>" data-service-type="<?= esc($field['service_type'] ?? 'football') ?>" data-block-minutes="<?= esc($field['block_minutes'] ?? 60) ?>" data-price="<?= esc($field['value'] ?? 0) ?>" data-price-light="<?= esc($field['ilumination_value'] ?? $field['value'] ?? 0) ?>"><?= $field['name'] ?></option>
+                            <option value="<?= $field['id'] ?>" data-service-type="<?= esc($field['service_type'] ?? 'football') ?>" data-duration-minutes="<?= esc($field['duration_minutes'] ?? $field['block_minutes'] ?? 60) ?>" data-slot-interval-minutes="<?= esc($field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? $field['block_minutes'] ?? 60) ?>" data-block-minutes="<?= esc($field['block_minutes'] ?? 60) ?>" data-price="<?= esc($field['value'] ?? 0) ?>" data-price-light="<?= esc($field['ilumination_value'] ?? $field['value'] ?? 0) ?>"><?= esc($field['name']) ?> - <?= esc(minutesToHuman($field['duration_minutes'] ?? $field['block_minutes'] ?? 60)) ?></option>
                         <?php endforeach; ?>
                     </select>
                     <label for="cancha">Cancha o espacio</label>

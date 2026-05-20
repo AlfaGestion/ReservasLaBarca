@@ -41,7 +41,7 @@ class Home extends BaseController
         $oferta = $offersModel->first();
 
         $fieldsModel = new FieldsModel();
-        $fields = $fieldsModel->where('disabled', 0)->findAll();
+        $fields = $fieldsModel->getFields();
 
         $localitiesModel = new LocalitiesModel();
         $localities = $localitiesModel->orderBy('name', 'ASC')->findAll();

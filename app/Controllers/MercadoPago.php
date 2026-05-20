@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\AvailabilityService;
 use App\Libraries\MercadoPagoLibrary;
 use App\Models\BookingSlotsModel;
 use App\Models\BookingsModel;
@@ -51,6 +52,8 @@ class MercadoPago extends BaseController
 
     private function hasBookingOverlap(BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, $date, $fieldId, $timeFrom, $timeUntil): bool
     {
+        return !(new AvailabilityService())->checkAvailability($fieldId, $date, $timeFrom, $timeUntil);
+
         $timeFrom = $bookingSlotsModel->normalizeTime($timeFrom);
         $timeUntil = $bookingSlotsModel->normalizeTime($timeUntil);
 
@@ -293,6 +296,13 @@ class MercadoPago extends BaseController
         $fieldName = $fieldsModel->getField($booking['id_field'])['name'] ?? 'N/D';
         $fecha = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'N/D';
         $horario = ($booking['time_from'] ?? '') . ' a ' . ($booking['time_until'] ?? '');
+        $slotModel = new BookingSlotsModel();
+        $fromMinutes = $slotModel->timeToMinutes($booking['time_from'] ?? '00:00');
+        $untilMinutes = $slotModel->timeToMinutes($booking['time_until'] ?? '00:00');
+        if ($untilMinutes <= $fromMinutes) {
+            $untilMinutes += 24 * 60;
+        }
+        $duracion = minutesToHuman($untilMinutes - $fromMinutes);
         $localidad = $booking['locality'] ?? '';
 
         $message = "Nueva reserva\n\n"
@@ -301,6 +311,7 @@ class MercadoPago extends BaseController
             . "Localidad: " . ($localidad !== '' ? $localidad : 'N/D') . "\n"
             . "Fecha: {$fecha}\n"
             . "Horario: {$horario}\n"
+            . "Duracion: {$duracion}\n"
             . "Tipo de reserva: {$fieldName}\n";
 
         $caPath = ROOTPATH . 'cacert.pem';
@@ -361,11 +372,11 @@ class MercadoPago extends BaseController
                     $until += 24 * 60;
                 }
                 $duration = $until - $from;
-                $blockMinutes = (int)($field['block_minutes'] ?? 60);
-                if (($field['service_type'] ?? 'football') === 'padel' && $duration !== 90) {
+                $blockMinutes = (int)($field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? 60);
+                if (false && ($field['service_type'] ?? 'football') === 'padel' && $duration !== 90) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'Pádel se reserva únicamente en bloques de 1 hora y 30 minutos.'));
                 }
-                if (($field['service_type'] ?? 'football') !== 'padel' && ($duration <= 0 || $duration % max(1, $blockMinutes) !== 0)) {
+                if ($duration <= 0 || $duration % max(1, $blockMinutes) !== 0) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'La duración seleccionada no es válida para el servicio.'));
                 }
                 if ($this->isClosedForDateField($item['fecha'], $item['cancha'])) {

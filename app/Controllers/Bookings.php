@@ -3,9 +3,11 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\AvailabilityService;
 use App\Libraries\PrintBookings;
 use App\Models\BookingSlotsModel;
 use App\Models\BookingsModel;
+use App\Models\AdminLogsModel;
 use App\Models\CancelReservationsModel;
 use App\Models\ConfigModel;
 use App\Models\CustomersModel;
@@ -18,6 +20,27 @@ use CodeIgniter\I18n\Time;
 
 class Bookings extends BaseController
 {
+    private function logAdminAction(string $action, string $entityType, $entityId, $oldData = null, $newData = null): void
+    {
+        try {
+            $model = new AdminLogsModel();
+            if (! \Config\Database::connect()->tableExists('admin_logs')) {
+                return;
+            }
+            $model->insert([
+                'admin_id' => session()->get('id_user') ?: null,
+                'action' => $action,
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+                'old_data' => $oldData === null ? null : json_encode($oldData, JSON_UNESCAPED_UNICODE),
+                'new_data' => $newData === null ? null : json_encode($newData, JSON_UNESCAPED_UNICODE),
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'No se pudo guardar admin log: ' . $e->getMessage());
+        }
+    }
+
     private function normalizeTime($time): string
     {
         $slotModel = new BookingSlotsModel();
@@ -26,6 +49,8 @@ class Bookings extends BaseController
 
     private function hasBookingOverlap(BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, $date, $fieldId, $timeFrom, $timeUntil, ?int $ignoreBookingId = null): bool
     {
+        return !(new AvailabilityService())->checkAvailability($fieldId, $date, $timeFrom, $timeUntil, $ignoreBookingId);
+
         $timeFrom = $bookingSlotsModel->normalizeTime($timeFrom);
         $timeUntil = $bookingSlotsModel->normalizeTime($timeUntil);
 
@@ -87,11 +112,11 @@ class Bookings extends BaseController
                 $until += 24 * 60;
             }
             $duration = $until - $from;
-            $blockMinutes = (int)($field['block_minutes'] ?? 60);
-            if (($field['service_type'] ?? 'football') === 'padel' && $duration !== 90) {
+            $blockMinutes = (int)($field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? 60);
+            if (false && ($field['service_type'] ?? 'football') === 'padel' && $duration !== 90) {
                 return 'Pádel se reserva únicamente en bloques de 1 hora y 30 minutos.';
             }
-            if (($field['service_type'] ?? 'football') !== 'padel' && ($duration <= 0 || $duration % max(1, $blockMinutes) !== 0)) {
+            if ($duration <= 0 || $duration % max(1, $blockMinutes) !== 0) {
                 return 'La duración seleccionada no es válida para el servicio.';
             }
             if ($this->isClosedForDateField($item['fecha'], $item['cancha'])) {
@@ -244,6 +269,13 @@ class Bookings extends BaseController
         $fieldName = $fieldsModel->getField($booking['id_field'])['name'] ?? 'N/D';
         $fecha = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'N/D';
         $horario = ($booking['time_from'] ?? '') . ' a ' . ($booking['time_until'] ?? '');
+        $slotModel = new BookingSlotsModel();
+        $fromMinutes = $slotModel->timeToMinutes($booking['time_from'] ?? '00:00');
+        $untilMinutes = $slotModel->timeToMinutes($booking['time_until'] ?? '00:00');
+        if ($untilMinutes <= $fromMinutes) {
+            $untilMinutes += 24 * 60;
+        }
+        $duracion = minutesToHuman($untilMinutes - $fromMinutes);
         $localidad = $booking['locality'] ?? '';
 
         $message = "Nueva reserva\n\n"
@@ -252,6 +284,7 @@ class Bookings extends BaseController
             . "Localidad: " . ($localidad !== '' ? $localidad : 'N/D') . "\n"
             . "Fecha: {$fecha}\n"
             . "Horario: {$horario}\n"
+            . "Duracion: {$duracion}\n"
             . "Tipo de reserva: {$fieldName}\n";
 
         $caPath = ROOTPATH . 'cacert.pem';
@@ -699,6 +732,7 @@ class Bookings extends BaseController
         $bookingSlotsModel = new BookingSlotsModel();
         $data = $this->request->getJSON();
         $idBooking = $data->idBooking;
+        $oldBooking = $bookingsModel->getBooking($idBooking);
         $mpPayment = $mercadoPagoModel->where('id_booking', $idBooking)->first();
 
         try {
@@ -710,6 +744,7 @@ class Bookings extends BaseController
                 ->where('active', 1)
                 ->set(['active' => 0, 'status' => 'cancelled'])
                 ->update();
+            $this->logAdminAction('cancel_booking', 'booking', $idBooking, $oldBooking, ['annulled' => 1]);
 
             return  $this->response->setJSON($this->setResponse(null, null, null, 'Respuesta exitosa'));
         } catch (\Exception $e) {
@@ -786,6 +821,7 @@ class Bookings extends BaseController
             }
 
             $bookingsModel->update($idBooking, $queryUpdate);
+            $this->logAdminAction('edit_booking', 'booking', $idBooking, $currentBooking, $queryUpdate);
 
             if ($changedSlot) {
                 $bookingSlotsModel->where('booking_id', $idBooking)
@@ -977,6 +1013,13 @@ class Bookings extends BaseController
         }
         $mpPayment = $mercadoPagoModel->where('id_booking', $bookingId)->first();
         $mpPayment = $mpPayment ?? ['payment_id' => 'N/A', 'status' => 'N/A'];
+        $slotModel = new BookingSlotsModel();
+        $fromMinutes = $slotModel->timeToMinutes($booking['time_from']);
+        $untilMinutes = $slotModel->timeToMinutes($booking['time_until']);
+        if ($untilMinutes <= $fromMinutes) {
+            $untilMinutes += 24 * 60;
+        }
+        $durationMinutes = $untilMinutes - $fromMinutes;
 
         //Generar PDF
         $printData = [
@@ -984,12 +1027,13 @@ class Bookings extends BaseController
             'telefono' => $booking['phone'],
             'fecha' => $booking['date'],
             'horario' => $this->normalizeTime($booking['time_from']) . ' a ' . $this->normalizeTime($booking['time_until']),
+            'duracion' => minutesToHuman($durationMinutes),
             'cancha' => $fieldsModel->getField($booking['id_field'])['name'],
             'id_mercado_pago' => $mpPayment['payment_id'],
             'estado_pago' => $mpPayment['status'],
-            'total_cancha' => '$' . $booking['total'],
-            'pagado' => '$' . $booking['payment'],
-            'saldo' => '$' . $booking['diference'],
+            'total_cancha' => $booking['total'],
+            'pagado' => $booking['payment'],
+            'saldo' => $booking['diference'],
             'detalle' => $booking['description'] ?? '',
         ];
 

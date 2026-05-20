@@ -44,20 +44,28 @@ $fieldsModel = new FieldsModel()
                     $fechaReservaFormateada = $dt->format('d/m/Y');
                 }
             }
+            $slotModel = new \App\Models\BookingSlotsModel();
+            $fromMinutes = $slotModel->timeToMinutes($booking['time_from'] ?? '00:00');
+            $untilMinutes = $slotModel->timeToMinutes($booking['time_until'] ?? '00:00');
+            if ($untilMinutes <= $fromMinutes) {
+                $untilMinutes += 24 * 60;
+            }
+            $duracion = minutesToHuman($untilMinutes - $fromMinutes);
             ?>
             <ul>
                 <li><strong>Nombre:</strong> <?= $booking['name'] ?></li>
                 <li><strong>Teléfono:</strong> <?= $booking['phone'] ?></li>
                 <li><strong>Fecha:</strong> <?= $fechaReservaFormateada ?></li>
                 <li><strong>Horario:</strong> <?= $booking['time_from'] . 'hs' . ' ' . $booking['time_until'] . 'hs' ?></li>
+                <li><strong>Duración:</strong> <?= esc($duracion) ?></li>
                 <li><strong>Tipo de reserva:</strong> <?= $fieldsModel->getField($booking['id_field'])['name'] ?></li>
                 <hr>
                 <li><strong>Id de pago de Mercado Pago:</strong> <?= $mercadoPago['payment_id'] ?> </li>
                 <li><strong>Estado del pago:</strong> <?= $mercadoPago['status'] ?></li>
                 <hr>
-                <li><strong>Valor total de la reserva:</strong> $<?= $booking['total'] ?></li>
-                <li><strong>Pagado:</strong> $<?= $booking['payment'] ?></li>
-                <li><strong>Restan:</strong> $<?= $booking['diference'] ?></li>
+                <li><strong>Valor total de la reserva:</strong> <?= format_price_ar($booking['total']) ?></li>
+                <li><strong>Pagado:</strong> <?= format_price_ar($booking['payment']) ?></li>
+                <li><strong>Restan:</strong> <?= format_price_ar($booking['diference']) ?></li>
                 <li><strong>Detalle:</strong> <?= $booking['description']  == '' || $booking['description'] == null ? 'Reserva' : $booking['description'] ?></li>
             </ul>
             <hr>

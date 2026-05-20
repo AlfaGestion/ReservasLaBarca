@@ -14,11 +14,87 @@ use App\Models\MercadoPagoModel;
 use App\Models\OffersModel;
 use App\Models\PaymentsModel;
 use App\Models\RateModel;
+use App\Models\ServicesModel;
+use App\Models\ServicePricesModel;
+use App\Models\AdminLogsModel;
 use App\Models\TimeModel;
 use App\Models\UsersModel;
 
 class Superadmin extends BaseController
 {
+    private function logAdminAction(string $action, string $entityType, $entityId, $oldData = null, $newData = null): void
+    {
+        try {
+            $model = new AdminLogsModel();
+            if (! \Config\Database::connect()->tableExists('admin_logs')) {
+                return;
+            }
+            $model->insert([
+                'admin_id' => session()->get('id_user') ?: null,
+                'action' => $action,
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+                'old_data' => $oldData === null ? null : json_encode($oldData, JSON_UNESCAPED_UNICODE),
+                'new_data' => $newData === null ? null : json_encode($newData, JSON_UNESCAPED_UNICODE),
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'No se pudo guardar admin log: ' . $e->getMessage());
+        }
+    }
+
+    private function syncServicePrice(string $serviceType, float $value, string $unitLabel): void
+    {
+        try {
+            $servicesModel = new ServicesModel();
+            $pricesModel = new ServicePricesModel();
+            $db = \Config\Database::connect();
+            if (! $db->tableExists('services') || ! $db->tableExists('service_prices')) {
+                return;
+            }
+
+            $service = $servicesModel->getByCode($serviceType);
+            if (! $service) {
+                return;
+            }
+
+            $chargeType = str_contains($unitLabel, 'bloque') ? 'block' : 'hour';
+            $current = $pricesModel->getActiveForService((int)$service['id']);
+            $payload = [
+                'service_id' => $service['id'],
+                'base_price' => $value,
+                'charge_type' => $chargeType,
+                'deposit_price' => $current['deposit_price'] ?? null,
+                'active' => 1,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ];
+
+            if ($current) {
+                $pricesModel->update($current['id'], $payload);
+                $this->logAdminAction('change_price', 'service_price', $current['id'], $current, $payload);
+                return;
+            }
+
+            $payload['created_at'] = date('Y-m-d H:i:s');
+            $pricesModel->insert($payload);
+            $this->logAdminAction('change_price', 'service_price', $pricesModel->getInsertID(), null, $payload);
+        } catch (\Throwable $e) {
+            log_message('error', 'No se pudo sincronizar service_price: ' . $e->getMessage());
+        }
+    }
+
+    private function bookingDurationLabel(array $booking): string
+    {
+        $slotModel = new BookingSlotsModel();
+        $fromMinutes = $slotModel->timeToMinutes($booking['time_from'] ?? '00:00');
+        $untilMinutes = $slotModel->timeToMinutes($booking['time_until'] ?? '00:00');
+        if ($untilMinutes <= $fromMinutes) {
+            $untilMinutes += 24 * 60;
+        }
+
+        return minutesToHuman($untilMinutes - $fromMinutes);
+    }
+
     private function cleanupExpiredPendingBookings(): void
     {
         $bookingsModel = new BookingsModel();
@@ -173,7 +249,8 @@ class Superadmin extends BaseController
             $offerRate = 0;
         }
 
-        $fields = $fieldsModel->findAll();
+        $fields = $fieldsModel->enrichFields($fieldsModel->findAll());
+        $services = (new ServicesModel())->getServices();
 
         $customers = $customersModel->findAll();
         $localities = $localitiesModel->orderBy('name', 'ASC')->findAll();
@@ -201,6 +278,7 @@ class Superadmin extends BaseController
             'localities' => $localities,
             'closureText' => $closureText,
             'bookingEmail' => $bookingEmail,
+            'services' => $services,
         ]);
     }
 
@@ -219,8 +297,8 @@ class Superadmin extends BaseController
         $serviceType = $this->request->getVar('serviceType') ?: 'football';
         $blockMinutes = (int)($this->request->getVar('blockMinutes') ?: ($serviceType === 'padel' ? 90 : 60));
         $priceUnitLabel = $serviceType === 'padel' ? 'por bloque de 1:30' : 'por hora';
-        $valor = $this->request->getVar('valor');
-        $valorIluminacion = $this->request->getVar('valorIluminacion');
+        $valor = parse_price_ar($this->request->getVar('valor'));
+        $valorIluminacion = parse_price_ar($this->request->getVar('valorIluminacion'));
 
 
         $query = [
@@ -251,6 +329,8 @@ class Superadmin extends BaseController
 
         try {
             $id = $fieldsModel->insert($query);
+            $this->syncServicePrice($serviceType, $valor, $priceUnitLabel);
+            $this->logAdminAction('create_field', 'field', $id, null, $query);
             if ($isAjax) {
                 return $this->response->setJSON([
                     'error' => false,
@@ -275,6 +355,7 @@ class Superadmin extends BaseController
     {
         $fieldsModel = new FieldsModel();
         $isAjax = $this->request->isAJAX();
+        $oldField = $fieldsModel->find($id);
 
         $this->request->getVar('iluminacion') ? $iluminacion = true : $iluminacion = false;
         $this->request->getVar('tipoTecho') ? $techada = true : $techada = false;
@@ -286,8 +367,8 @@ class Superadmin extends BaseController
         $serviceType = $this->request->getVar('serviceType') ?: 'football';
         $blockMinutes = (int)($this->request->getVar('blockMinutes') ?: ($serviceType === 'padel' ? 90 : 60));
         $priceUnitLabel = $serviceType === 'padel' ? 'por bloque de 1:30' : 'por hora';
-        $valor = $this->request->getVar('valor');
-        $valorIluminacion = $this->request->getVar('valorIluminacion');
+        $valor = parse_price_ar($this->request->getVar('valor'));
+        $valorIluminacion = parse_price_ar($this->request->getVar('valorIluminacion'));
         $disabled = $this->request->getVar('disabled') ? 1 : 0;
 
 
@@ -319,6 +400,8 @@ class Superadmin extends BaseController
 
         try {
             $fieldsModel->update($id, $query);
+            $this->syncServicePrice($serviceType, $valor, $priceUnitLabel);
+            $this->logAdminAction('edit_field', 'field', $id, $oldField, $query);
             if ($isAjax) {
                 return $this->response->setJSON([
                     'error' => false,
@@ -337,6 +420,143 @@ class Superadmin extends BaseController
         }
 
         return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Servicio editado correctamente']);
+    }
+
+    public function saveService()
+    {
+        $servicesModel = new ServicesModel();
+        if (! \Config\Database::connect()->tableExists('services')) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Debe ejecutar la migracion SQL de servicios.']);
+        }
+
+        $durationMinutes = combine_duration_minutes(
+            $this->request->getVar('duration_hours'),
+            $this->request->getVar('duration_minutes_remainder')
+        );
+        $intervalMinutes = combine_duration_minutes(
+            $this->request->getVar('slot_interval_hours'),
+            $this->request->getVar('slot_interval_minutes_remainder')
+        );
+
+        if ($durationMinutes <= 0) {
+            $durationMinutes = 60;
+        }
+        if ($intervalMinutes <= 0) {
+            $intervalMinutes = $durationMinutes;
+        }
+
+        if ($durationMinutes < $intervalMinutes || $durationMinutes % $intervalMinutes !== 0 || $durationMinutes % 15 !== 0 || $intervalMinutes % 15 !== 0) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Duracion e intervalo deben ser multiplos de 15 minutos y la duracion no puede ser menor al intervalo.']);
+        }
+
+        $name = trim((string)$this->request->getVar('name'));
+        $code = strtolower(trim((string)$this->request->getVar('code')));
+        $code = preg_replace('/[^a-z0-9_]+/', '_', $code);
+        $code = trim((string)$code, '_');
+
+        if ($name === '' || $code === '') {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'El nombre y el codigo del servicio son obligatorios.']);
+        }
+
+        if ($servicesModel->getByCode($code)) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Ya existe un servicio con ese codigo.']);
+        }
+
+        $payload = [
+            'name' => $name,
+            'code' => $code,
+            'opening_time' => $this->request->getVar('opening_time') ?: '07:00',
+            'closing_time' => $this->request->getVar('closing_time') ?: '23:00',
+            'duration_minutes' => $durationMinutes,
+            'slot_interval_minutes' => $intervalMinutes,
+            'minimum_duration_minutes' => $durationMinutes,
+            'booking_interval_minutes' => $intervalMinutes,
+            'active' => $this->request->getVar('active') ? 1 : 0,
+            'online_available' => $this->request->getVar('online_available') ? 1 : 0,
+            'allows_quincho_addon' => $this->request->getVar('allows_quincho_addon') ? 1 : 0,
+            'display_order' => (int)($this->request->getVar('display_order') ?: 100),
+            'offer_active' => $this->request->getVar('offer_active') ? 1 : 0,
+            'offer_text' => trim((string)$this->request->getVar('offer_text')),
+            'discount_type' => $this->request->getVar('discount_type') === 'fixed' ? 'fixed' : 'percentage',
+            'discount_value' => parse_price_ar($this->request->getVar('discount_value')),
+            'offer_start_date' => $this->request->getVar('offer_start_date') ?: null,
+            'offer_end_date' => $this->request->getVar('offer_end_date') ?: null,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        try {
+            $id = $servicesModel->insert($payload);
+            $this->logAdminAction('create_service', 'service', $id, null, $payload);
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Servicio creado correctamente']);
+        } catch (\Throwable $e) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Error al crear servicio: ' . $e->getMessage()]);
+        }
+    }
+
+    public function editService($id)
+    {
+        $servicesModel = new ServicesModel();
+        if (! \Config\Database::connect()->tableExists('services')) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Debe ejecutar la migracion SQL de servicios.']);
+        }
+
+        $oldService = $servicesModel->find($id);
+        if (! $oldService) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Servicio no encontrado.']);
+        }
+
+        $durationMinutes = combine_duration_minutes(
+            $this->request->getVar('duration_hours'),
+            $this->request->getVar('duration_minutes_remainder')
+        );
+        $intervalMinutes = combine_duration_minutes(
+            $this->request->getVar('slot_interval_hours'),
+            $this->request->getVar('slot_interval_minutes_remainder')
+        );
+
+        if ($durationMinutes <= 0) {
+            $durationMinutes = (int)($oldService['duration_minutes'] ?? $oldService['minimum_duration_minutes'] ?? 60);
+        }
+        if ($intervalMinutes <= 0) {
+            $intervalMinutes = (int)($oldService['slot_interval_minutes'] ?? $oldService['booking_interval_minutes'] ?? $durationMinutes);
+        }
+
+        if ($durationMinutes < $intervalMinutes || $durationMinutes % $intervalMinutes !== 0 || $durationMinutes % 15 !== 0 || $intervalMinutes % 15 !== 0) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Duracion e intervalo deben ser multiplos de 15 minutos y la duracion no puede ser menor al intervalo.']);
+        }
+
+        $payload = [
+            'name' => trim((string)$this->request->getVar('name')),
+            'opening_time' => $this->request->getVar('opening_time') ?: '07:00',
+            'closing_time' => $this->request->getVar('closing_time') ?: '23:00',
+            'duration_minutes' => $durationMinutes,
+            'slot_interval_minutes' => $intervalMinutes,
+            'minimum_duration_minutes' => $durationMinutes,
+            'booking_interval_minutes' => $intervalMinutes,
+            'active' => $this->request->getVar('active') ? 1 : 0,
+            'online_available' => $this->request->getVar('online_available') ? 1 : 0,
+            'allows_quincho_addon' => $this->request->getVar('allows_quincho_addon') ? 1 : 0,
+            'offer_active' => $this->request->getVar('offer_active') ? 1 : 0,
+            'offer_text' => trim((string)$this->request->getVar('offer_text')),
+            'discount_type' => $this->request->getVar('discount_type') === 'fixed' ? 'fixed' : 'percentage',
+            'discount_value' => parse_price_ar($this->request->getVar('discount_value')),
+            'offer_start_date' => $this->request->getVar('offer_start_date') ?: null,
+            'offer_end_date' => $this->request->getVar('offer_end_date') ?: null,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        if ($payload['name'] === '') {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'El nombre del servicio es obligatorio.']);
+        }
+
+        try {
+            $servicesModel->update($id, $payload);
+            $this->logAdminAction('edit_service', 'service', $id, $oldService, $payload);
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Servicio editado correctamente']);
+        } catch (\Throwable $e) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Error al editar servicio: ' . $e->getMessage()]);
+        }
     }
 
     public function getActiveBookings()
@@ -385,7 +605,7 @@ class Superadmin extends BaseController
                 'id' => $booking['id'],
                 'cancha' => $fieldsModel->getField($booking['id_field'])['name'],
                 'fecha' => date("d/m/Y", strtotime($booking['date'])),
-                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'],
+                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'] . ' (' . $this->bookingDurationLabel($booking) . ')',
                 'nombre' => $booking['name'],
                 'telefono' => $booking['phone'],
                 'creado_por' => $booking['created_by_name'] ?? $booking['created_by_type'] ?? 'N/D',
@@ -455,7 +675,7 @@ class Superadmin extends BaseController
                 'id' => $booking['id'],
                 'cancha' => $fieldsModel->getField($booking['id_field'])['name'],
                 'fecha' => date("d/m/Y", strtotime($booking['date'])),
-                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'],
+                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'] . ' (' . $this->bookingDurationLabel($booking) . ')',
                 'nombre' => $booking['name'],
                 'telefono' => $booking['phone'],
                 'creado_por' => $booking['created_by_name'] ?? $booking['created_by_type'] ?? 'N/D',
@@ -507,7 +727,7 @@ class Superadmin extends BaseController
                 'nombre' => $booking['name'],
                 'telefono' => $booking['phone'],
                 'cancha' => $fieldName,
-                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'],
+                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'] . ' (' . $this->bookingDurationLabel($booking) . ')',
             ];
         }
 

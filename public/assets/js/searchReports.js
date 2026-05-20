@@ -6,6 +6,13 @@ const downloadReportButton = document.getElementById('downloadReport')
 const downloadPaymentsReportButton = document.getElementById('downloadPaymentsReport')
 const rateModal = new bootstrap.Modal('#rateModal')
 const generateReportModal = new bootstrap.Modal('#generateReportModal')
+
+function formatPriceAR(value) {
+    return '$ ' + new Intl.NumberFormat('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(Number(value || 0))
+}
 const switchPaymentsMp = document.getElementById('checkPaymetsMp')
 const reservePaymentsButton = document.getElementById('reservePayments')
 const searchReportsButton = document.getElementById('searchReports')
@@ -271,7 +278,7 @@ async function fillReservations(data) {
         tr += `
         <tr >
             <td>${pago.fecha}</th>
-            <td>$${pago.reserva}</td>
+            <td>${formatPriceAR(pago.reserva)}</td>
         </tr>
     `
 
@@ -279,7 +286,7 @@ async function fillReservations(data) {
     })
 
     resume = `
-        <p>Total: <b>$${totalReservations}</b></p>
+        <p>Total: <b>${formatPriceAR(totalReservations)}</b></p>
     `
 
     divReservas.innerHTML = tr
@@ -380,7 +387,7 @@ async function fillTable(data) {
         <tr class="report-summary" data-booking="${g.bookingId ?? ''}">
             <td>${g.fecha}</th>
             <td>${g.usuario}</td>
-            <td>$${totalReserva}</td>
+            <td>${formatPriceAR(totalReserva)}</td>
             <td>${methodSummary}</td>
             <td>${g.cliente}</td>
             <td>${g.telefono}</td>
@@ -388,10 +395,10 @@ async function fillTable(data) {
         <tr class="report-detail d-none" data-booking="${g.bookingId ?? ''}">
             <td colspan="6">
                 <div class="report-detail-box">
-                    <div><strong>Pagado:</strong> $${totalPagado}</div>
-                    <div><strong>Saldo:</strong> $${saldo}</div>
+                    <div><strong>Pagado:</strong> ${formatPriceAR(totalPagado)}</div>
+                    <div><strong>Saldo:</strong> ${formatPriceAR(saldo)}</div>
                     <div class="report-detail-list">
-                        ${g.pagos.map(p => `<div>${formatMetodo(p.metodo)}: $${p.monto}</div>`).join('')}
+                        ${g.pagos.map(p => `<div>${formatMetodo(p.metodo)}: ${formatPriceAR(p.monto)}</div>`).join('')}
                     </div>
                 </div>
             </td>
@@ -411,11 +418,11 @@ async function fillTable(data) {
 
     resume = `
         <p>Reservas: <b>${reservasCount}</b></p>
-        <p>Efectivo: <b> $${efectivo} </b></p>
-        <p>Mercado Pago: <b> $${mercadoPago} </b></p>
-        <p>Transferencia: <b> $${transferencia} </b></p>
+        <p>Efectivo: <b>${formatPriceAR(efectivo)}</b></p>
+        <p>Mercado Pago: <b>${formatPriceAR(mercadoPago)}</b></p>
+        <p>Transferencia: <b>${formatPriceAR(transferencia)}</b></p>
         <hr>
-        <p>Total: <b>$${efectivo + mercadoPago + transferencia}</b></p>
+        <p>Total: <b>${formatPriceAR(efectivo + mercadoPago + transferencia)}</b></p>
     `
 
     divTr.innerHTML = tr

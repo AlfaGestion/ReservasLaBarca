@@ -85,6 +85,8 @@ $routes->group('', ['filter' => 'auth'], function ($routes) {
     $routes->get('abmAdmin', 'Superadmin::index');
     $routes->post('saveField', 'Superadmin::saveField');
     $routes->post('editField/(:any)', 'Superadmin::editField/$1');
+    $routes->post('saveService', 'Superadmin::saveService');
+    $routes->post('editService/(:any)', 'Superadmin::editService/$1');
     $routes->post('getActiveBookings', 'Superadmin::getActiveBookings');
     $routes->post('getAnnulledBookings', 'Superadmin::getAnnulledBookings');
     $routes->post('checkCancelReservations', 'Superadmin::checkCancelReservations');

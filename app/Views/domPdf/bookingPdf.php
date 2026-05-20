@@ -104,6 +104,7 @@
             ?>
             <li><span class="label">Fecha:</span> <?= $fechaFormateada ?></li>
             <li><span class="label">Horario:</span> <?= $data['horario'] ?></li>
+            <li><span class="label">Duraci&oacute;n:</span> <?= $data['duracion'] ?? '' ?></li>
             <li><span class="label">Tipo de reserva:</span> <?= $data['cancha'] ?></li>
         </ul>
 
@@ -116,9 +117,9 @@
 
         <div class="section">
             <ul>
-                <li><span class="label">Valor total de la reserva:</span> <?= $data['total_cancha'] ?></li>
-                <li><span class="label">Pagado:</span> <?= $data['pagado'] ?></li>
-                <li><span class="label">Restan:</span> <?= $data['saldo'] ?></li>
+                <li><span class="label">Valor total de la reserva:</span> <?= format_price_ar($data['total_cancha']) ?></li>
+                <li><span class="label">Pagado:</span> <?= format_price_ar($data['pagado']) ?></li>
+                <li><span class="label">Restan:</span> <?= format_price_ar($data['saldo']) ?></li>
                 <li><span class="label">Detalle:</span> <?= $data['detalle']  == '' || $data['detalle'] == null ? 'Reserva' : $data['detalle'] ?></li>
             </ul>
         </div>

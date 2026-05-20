@@ -119,6 +119,30 @@ function timeToMinutes(value) {
     return (h * 60) + m
 }
 
+function minutesToTime(minutes) {
+    const normalized = ((minutes % 1440) + 1440) % 1440
+    const h = Math.floor(normalized / 60)
+    const m = normalized % 60
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function formatPriceAR(value) {
+    return '$ ' + new Intl.NumberFormat('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(Number(value || 0))
+}
+
+function parsePriceAR(value) {
+    if (typeof value === 'number') return value
+    const normalized = String(value || '0')
+        .replace(/\$/g, '')
+        .replace(/\s/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.')
+    return Number(normalized) || 0
+}
+
 let bookingId
 let updateData
 
@@ -142,13 +166,14 @@ document.addEventListener('click', async (e) => {
         const { fecha, horarioDesde, horarioHasta, cancha, inputMonto, telefono, nombre, localidad } = getEditEls()
         const rate = await getRate()
 
+        const totalAmount = parsePriceAR(inputMonto.value)
         updateData = {
             fecha: fecha.value,
             cancha: cancha.value,
             horarioDesde: horarioDesde.value,
             horarioHasta: horarioHasta.value,
-            total: inputMonto.value,
-            parcial: inputMonto.value * rate / 100,
+            total: totalAmount,
+            parcial: totalAmount * rate / 100,
             localidad: localidad ? localidad.value : '',
         }
 
@@ -171,7 +196,7 @@ document.addEventListener('click', async (e) => {
             cancha.value = currentBooking.id_field
             telefono.value = currentBooking.phone
             nombre.value = currentBooking.name
-            inputMonto.value = currentBooking.total
+            inputMonto.value = formatPriceAR(currentBooking.total)
             if (localidad) {
                 localidad.value = currentBooking.locality || ''
             }
@@ -182,8 +207,11 @@ document.addEventListener('click', async (e) => {
             const currentBooking = await getBooking(bookingId)
 
             updateData.bookingId = bookingId
-            updateData.diferencia = inputMonto.value - currentBooking.payment
-            updateData.pagoTotal = (inputMonto.value - currentBooking.payment) == 0 ? 1 : 0
+            const totalAmount = parsePriceAR(inputMonto.value)
+            updateData.total = totalAmount
+            updateData.parcial = totalAmount * rate / 100
+            updateData.diferencia = totalAmount - Number(currentBooking.payment || 0)
+            updateData.pagoTotal = (totalAmount - Number(currentBooking.payment || 0)) == 0 ? 1 : 0
 
 
             if (fecha.value == '' || cancha.value == '' || horarioDesde.value == '' || horarioHasta.value == '' || nombre.value == '' || telefono.value == '') {
@@ -208,8 +236,9 @@ document.addEventListener('change', async (e) => {
         const { fecha, horarioDesde, horarioHasta, cancha, inputMonto } = getEditEls()
         if (e.target.id == 'horarioDesde') {
 
-            const indexDe = horarioDesde.selectedIndex
-            horarioHasta.value = horarioHasta[indexDe + 1].value
+            const selectedField = await getField(cancha.value)
+            const duration = Number(selectedField?.duration_minutes || selectedField?.block_minutes || 60)
+            horarioHasta.value = minutesToTime(timeToMinutes(horarioDesde.value) + duration)
 
             inputMonto.value = 0
 
@@ -429,9 +458,9 @@ async function getAmount(field = "1") {
         const selectedField = await getField(field)
 
         if (nocturnalTime.time.includes(horarioDesde.value) && nocturnalTime.time.includes(horarioHasta.value)) {
-            inputMonto.value = `${calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.ilumination_value)}`
+            inputMonto.value = formatPriceAR(calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.ilumination_value, selectedField))
         } else {
-            inputMonto.value = `${calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.value)}`
+            inputMonto.value = formatPriceAR(calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.value, selectedField))
         }
     } catch (error) {
         console.error('Error:', error);
@@ -440,11 +469,14 @@ async function getAmount(field = "1") {
 }
 
 // Calcula el total $ de la reserva
-function calculateAmount(from, until, amount) {
+function calculateAmount(from, until, amount, field = null) {
     let fromMinutes = timeToMinutes(from)
     let untilMinutes = timeToMinutes(until)
     if (untilMinutes <= fromMinutes) untilMinutes += 1440
-    return Math.round(((untilMinutes - fromMinutes) / 60) * Number(amount || 0))
+    const minutes = untilMinutes - fromMinutes
+    const duration = Number(field?.duration_minutes || field?.block_minutes || 60)
+    const multiplier = (field?.service_type || '') === 'padel' ? Math.ceil(minutes / duration) : minutes / 60
+    return Math.round(multiplier * Number(amount || 0))
 }
 
 async function getRate() {

@@ -4,6 +4,13 @@ const inputHastaBooking = document.getElementById('fechaHastaBooking')
 let bookingData = {}
 let bookingId = ''
 
+function formatPriceAR(value) {
+    return '$ ' + new Intl.NumberFormat('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(Number(value || 0))
+}
+
 function formatDateTime(dateTime) {
     if (!dateTime) return ''
     const parts = dateTime.split(' ')
@@ -264,9 +271,9 @@ async function fillTableBookings(data) {
             <td>${reserva.telefono}</td>
             <td>${reserva.creado_por || 'N/D'}${editInfo}</td>
             <td>${reserva.pago_total}</td>
-            <td>${reserva.monto_reserva}</td>
-            <td>${reserva.total_reserva}</td>
-            <td>${reserva.diferencia}</td>
+            <td>${formatPriceAR(reserva.monto_reserva)}</td>
+            <td>${formatPriceAR(reserva.total_reserva)}</td>
+            <td>${formatPriceAR(reserva.diferencia)}</td>
             <td>${reserva.metodo_pago}</td>
             <td>${descripcion}</td>
             <td>${stateMP}</td>
