@@ -16,10 +16,93 @@ use App\Models\RateModel;
 
 class MercadoPago extends BaseController
 {
-    private function createEmailService()
+    private function normalizeTime($time): string
     {
-        $email = \Config\Services::email();
-        $email->SMTPTimeout = 8;
+        $slotModel = new BookingSlotsModel();
+        return $slotModel->normalizeTime($time);
+    }
+
+    private function extractBookingItems($booking): array
+    {
+        $get = static function ($source, $key) {
+            return is_array($source) ? ($source[$key] ?? null) : ($source->{$key} ?? null);
+        };
+
+        $items = [[
+            'fecha' => $get($booking, 'fecha'),
+            'cancha' => $get($booking, 'cancha'),
+            'horarioDesde' => $get($booking, 'horarioDesde'),
+            'horarioHasta' => $get($booking, 'horarioHasta'),
+        ]];
+
+        $additional = $get($booking, 'additionalQuincho');
+        $enabled = is_array($additional) ? ($additional['enabled'] ?? false) : ($additional->enabled ?? false);
+        if ($additional && $enabled) {
+            $items[] = [
+                'fecha' => is_array($additional) ? ($additional['fecha'] ?? $get($booking, 'fecha')) : ($additional->fecha ?? $get($booking, 'fecha')),
+                'cancha' => is_array($additional) ? ($additional['cancha'] ?? null) : ($additional->cancha ?? null),
+                'horarioDesde' => is_array($additional) ? ($additional['horarioDesde'] ?? null) : ($additional->horarioDesde ?? null),
+                'horarioHasta' => is_array($additional) ? ($additional['horarioHasta'] ?? null) : ($additional->horarioHasta ?? null),
+            ];
+        }
+
+        return $items;
+    }
+
+    private function hasBookingOverlap(BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, $date, $fieldId, $timeFrom, $timeUntil): bool
+    {
+        $timeFrom = $bookingSlotsModel->normalizeTime($timeFrom);
+        $timeUntil = $bookingSlotsModel->normalizeTime($timeUntil);
+
+        $bookings = $bookingsModel->where('date', $date)
+            ->where('id_field', $fieldId)
+            ->where('annulled', 0)
+            ->findAll();
+
+        foreach ($bookings as $booking) {
+            if ($bookingSlotsModel->rangesOverlap($timeFrom, $timeUntil, $booking['time_from'], $booking['time_until'])) {
+                return true;
+            }
+        }
+
+        return $bookingSlotsModel->hasActiveOverlap($date, $fieldId, $timeFrom, $timeUntil);
+    }
+
+    private function buildSlotData(array $item, string $status): array
+    {
+        return [
+            'date' => $item['fecha'],
+            'id_field' => $item['cancha'],
+            'time_from' => $this->normalizeTime($item['horarioDesde']),
+            'time_until' => $this->normalizeTime($item['horarioHasta']),
+            'status' => $status,
+            'active' => 1,
+            'expires_at' => $status === 'pending' ? date('Y-m-d H:i:s', strtotime('+5 minutes')) : null,
+            'created_at' => date('Y-m-d H:i:s'),
+        ];
+    }
+
+    private function createEmailService(array $account = [])
+    {
+        $emailConfig = config('Email');
+        $email = \Config\Services::email(null, false);
+        $email->initialize([
+            'protocol' => $emailConfig->protocol,
+            'SMTPHost' => $emailConfig->SMTPHost,
+            'SMTPUser' => $account['SMTPUser'] ?? $emailConfig->SMTPUser,
+            'SMTPPass' => str_replace(' ', '', (string)($account['SMTPPass'] ?? $emailConfig->SMTPPass)),
+            'SMTPPort' => $emailConfig->SMTPPort,
+            'SMTPTimeout' => $emailConfig->SMTPTimeout ?: 8,
+            'SMTPKeepAlive' => false,
+            'SMTPCrypto' => $emailConfig->SMTPCrypto,
+            'SMTPOptions' => $emailConfig->SMTPOptions,
+            'mailType' => $emailConfig->mailType,
+            'charset' => $emailConfig->charset,
+            'wordWrap' => $emailConfig->wordWrap,
+            'CRLF' => $emailConfig->CRLF,
+            'newline' => $emailConfig->newline,
+            'validate' => $emailConfig->validate,
+        ]);
 
         return $email;
     }
@@ -40,12 +123,10 @@ class MercadoPago extends BaseController
 
         foreach ($accounts as $account) {
             try {
-                $email = $this->createEmailService();
-                $email->fromEmail = $account['fromEmail'] ?? $emailConfig->fromEmail;
-                $email->fromName = $account['fromName'] ?? $emailConfig->fromName;
-                $email->SMTPUser = $account['SMTPUser'] ?? $emailConfig->SMTPUser;
-                $email->SMTPPass = $account['SMTPPass'] ?? $emailConfig->SMTPPass;
-                $email->setFrom($email->fromEmail, $email->fromName);
+                $email = $this->createEmailService($account);
+                $fromEmail = $account['fromEmail'] ?? $emailConfig->fromEmail;
+                $fromName = $account['fromName'] ?? $emailConfig->fromName;
+                $email->setFrom($fromEmail, $fromName);
                 $email->setTo($to);
                 $email->setSubject($subject);
                 $email->setMessage($message);
@@ -54,13 +135,21 @@ class MercadoPago extends BaseController
                     return true;
                 }
 
-                log_message('error', 'Fallo envio SMTP con ' . ($email->fromEmail ?? 'sin cuenta') . ': ' . $email->printDebugger(['headers']));
+                log_message('error', 'Fallo envio SMTP con ' . ($fromEmail ?: 'sin cuenta') . ': ' . $email->printDebugger(['headers']));
             } catch (\Throwable $e) {
                 log_message('error', 'Fallo envio SMTP con ' . (($account['fromEmail'] ?? '') ?: 'sin cuenta') . ': ' . $e->getMessage());
             }
         }
 
         return false;
+    }
+
+    private function parseEmailRecipients(string $toEmail): array
+    {
+        return array_values(array_filter(array_map(
+            static fn($email) => filter_var(trim((string) $email), FILTER_VALIDATE_EMAIL) ?: null,
+            preg_split('/[;,\s]+/', $toEmail) ?: []
+        )));
     }
 
     private function releaseBookingSlot(BookingSlotsModel $bookingSlotsModel, int $slotId): void
@@ -184,14 +273,13 @@ class MercadoPago extends BaseController
         $toRow = $configModel->where('clave', 'email_reservas')->first();
         $toEmail = $toRow['valor'] ?? '';
         if (!is_string($toEmail) || trim($toEmail) === '') {
+            log_message('warning', 'No se envia email de reserva: no hay destinatarios configurados en email_reservas.');
             return;
         }
 
-        $toEmails = array_values(array_filter(array_map(
-            static fn($email) => filter_var(trim((string) $email), FILTER_VALIDATE_EMAIL) ?: null,
-            explode(';', $toEmail)
-        )));
+        $toEmails = $this->parseEmailRecipients($toEmail);
         if ($toEmails === []) {
+            log_message('warning', 'No se envia email de reserva: email_reservas no contiene destinatarios validos.');
             return;
         }
 
@@ -213,7 +301,7 @@ class MercadoPago extends BaseController
             . "Localidad: " . ($localidad !== '' ? $localidad : 'N/D') . "\n"
             . "Fecha: {$fecha}\n"
             . "Horario: {$horario}\n"
-            . "Cancha: {$fieldName}\n";
+            . "Tipo de reserva: {$fieldName}\n";
 
         $caPath = ROOTPATH . 'cacert.pem';
         if (is_file($caPath)) {
@@ -229,7 +317,9 @@ class MercadoPago extends BaseController
         ]);
         $subjectName = trim((string)($booking['name'] ?? 'Cliente'));
         $subjectDate = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'Sin fecha';
-        $this->sendEmailWithFallback($toEmails, "Reserva: {$subjectName} - {$subjectDate}", $message);
+        if (!$this->sendEmailWithFallback($toEmails, "Reserva: {$subjectName} - {$subjectDate}", $message)) {
+            log_message('error', 'No se pudo enviar email de reserva #' . $bookingId . ' con ninguna cuenta SMTP configurada.');
+        }
     }
     public function setPreference()
     {
@@ -258,36 +348,50 @@ class MercadoPago extends BaseController
 
             $bookingDate = $booking->fecha ?? $booking['fecha'] ?? null;
             $bookingField = $booking->cancha ?? $booking['cancha'] ?? null;
-            if ($this->isClosedForDateField($bookingDate, $bookingField)) {
-                return $this->response->setJSON($this->setResponse(409, true, null, 'No se puede reservar: hay un cierre informado para esa fecha.'));
+            $items = $this->extractBookingItems($booking);
+            $fieldsModel = new \App\Models\FieldsModel();
+            foreach ($items as $index => $item) {
+                $field = $fieldsModel->getField($item['cancha']);
+                if (!$field) {
+                    return $this->response->setJSON($this->setResponse(409, true, null, 'El servicio seleccionado no existe.'));
+                }
+                $from = $bookingSlotsModel->timeToMinutes($item['horarioDesde']);
+                $until = $bookingSlotsModel->timeToMinutes($item['horarioHasta']);
+                if ($until <= $from) {
+                    $until += 24 * 60;
+                }
+                $duration = $until - $from;
+                $blockMinutes = (int)($field['block_minutes'] ?? 60);
+                if (($field['service_type'] ?? 'football') === 'padel' && $duration !== 90) {
+                    return $this->response->setJSON($this->setResponse(409, true, null, 'Pádel se reserva únicamente en bloques de 1 hora y 30 minutos.'));
+                }
+                if (($field['service_type'] ?? 'football') !== 'padel' && ($duration <= 0 || $duration % max(1, $blockMinutes) !== 0)) {
+                    return $this->response->setJSON($this->setResponse(409, true, null, 'La duración seleccionada no es válida para el servicio.'));
+                }
+                if ($this->isClosedForDateField($item['fecha'], $item['cancha'])) {
+                    return $this->response->setJSON($this->setResponse(409, true, null, 'No se puede reservar: hay un cierre informado para esa fecha.'));
+                }
+                if ($this->hasBookingOverlap($bookingsModel, $bookingSlotsModel, $item['fecha'], $item['cancha'], $item['horarioDesde'], $item['horarioHasta'])) {
+                    $msg = $index === 0 ? 'El horario ya fue tomado por otra reserva. Actualiza e intenta nuevamente.' : 'El quincho no está disponible en el horario seleccionado.';
+                    return $this->response->setJSON($this->setResponse(409, true, null, $msg));
+                }
             }
 
             $rate = $rateRow['value'];
             $montoParcial = (floatval($montoTotal) * floatval($rate)) / 100;
 
             // Crear slot pendiente antes de generar la preferencia
-            $slotData = [
-                'date' => $booking->fecha ?? $booking['fecha'] ?? null,
-                'id_field' => $booking->cancha ?? $booking['cancha'] ?? null,
-                'time_from' => $booking->horarioDesde ?? $booking['horarioDesde'] ?? null,
-                'time_until' => $booking->horarioHasta ?? $booking['horarioHasta'] ?? null,
-                'status' => 'pending',
-                'active' => 1,
-                'expires_at' => date('Y-m-d H:i:s', strtotime('+5 minutes')),
-                'created_at' => date('Y-m-d H:i:s'),
-            ];
-
-            $slotId = $bookingSlotsModel->insert($slotData, true);
+            $slotId = $bookingSlotsModel->createSlot($this->buildSlotData($items[0], 'pending'));
             if (!$slotId) {
                 return $this->response->setJSON($this->setResponse(409, true, null, 'El horario ya fue tomado por otra reserva. Actualiza e intenta nuevamente.'));
             }
 
             $mp = new MercadoPagoLibrary();
-            $mp->setPreference('Pago total de cancha', $montoTotal, 1);
+            $mp->setPreference('Pago total de reserva', $montoTotal, 1);
             $preferenceIdTotal = $mp->preferenceId;
 
             $mp = new MercadoPagoLibrary();
-            $mp->setPreference('Reserva de cancha', $montoParcial, 1);
+            $mp->setPreference('Reserva de servicio', $montoParcial, 1);
             $preferenceIdParcial = $mp->preferenceId;
 
             $preferences = [
@@ -337,6 +441,46 @@ class MercadoPago extends BaseController
                 $bookingId = $bookingsModel->getInsertID();
                 if ($bookingId) {
                     $bookingSlotsModel->update($slotId, ['booking_id' => $bookingId]);
+                }
+                if ($bookingId && count($items) > 1) {
+                    $additional = $items[1];
+                    $additionalSlotId = $bookingSlotsModel->createSlot($this->buildSlotData($additional, 'pending'));
+                    if (!$additionalSlotId) {
+                        $this->releaseBookingSlot($bookingSlotsModel, (int)$slotId);
+                        $bookingsModel->delete($bookingId);
+                        return $this->response->setJSON($this->setResponse(409, true, null, 'El quincho no está disponible en el horario seleccionado.'));
+                    }
+
+                    $bookingsModel->insert([
+                        'date' => $additional['fecha'],
+                        'id_field' => $additional['cancha'],
+                        'time_from' => $this->normalizeTime($additional['horarioDesde']),
+                        'time_until' => $this->normalizeTime($additional['horarioHasta']),
+                        'name' => $bookingArr['nombre'] ?? null,
+                        'phone' => $bookingArr['telefono'] ?? null,
+                        'locality' => $bookingArr['localidad'] ?? null,
+                        'payment' => 0,
+                        'approved' => 0,
+                        'total' => 0,
+                        'parcial' => 0,
+                        'diference' => 0,
+                        'reservation' => 0,
+                        'total_payment' => 0,
+                        'payment_method' => 'Mercado Pago',
+                        'id_preference_parcial' => $preferenceIdParcial,
+                        'id_preference_total' => $preferenceIdTotal,
+                        'use_offer' => $bookingArr['oferta'] ?? 0,
+                        'description' => 'Quincho adicional de la reserva #' . $bookingId,
+                        'booking_time' => date("Y-m-d H:i:s"),
+                        'mp' => 0,
+                        'annulled' => 0,
+                        'created_by_type' => 'CLIENTE',
+                        'created_by_name' => 'CLIENTE',
+                        'created_by_user_id' => null,
+                    ]);
+                    $additionalBookingId = $bookingsModel->getInsertID();
+                    $bookingSlotsModel->update($additionalSlotId, ['booking_id' => $additionalBookingId]);
+                    $bookingArr['additionalSlotId'] = $additionalSlotId;
                 }
             }
             $preferences['bookingId'] = $bookingId;
@@ -539,10 +683,35 @@ class MercadoPago extends BaseController
             }
 
             $bookingsModel->update($existingBooking['id'], $queryBooking);
+            $siblingBookings = $bookingsModel
+                ->groupStart()
+                    ->where('id_preference_parcial', $existingBooking['id_preference_parcial'])
+                    ->orWhere('id_preference_total', $existingBooking['id_preference_total'])
+                ->groupEnd()
+                ->where('id !=', $existingBooking['id'])
+                ->where('annulled', 0)
+                ->findAll();
+            foreach ($siblingBookings as $siblingBooking) {
+                $siblingUpdate = [
+                    'mp' => 1,
+                    'approved' => 1,
+                    'total_payment' => $total_payment,
+                ];
+                if ($customerId !== null) {
+                    $siblingUpdate['id_customer'] = $customerId;
+                }
+                $bookingsModel->update($siblingBooking['id'], $siblingUpdate);
+            }
             $bookingSlotsModel->where('booking_id', $existingBooking['id'])
                 ->where('active', 1)
                 ->set(['status' => 'confirmed', 'expires_at' => null])
                 ->update();
+            foreach ($siblingBookings as $siblingBooking) {
+                $bookingSlotsModel->where('booking_id', $siblingBooking['id'])
+                    ->where('active', 1)
+                    ->set(['status' => 'confirmed', 'expires_at' => null])
+                    ->update();
+            }
             if (!$createdFromIntent && $customer && array_key_exists('quantity', $customer)) {
                 $customersModel->update($customer['id'], ['quantity' => $customer['quantity'] + 1]);
             }

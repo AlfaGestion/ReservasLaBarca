@@ -1,6 +1,8 @@
 const confirmarReservabutton = document.getElementById('confirmarReserva')
 const bookingForm = document.getElementById('bookingForm')
 const selectCancha = document.getElementById('cancha')
+const serviceTypeSelect = document.getElementById('serviceType')
+const serviceTypeOptions = document.querySelectorAll('input[name="serviceTypeOption"]')
 const fechaInput = document.getElementById('fecha')
 const horarioDesde = document.getElementById('horarioDesde')
 const horarioHasta = document.getElementById('horarioHasta')
@@ -34,6 +36,24 @@ const ofertaModal = new bootstrap.Modal('#ofertaModal')
 const closureNotice = document.getElementById('closureNotice')
 const closureWelcomeNotice = document.getElementById('closureWelcomeNotice')
 const closureTopNotice = document.getElementById('closureTopNotice')
+const addQuincho = document.getElementById('addQuincho')
+const quinchoAdditionalBox = document.getElementById('quinchoAdditionalBox')
+const quinchoAdditionalFields = document.getElementById('quinchoAdditionalFields')
+const quinchoDesde = document.getElementById('quinchoDesde')
+const quinchoHasta = document.getElementById('quinchoHasta')
+const quinchoAvailabilityMessage = document.getElementById('quinchoAvailabilityMessage')
+const allFields = Array.isArray(window.bookingFields) ? window.bookingFields : Array.from(selectCancha?.options || [])
+    .filter(option => option.value)
+    .map(option => ({
+        id: option.value,
+        name: option.textContent,
+        service_type: option.dataset.serviceType || 'football',
+        block_minutes: option.dataset.blockMinutes || 60,
+        value: option.dataset.price || 0,
+        ilumination_value: option.dataset.priceLight || option.dataset.price || 0,
+        disabled: 0,
+    }))
+const openingTime = Array.isArray(window.bookingOpeningTime) ? window.bookingOpeningTime : []
 
 let data = {}
 let preferencesIds = {}
@@ -44,6 +64,7 @@ let pendingMpContext = null
 let closureLoadNoticeShown = false
 // let idCustomer
 let closureInfo = { closed: false, scope: 'none', label: '', fecha: '', closedAll: false, closedFields: [] }
+let currentOccupiedSlots = []
 
 let dataOferta = {
     valor: 0,
@@ -88,18 +109,6 @@ function setupLocalityAutocomplete(inputEl, datalistId) {
 
     const box = document.createElement('div')
     box.className = 'locality-suggestions'
-    box.style.position = 'absolute'
-    box.style.top = '100%'
-    box.style.left = '0'
-    box.style.right = '0'
-    box.style.zIndex = '50'
-    box.style.background = '#fff'
-    box.style.border = '1px solid #cfd4da'
-    box.style.borderTop = 'none'
-    box.style.maxHeight = '200px'
-    box.style.overflowY = 'auto'
-    box.style.display = 'none'
-    box.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
 
     parent.appendChild(box)
 
@@ -111,19 +120,12 @@ function setupLocalityAutocomplete(inputEl, datalistId) {
         }
         items.slice(0, 8).forEach((name) => {
             const item = document.createElement('div')
+            item.className = 'locality-suggestion-item'
             item.textContent = name
-            item.style.padding = '8px 12px'
-            item.style.cursor = 'pointer'
             item.addEventListener('mousedown', (e) => {
                 e.preventDefault()
                 inputEl.value = name
                 box.style.display = 'none'
-            })
-            item.addEventListener('mouseenter', () => {
-                item.style.background = '#f1f3f5'
-            })
-            item.addEventListener('mouseleave', () => {
-                item.style.background = '#fff'
             })
             box.appendChild(item)
         })
@@ -162,9 +164,14 @@ document.addEventListener('DOMContentLoaded', async (e) => {
     // const fechaActual = new Date().toISOString().split('T')[0]
     fechaInput.setAttribute('min', fechaActual)
     fechaInput.value = fechaActual;
+    if (addQuincho) {
+        addQuincho.checked = false
+        quinchoAdditionalFields?.classList.add('d-none')
+    }
     deleteRejected()
 
     await refreshFieldsFromApi()
+    updateServiceOptions()
     await checkClosureStatus()
 
     if (closureWelcomeNotice) {
@@ -207,7 +214,16 @@ document.addEventListener('DOMContentLoaded', async (e) => {
 
 document.addEventListener('change', async (e) => {
     if (e.target) {
-        if (e.target.id == 'fecha') {
+        if (e.target.name == 'serviceTypeOption') {
+            serviceTypeSelect.value = e.target.value
+            serviceTypeSelect.dispatchEvent(new Event('change', { bubbles: true }))
+        } else if (e.target.id == 'serviceType') {
+            syncServiceTypeOptions()
+            selectCancha.value = ''
+            inputMonto.value = 0
+            updateServiceOptions()
+            await getTimeFromBookings()
+        } else if (e.target.id == 'fecha') {
             const day = new Date(fechaInput.value);
             const dayOfWeek = day.getDay();
 
@@ -229,8 +245,8 @@ document.addEventListener('change', async (e) => {
             getTimeFromBookings()
 
             if (horarioDesde.value) {
-                const indexDe = horarioDesde.selectedIndex
-                horarioHasta.value = horarioHasta[indexDe + 1].value
+                horarioHasta.value = minutesToTime(timeToMinutes(horarioDesde.value) + getCurrentBlockMinutes())
+                syncQuinchoSuggestion()
             }
 
             inputMonto.value = 0
@@ -243,9 +259,26 @@ document.addEventListener('change', async (e) => {
 
             getAmount(selectCancha.value)
             await checkClosureStatus()
+            updateAdditionalQuinchoVisibility()
 
         } else if (e.target.id == 'horarioHasta') {
             inputMonto.value = 0
+            getAmount(selectCancha.value)
+            syncQuinchoSuggestion()
+        } else if (e.target.id == 'addQuincho') {
+            quinchoAdditionalFields?.classList.toggle('d-none', !addQuincho.checked)
+            if (addQuincho.checked) {
+                syncQuinchoSuggestion()
+                await getTimeFromBookings()
+                validateQuinchoAdditional(true)
+            }
+            getAmount(selectCancha.value)
+        } else if (e.target.id == 'quinchoDesde') {
+            if (quinchoDesde.value) quinchoHasta.value = minutesToTime(timeToMinutes(quinchoDesde.value) + 60)
+            validateQuinchoAdditional(true)
+            getAmount(selectCancha.value)
+        } else if (e.target.id == 'quinchoHasta') {
+            validateQuinchoAdditional(true)
             getAmount(selectCancha.value)
 
         } else if (e.target.id == 'switchPagoTotal') {
@@ -278,6 +311,7 @@ document.addEventListener('click', async (e) => {
                 nombre: nombre.value,
                 telefono: normalizedPhone,
                 localidad: localidad ? localidad.value : '',
+                additionalQuincho: buildAdditionalQuinchoPayload(),
             }
         } else {
             data = {
@@ -296,6 +330,7 @@ document.addEventListener('click', async (e) => {
                 pagoTotal: pagoTotal.checked,
                 metodoDePago: 'Mercado Pago',
                 oferta: useOffer,
+                additionalQuincho: buildAdditionalQuinchoPayload(),
                 // idCliente: idCustomer,
             }
         }
@@ -309,9 +344,11 @@ document.addEventListener('click', async (e) => {
                 alert('Debe completar todos los campos obligatorios.')
                 return;
             }
+            if (!validateQuinchoAdditional(true)) {
+                return
+            }
 
-            if (horarioDesde.value == '23' && horarioHasta.value == '00' || horarioDesde.value == '23' && horarioHasta.value == '01' || horarioDesde.value == '22' && horarioHasta.value == '00' || horarioDesde.value == '22' && horarioHasta.value == '01') {
-            } else if (parseInt(horarioDesde.value) >= parseInt(horarioHasta.value)) {
+            if (timeToMinutes(horarioDesde.value) >= timeToMinutes(horarioHasta.value) && timeToMinutes(horarioHasta.value) !== 0) {
                 alert('El horario de inicio no puede ser mayor o igual al horario de fin.')
                 return;
             }
@@ -341,15 +378,10 @@ document.addEventListener('click', async (e) => {
             }
         } else if (e.target.id == 'switchPagoTotal') {
             const switchPagoTotal = document.getElementById('switchPagoTotal')
-            const nocturnalTime = await getNocturnalTime()
             const rate = await getRate()
 
             if (switchPagoTotal.checked) {
-                if (nocturnalTime.time.includes(horarioDesde.value) && nocturnalTime.time.includes(horarioHasta.value)) {
-                    pagoReserva.value = inputMonto.value
-                } else {
-                    pagoReserva.value = inputMonto.value
-                }
+                pagoReserva.value = inputMonto.value
             } else {
                 pagoReserva.value = inputMonto.value * rate / 100
             }
@@ -400,11 +432,15 @@ document.addEventListener('click', async (e) => {
             data.metodoDePago = paymentMethod.value
             data.descripcion = description.value
             data.total = totalReserva.value
+            data.additionalQuincho = buildAdditionalQuinchoPayload()
 
             saveAdminBooking(data)
         } else if (e.target.id == 'confirmarAdminReserva') {
             if (closureInfo && (closureInfo.closedAll || (Array.isArray(closureInfo.closedFields) && closureInfo.closedFields.length > 0))) {
                 alert('Aviso: hay un cierre informado para esta fecha. Como admin, la reserva se puede guardar igual.')
+            }
+            if (!validateQuinchoAdditional(true)) {
+                return
             }
             fetchFormInfo(data)
 
@@ -452,60 +488,52 @@ telefono.addEventListener('input', async () => {
 
     if (phone.length >= 10 && phone.length <= 11) {
         modalSpinner.show()
-        const offer = await getOffer()
-        const customer = await getCustomer(phone)
-        const amount = inputMonto.value
+        try {
+            const offer = await getOffer()
+            const customer = await getCustomer(phone)
+            const amount = Number(inputMonto.value || 0)
 
+            if (customer) {
+                if (customer.offer == '1') {
+                    content = `
+                        <h1 class="offerTitle">${offer.value}%</h1>
+                        <h6 class="offerDescription">${offer.description}</h6>
+                        <button type="button" class="btn mb-2" data-bs-dismiss="modal" style="background-color: #f09424">Continuar</button>
+                        `
 
-        if (customer) {
+                    if (offer.value != 0) {
+                        const ofertaModalContent = document.getElementById('ofertaModalContent')
 
-            if (customer.offer == '1') {
+                        ofertaModalContent.innerHTML = content
+                        ofertaModal.show()
+                    }
 
-                content = `
-                    <h1 class="offerTitle">${offer.value}%</h1>
-                    <h6 class="offerDescription">${offer.description}</h6>
-                    <button type="button" class="btn mb-2" data-bs-dismiss="modal" style="background-color: #f09424">Continuar</button>
-                    `
+                    const discount = amount * offer.value / 100
+                    const discountAmount = amount - discount
 
-                if (offer.value != 0) {
-                    const ofertaModalContent = document.getElementById('ofertaModalContent')
-
-                    ofertaModalContent.innerHTML = content
-                    ofertaModal.show()
+                    useOffer = true
+                    // idCustomer = customer.id
+                    inputMonto.value = discountAmount
+                    nombre.value = customer.name
+                    if (localidad) {
+                        localidad.value = customer.city || ''
+                    }
+                } else {
+                    // idCustomer = customer.id
+                    nombre.value = customer.name
+                    if (localidad) {
+                        localidad.value = customer.city || ''
+                    }
                 }
-
-                const discount = amount * offer.value / 100
-                const discountAmount = amount - discount
-
-                useOffer = true
-                // idCustomer = customer.id
-                inputMonto.value = discountAmount
-                nombre.value = customer.name
-                if (localidad) {
-                    localidad.value = customer.city || ''
-                }
-
             } else {
-                // idCustomer = customer.id
-                nombre.value = customer.name
-                if (localidad) {
-                    localidad.value = customer.city || ''
-                }
+                await getAmount(selectCancha.value)
             }
-        } else {
-
-            const nocturnalTime = await getNocturnalTime()
-            const selectedField = await getField(selectCancha.value)
-
-
-            if (nocturnalTime.time.includes(horarioDesde.value) && nocturnalTime.time.includes(horarioHasta.value)) {
-                inputMonto.value = `${calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.ilumination_value)}`
-            } else {
-                inputMonto.value = `${calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.value)}`
-            }
+        } catch (error) {
+            console.error('Error al validar telefono:', error)
+            await getAmount(selectCancha.value)
+        } finally {
+            setTimeout(() => { modalSpinner.hide() }, 300);
         }
-
-        setTimeout(() => { modalSpinner.hide() }, 300);
     }
 })
 
@@ -641,6 +669,190 @@ async function setScriptMP(amount) {
         return false
     } finally {
         modalSpinner.hide()
+    }
+}
+
+function normalizeTimeValue(value) {
+    const raw = String(value || '').trim()
+    if (!raw) return ''
+    if (/^\d{1,2}$/.test(raw)) return `${raw.padStart(2, '0')}:00`
+    const parts = raw.split(':')
+    return `${String(parts[0] || '0').padStart(2, '0')}:${String(parts[1] || '0').padStart(2, '0')}`
+}
+
+function timeToMinutes(value) {
+    const [h, m] = normalizeTimeValue(value).split(':').map(Number)
+    return (h * 60) + m
+}
+
+function minutesToTime(minutes) {
+    const normalized = ((minutes % 1440) + 1440) % 1440
+    const h = Math.floor(normalized / 60)
+    const m = normalized % 60
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function rangesOverlap(fromA, untilA, fromB, untilB) {
+    let aFrom = timeToMinutes(fromA)
+    let aUntil = timeToMinutes(untilA)
+    let bFrom = timeToMinutes(fromB)
+    let bUntil = timeToMinutes(untilB)
+    if (aUntil <= aFrom) aUntil += 1440
+    if (bUntil <= bFrom) bUntil += 1440
+    return aFrom < bUntil && aUntil > bFrom
+}
+
+function getSelectedServiceType() {
+    return serviceTypeSelect?.value || 'football'
+}
+
+function syncServiceTypeOptions() {
+    serviceTypeOptions.forEach(option => {
+        option.checked = option.value === getSelectedServiceType()
+    })
+}
+
+function getFieldById(id) {
+    return allFields.find(field => String(field.id) === String(id)) || null
+}
+
+function getFieldsByService(serviceType) {
+    return allFields.filter(field => String(field.disabled || '0') !== '1' && (field.service_type || 'football') === serviceType)
+}
+
+function getQuinchoField() {
+    return getFieldsByService('quincho')[0] || null
+}
+
+async function getSelectedFieldDetails(fieldId) {
+    const localField = getFieldById(fieldId)
+    if (localField) return localField
+
+    try {
+        return await getField(fieldId)
+    } catch (error) {
+        console.error('No se pudo obtener la cancha:', error)
+        return null
+    }
+}
+
+function isNocturnalBooking(nocturnalTime) {
+    const times = Array.isArray(nocturnalTime?.time) ? nocturnalTime.time : []
+    return times.includes(horarioDesde.value) && times.includes(horarioHasta.value)
+}
+
+function getCurrentBlockMinutes() {
+    const selected = getFieldById(selectCancha?.value)
+    if (selected?.block_minutes) return Number(selected.block_minutes)
+    return getSelectedServiceType() === 'padel' ? 90 : 60
+}
+
+function getOpeningStartMinutes() {
+    return timeToMinutes(openingTime[0] || '07:00')
+}
+
+function getOpeningEndMinutes() {
+    const end = timeToMinutes(openingTime[openingTime.length - 1] || '23:00')
+    const start = getOpeningStartMinutes()
+    return end <= start ? end + 1440 : end
+}
+
+function fillTimeSelect(select, values, placeholder = 'Seleccionar') {
+    if (!select) return
+    const previous = select.value
+    select.innerHTML = ''
+    select.appendChild(new Option(placeholder, ''))
+    values.forEach(value => select.appendChild(new Option(value, value)))
+    if (previous && values.includes(previous)) select.value = previous
+}
+
+function buildStartTimes(blockMinutes, stepMinutes = blockMinutes) {
+    const start = getOpeningStartMinutes()
+    const end = getOpeningEndMinutes()
+    const values = []
+    for (let current = start; current + blockMinutes <= end; current += stepMinutes) {
+        values.push(minutesToTime(current))
+    }
+    return values
+}
+
+function updateTimeOptions() {
+    const block = getCurrentBlockMinutes()
+    const starts = buildStartTimes(block, getSelectedServiceType() === 'padel' ? 30 : block)
+    fillTimeSelect(horarioDesde, starts)
+    fillTimeSelect(horarioHasta, starts.map(t => minutesToTime(timeToMinutes(t) + block)))
+    if (quinchoDesde && quinchoHasta) {
+        const hourlyStarts = buildStartTimes(60)
+        fillTimeSelect(quinchoDesde, hourlyStarts)
+        fillTimeSelect(quinchoHasta, hourlyStarts.map(t => minutesToTime(timeToMinutes(t) + 60)))
+    }
+}
+
+function updateServiceOptions() {
+    if (!selectCancha) return
+    const selectedService = getSelectedServiceType()
+    const selected = selectCancha.value
+    selectCancha.innerHTML = ''
+    selectCancha.appendChild(new Option('Elegí una cancha o espacio', ''))
+    getFieldsByService(selectedService).forEach((field) => {
+        const option = new Option(field.name, field.id)
+        option.dataset.serviceType = field.service_type || 'football'
+        option.dataset.blockMinutes = field.block_minutes || (selectedService === 'padel' ? 90 : 60)
+        selectCancha.appendChild(option)
+    })
+    if (selected && Array.from(selectCancha.options).some(opt => opt.value === selected)) {
+        selectCancha.value = selected
+    }
+    if (!selectCancha.value && selectCancha.options.length === 2) {
+        selectCancha.selectedIndex = 1
+    }
+    applyClosedFieldsToSelect()
+    updateTimeOptions()
+    updateAdditionalQuinchoVisibility()
+}
+
+function updateAdditionalQuinchoVisibility() {
+    const quincho = getQuinchoField()
+    const canOffer = Boolean(quincho && selectCancha?.value && String(selectCancha.value) !== String(quincho.id))
+    if (!quinchoAdditionalBox) return
+    quinchoAdditionalBox.classList.toggle('d-none', !canOffer)
+    if (!canOffer && addQuincho) {
+        addQuincho.checked = false
+        quinchoAdditionalFields?.classList.add('d-none')
+    }
+}
+
+function syncQuinchoSuggestion() {
+    if (!quinchoDesde || !quinchoHasta || !horarioHasta.value) return
+    quinchoDesde.value = normalizeTimeValue(horarioHasta.value)
+    quinchoHasta.value = minutesToTime(timeToMinutes(quinchoDesde.value) + 60)
+}
+
+function isSlotAvailable(fieldId, from, until) {
+    return !currentOccupiedSlots.some(slot => String(slot.id_cancha) === String(fieldId) && rangesOverlap(from, until, slot.time_from || slot.time?.[0], slot.time_until || slot.time?.[1]))
+}
+
+function validateQuinchoAdditional(showMessage = true) {
+    if (!addQuincho?.checked) return true
+    const quincho = getQuinchoField()
+    const valid = Boolean(quincho && quinchoDesde.value && quinchoHasta.value && isSlotAvailable(quincho.id, quinchoDesde.value, quinchoHasta.value))
+    if (quinchoAvailabilityMessage) {
+        quinchoAvailabilityMessage.textContent = valid ? '' : 'El quincho no está disponible en el horario seleccionado.'
+        quinchoAvailabilityMessage.classList.toggle('d-none', valid || !showMessage)
+    }
+    return valid
+}
+
+function buildAdditionalQuinchoPayload() {
+    if (!addQuincho?.checked) return null
+    const quincho = getQuinchoField()
+    if (!quincho) return null
+    return {
+        enabled: true,
+        fecha: fechaInput.value,
+        cancha: quincho.id,
+        horarioDesde: quinchoDesde.value,
+        horarioHasta: quinchoHasta.value,
     }
 }
 
@@ -882,27 +1094,26 @@ function showStyledConfirm({
 
 async function getAmount(field = "1") {
     try {
-        const nocturnalTime = await getNocturnalTime()
-        const selectedField = await getField(field)
-
-        if (!nocturnalTime) {
-            console.warn('No se pudo obtener el horario nocturno.')
+        if (!field || !horarioDesde.value || !horarioHasta.value) {
+            inputMonto.value = 0
             return
         }
+        const selectedField = await getSelectedFieldDetails(field)
 
         if (!selectedField) {
             alert('No se pudo obtener la información. Intenta nuevamente.')
             return
         }
 
-        if (nocturnalTime.time.includes(horarioDesde.value) && nocturnalTime.time.includes(horarioHasta.value)) {
+        const nocturnalTime = await getNocturnalTime()
+        if (isNocturnalBooking(nocturnalTime)) {
             inputMonto.value = `${calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.ilumination_value)}`
         } else {
             inputMonto.value = `${calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.value)}`
         }
     } catch (error) {
         console.error('Error:', error);
-        throw error;
+        inputMonto.value = 0
     }
 }
 
@@ -971,7 +1182,7 @@ async function getNocturnalTime() {
         }
     } catch (error) {
         console.error('Error:', error);
-        throw error;
+        return null
     }
 }
 
@@ -1008,22 +1219,9 @@ async function refreshFieldsFromApi() {
         if (!fields || fields.length === 0) {
             return
         }
-
-        const selected = selectCancha.value
-
-        selectCancha.innerHTML = ''
-        const defaultOption = new Option('Canchas disponibles', '')
-        selectCancha.appendChild(defaultOption)
-
-        fields.forEach((field) => {
-            const option = new Option(field.name, field.id)
-            selectCancha.appendChild(option)
-        })
-
-        if (selected) {
-            selectCancha.value = selected
-        }
-        applyClosedFieldsToSelect()
+        window.bookingFields = fields
+        allFields.splice(0, allFields.length, ...fields)
+        updateServiceOptions()
     } catch (error) {
         console.error('Error:', error)
     }
@@ -1130,7 +1328,7 @@ async function getCustomer(phone) {
 
     } catch (error) {
         console.error('Error:', error);
-        throw error;
+        return null
     }
 }
 
@@ -1148,14 +1346,17 @@ async function fillModal(data) {
 
     const fecha = convertDateFormat(data.data.fecha)
     const localidadValue = data.data.localidad ? `<li><i class="fa-solid fa-location-dot"></i> <b>Localidad:</b> ${data.data.localidad}</li>` : ''
+    const additional = buildAdditionalQuinchoPayload()
+    const additionalText = additional ? `<li><i class="fa-solid fa-plus"></i> <b>Adicional:</b> Quincho de ${additional.horarioDesde} a ${additional.horarioHasta}</li>` : ''
 
     if (sessionUserLogued) {
         info =
             `
         <ul id="bookingDetail">
             <li><i class="fa-solid fa-calendar-days"></i> <b>Fecha:</b> ${fecha}</li>
-            <li><i class="fa-solid fa-futbol"></i> <b>Cancha:</b> ${data.data.cancha}</li>
-            <li><i class="fa-solid fa-clock"></i> <b>Horario:</b> ${data.data.horarioDesde}:00 a ${data.data.horarioHasta}:00</li>
+            <li><i class="fa-solid fa-futbol"></i> <b>Tipo de reserva:</b> ${data.data.cancha}</li>
+            <li><i class="fa-solid fa-clock"></i> <b>Horario:</b> ${normalizeTimeValue(data.data.horarioDesde)} a ${normalizeTimeValue(data.data.horarioHasta)}</li>
+            ${additionalText}
             <li><i class="fa-solid fa-user"></i> <b>Nombre:</b> ${data.data.nombre}</li>
             <li><i class="fa-solid fa-phone"></i> <b>Telefono:</b> ${data.data.telefono}</li>
             ${localidadValue}
@@ -1166,8 +1367,9 @@ async function fillModal(data) {
             `
         <ul id="bookingDetail">
             <li><i class="fa-solid fa-calendar-days"></i> <b>Fecha:</b> ${fecha}</li>
-            <li><i class="fa-solid fa-futbol"></i> <b>Cancha:</b> ${data.data.cancha}</li>
-            <li><i class="fa-solid fa-clock"></i> <b>Horario:</b> ${data.data.horarioDesde}:00 a ${data.data.horarioHasta}:00</li>
+            <li><i class="fa-solid fa-futbol"></i> <b>Tipo de reserva:</b> ${data.data.cancha}</li>
+            <li><i class="fa-solid fa-clock"></i> <b>Horario:</b> ${normalizeTimeValue(data.data.horarioDesde)} a ${normalizeTimeValue(data.data.horarioHasta)}</li>
+            ${additionalText}
             <i class="fa-regular fa-money-bill-1"></i> <b>Monto:</b> $${amount}</li>
             <li><i class="fa-solid fa-user"></i> <b>Nombre:</b> ${data.data.nombre}</li>
             <li><i class="fa-solid fa-phone"></i> <b>Telefono:</b> ${data.data.telefono}</li>
@@ -1341,6 +1543,7 @@ async function getTimeFromBookings() {
         const responseData = await response.json();
 
         if (isEmptyData(responseData.data)) {
+            getFieldForTimeBookings([])
             return
         }
 
@@ -1426,94 +1629,33 @@ async function getTimeFromBookings() {
 
 
 async function getFieldForTimeBookings(timeBookings) {
-    let exists = false
-    const normalizeHour = (h) => String(h ?? '').padStart(2, '0')
-    const currentReserva = [normalizeHour(horarioDesde.value), normalizeHour(horarioHasta.value)] // 21 a 22
-    const options = selectCancha.options //canchas (4)
+    currentOccupiedSlots = Array.isArray(timeBookings) ? timeBookings : []
+    updateServiceOptions()
 
-
-    timeBookings.forEach(element => {
-        let reserva = []
-        for (let t = 0; t < element.time.length; t += 2) {
-            if (normalizeHour(horarioDesde.value) == normalizeHour(element.time[t])) {
-                reserva.push(element.time.slice(t, t + 2).map(normalizeHour))
+    if (horarioDesde.value && horarioHasta.value) {
+        Array.from(selectCancha.options).forEach((option) => {
+            if (!option.value) return
+            if (!isSlotAvailable(option.value, horarioDesde.value, horarioHasta.value)) {
+                option.remove()
             }
-        }
+        })
+    }
 
-        exists = false
-
-        if (reserva.length == 0) {
-            for (let i = 0; i < options.length; i++) {
-                if (options[i].value == element.id_cancha) {
-                    exists = true
-
-                    break
-                }
-            }
-
-            if (!exists) {
-                const newOption = new Option(element.nombre_cancha, element.id_cancha)
-                selectCancha.appendChild(newOption)
-            }
-        } else {
-
-            reserva.forEach(res => {
-                const remove = JSON.stringify(res) === JSON.stringify(currentReserva)
-
-                if (remove) {
-                    for (let i = 0; i < options.length; i++) {
-
-                        if (options[i].value == element.id_cancha) {
-                            options[i].remove()
-
-                            break
-                        }
-                    }
-                } else {
-                    exists = false
-
-                    for (let i = 0; i < options.length; i++) {
-                        if (options[i].value == element.id_cancha) {
-                            exists = true
-
-                            break
-                        }
-                    }
-
-                    if (!exists) {
-                        const newOption = new Option(element.nombre_cancha, element.id_cancha)
-                        selectCancha.appendChild(newOption)
-                    }
-                }
-            })
-        }
-    })
-
-    const optionsArray = Array.from(selectCancha.options)
-
-    optionsArray.sort((a, b) => {
-        const valueA = parseFloat(a.value)
-        const valueB = parseFloat(b.value)
-        return valueA - valueB
-    });
-
-    selectCancha.innerHTML = ''
-
-    if (optionsArray.length == 1) {
+    if (selectCancha.options.length == 1) {
         selectCancha.setAttribute('disabled', 'true')
         selectCancha.style.backgroundColor = '#bb2d3b'
-        optionsArray[0].innerText = 'No hay canchas disponibles en este horario'
+        selectCancha.options[0].innerText = 'No hay canchas o espacios disponibles'
     } else {
         selectCancha.removeAttribute('disabled')
         selectCancha.style.backgroundColor = ''
-        optionsArray[0].innerText = 'Canchas disponibles'
+        selectCancha.options[0].innerText = 'Elegí una cancha o espacio'
+        if (!selectCancha.value && selectCancha.options.length === 2) {
+            selectCancha.selectedIndex = 1
+        }
     }
 
-    optionsArray.forEach(option => {
-        selectCancha.appendChild(option)
-    })
-
     applyClosedFieldsToSelect()
+    validateQuinchoAdditional(false)
 }
 
 
@@ -1522,23 +1664,28 @@ async function getFieldForTimeBookings(timeBookings) {
 // Calcula el total $ de la reserva
 
 function calculateAmount(from, until, amount) {
-    let hours = 0
-    let result = ''
+    const field = getFieldById(selectCancha?.value)
+    const blockMinutes = Number(field?.block_minutes || getCurrentBlockMinutes())
+    let fromMinutes = timeToMinutes(from)
+    let untilMinutes = timeToMinutes(until)
+    if (untilMinutes <= fromMinutes) untilMinutes += 1440
+    const minutes = Math.max(0, untilMinutes - fromMinutes)
+    const multiplier = (field?.service_type || getSelectedServiceType()) === 'padel'
+        ? Math.ceil(minutes / blockMinutes)
+        : minutes / 60
+    let total = multiplier * Number(amount || 0)
 
-    if (Number(from) == 23 && Number(until) == 0) {
-        hours = 1
-    } else if (Number(from) == 23 && Number(until == 1)) {
-        hours = 2
+    if (addQuincho?.checked) {
+        const quincho = getQuinchoField()
+        if (quincho && quinchoDesde.value && quinchoHasta.value) {
+            let qFrom = timeToMinutes(quinchoDesde.value)
+            let qUntil = timeToMinutes(quinchoHasta.value)
+            if (qUntil <= qFrom) qUntil += 1440
+            total += ((qUntil - qFrom) / 60) * Number(quincho.value || 0)
+        }
     }
 
-    for (i = Number(from); i < Number(until); i++) {
-
-        hours = hours + 1
-    }
-
-    result = parseInt(hours) * parseInt(amount)
-
-    return result
+    return Math.round(total)
 }
 
 

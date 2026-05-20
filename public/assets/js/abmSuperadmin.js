@@ -24,6 +24,11 @@ const enterFieldsForm = document.getElementById('enterFields')
 const selectEditField = document.getElementById('selectEditField')
 const editFieldDiv = document.getElementById('editFieldDiv')
 const selectEditFields = document.getElementById('selectEditFields')
+const fieldFormModalElement = document.getElementById('fieldFormModal')
+const fieldFormModal = fieldFormModalElement ? new bootstrap.Modal(fieldFormModalElement) : null
+const fieldFormModalTitle = document.getElementById('fieldFormModalTitle')
+const fieldFormMessage = document.getElementById('fieldFormMessage')
+const serviceFieldsTableBody = document.getElementById('serviceFieldsTableBody')
 const adminTabs = new bootstrap.Tab(document.getElementById('nav-tab'))
 const toggleCancelReservations = document.getElementById('toggleCancelReservations')
 const cancelReservationsPanel = document.getElementById('cancelReservationsPanel')
@@ -53,10 +58,116 @@ function getLocalDateISO(date = new Date()) {
     return `${year}-${month}-${day}`
 }
 
+const fieldServiceLabels = {
+    football: 'Cancha / Fútbol',
+    padel: 'Pádel',
+    quincho: 'Quincho',
+    eventos: 'Eventos / Confitería',
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+}
+
+function showFieldFormMessage(type, message) {
+    if (!fieldFormMessage) return
+    fieldFormMessage.className = `alert alert-${type}`
+    fieldFormMessage.textContent = message
+    fieldFormMessage.classList.remove('d-none')
+}
+
+function clearFieldFormMessage() {
+    if (!fieldFormMessage) return
+    fieldFormMessage.textContent = ''
+    fieldFormMessage.className = 'alert d-none'
+}
+
+function setFieldModalMode(mode) {
+    clearFieldFormMessage()
+    if (fieldFormModalTitle) {
+        fieldFormModalTitle.textContent = mode === 'create' ? 'Crear servicio' : 'Editar servicio'
+    }
+    enterFieldsForm?.classList.toggle('d-none', mode !== 'create')
+    selectEditField?.classList.toggle('d-none', mode !== 'selectEdit')
+    if (mode !== 'edit' && editFieldDiv) {
+        editFieldDiv.innerHTML = ''
+    }
+    if (mode === 'create') {
+        const form = enterFieldsForm?.querySelector('form')
+        form?.reset()
+        const serviceSelect = document.getElementById('createServiceType')
+        const blockMinutes = document.getElementById('createBlockMinutes')
+        const footballOption = document.getElementById('createServiceTypeFootball')
+        if (serviceSelect) serviceSelect.value = 'football'
+        if (blockMinutes) blockMinutes.value = 60
+        if (footballOption) footballOption.checked = true
+    }
+}
+
+function renderServiceFieldRow(field) {
+    const serviceType = field.service_type || 'football'
+    const disabled = String(field.disabled || '0') === '1'
+    return `
+        <tr data-field-row="${escapeHtml(field.id)}">
+            <td>${escapeHtml(field.name)}</td>
+            <td>${escapeHtml(fieldServiceLabels[serviceType] || serviceType)}</td>
+            <td>${escapeHtml(field.block_minutes || 60)} min</td>
+            <td>$${escapeHtml(field.value || 0)}</td>
+            <td>$${escapeHtml(field.ilumination_value || 0)}</td>
+            <td>
+                <span class="badge ${disabled ? 'bg-secondary' : 'bg-success'}">
+                    ${disabled ? 'Deshabilitado' : 'Activo'}
+                </span>
+            </td>
+            <td class="text-end">
+                <button type="button" class="btn btn-sm btn-outline-primary field-edit-row" data-field-id="${escapeHtml(field.id)}">
+                    <i class="fa-solid fa-pen-to-square me-1"></i>Editar
+                </button>
+            </td>
+        </tr>`
+}
+
+function upsertServiceFieldRow(field) {
+    if (!serviceFieldsTableBody || !field?.id) return
+    const emptyRow = document.getElementById('serviceFieldsEmptyRow')
+    emptyRow?.remove()
+    const existing = Array.from(serviceFieldsTableBody.querySelectorAll('[data-field-row]'))
+        .find(row => String(row.dataset.fieldRow) === String(field.id))
+    if (existing) {
+        existing.outerHTML = renderServiceFieldRow(field)
+        return
+    }
+    serviceFieldsTableBody.insertAdjacentHTML('beforeend', renderServiceFieldRow(field))
+}
+
+function upsertServiceFieldSelectOption(field) {
+    if (!selectEditFields || !field?.id) return
+    let option = Array.from(selectEditFields.options).find(opt => String(opt.value) === String(field.id))
+    if (!option) {
+        option = new Option(field.name, field.id)
+        selectEditFields.appendChild(option)
+    } else {
+        option.textContent = field.name
+    }
+}
+
 if (adminTabs && adminTabs._element) {
     adminTabs._element.addEventListener("shown.bs.tab", (e) => {
         if (enterFieldsForm) enterFieldsForm.classList.add('d-none')
         if (selectEditField) selectEditField.classList.add('d-none')
+    })
+}
+
+if (fieldFormModalElement) {
+    fieldFormModalElement.addEventListener('hidden.bs.modal', () => {
+        clearFieldFormMessage()
+        if (editFieldDiv) editFieldDiv.innerHTML = ''
+        if (selectEditFields) selectEditFields.value = ''
     })
 }
 
@@ -75,15 +186,102 @@ if (closuresTabDateRangeSelect && closuresTabDateFromInput && closuresTabDateToI
 
 if (selectEditField) {
     selectEditField.addEventListener('change', async (e) => {
-        if (selectEditFields) {
-            getEditField(selectEditFields.value)
+        if (selectEditFields?.value) {
+            clearFieldFormMessage()
+            await getEditField(selectEditFields.value)
+            selectEditField.classList.add('d-none')
+        } else if (editFieldDiv) {
+            editFieldDiv.innerHTML = ''
         }
     })
 }
 
+document.addEventListener('change', (e) => {
+    const serviceTypeOption = e.target.closest('[data-service-select]')
+    if (!serviceTypeOption) return
+
+    const select = document.querySelector(serviceTypeOption.dataset.serviceSelect)
+    const blockMinutes = document.querySelector(serviceTypeOption.dataset.blockMinutesTarget)
+    if (select) {
+        select.value = serviceTypeOption.value
+    }
+    if (blockMinutes) {
+        blockMinutes.value = serviceTypeOption.value === 'padel' ? 90 : 60
+    }
+})
+
+document.addEventListener('submit', async (e) => {
+    const form = e.target.closest('.field-ajax-form')
+    if (!form) return
+
+    e.preventDefault()
+    clearFieldFormMessage()
+
+    const submitButton = form.querySelector('[type="submit"]')
+    const originalText = submitButton ? submitButton.textContent : ''
+    if (submitButton) {
+        submitButton.disabled = true
+        submitButton.textContent = 'Guardando...'
+    }
+
+    try {
+        const response = await fetch(form.action, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            },
+            body: new FormData(form),
+        })
+        const result = await response.json()
+        if (!response.ok || result.error) {
+            showFieldFormMessage('danger', result.message || 'No se pudo guardar el servicio.')
+            return
+        }
+        if (result.data) {
+            upsertServiceFieldRow(result.data)
+            upsertServiceFieldSelectOption(result.data)
+        }
+        fieldFormModal?.hide()
+        form.reset()
+        if (editFieldDiv) editFieldDiv.innerHTML = ''
+    } catch (error) {
+        console.error('Error:', error)
+        showFieldFormMessage('danger', 'No se pudo guardar el servicio. Intenta nuevamente.')
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false
+            submitButton.textContent = originalText
+        }
+    }
+})
+
 
 document.addEventListener('click', async (e) => {
     if (e.target) {
+        const fieldAction = e.target.closest('#buttonCreateField, #buttonEditField, .field-edit-row')
+        if (fieldAction?.id == 'buttonCreateField') {
+            setFieldModalMode('create')
+            fieldFormModal?.show()
+            return
+        }
+        if (fieldAction?.id == 'buttonEditField') {
+            setFieldModalMode('selectEdit')
+            if (selectEditFields) selectEditFields.value = ''
+            fieldFormModal?.show()
+            return
+        }
+        if (fieldAction?.classList.contains('field-edit-row')) {
+            const fieldId = fieldAction.dataset.fieldId
+            if (!fieldId) return
+            setFieldModalMode('edit')
+            selectEditField?.classList.add('d-none')
+            if (selectEditFields) selectEditFields.value = fieldId
+            await getEditField(fieldId)
+            fieldFormModal?.show()
+            return
+        }
+
         if (e.target.id == 'botonCompletarPago') {
 
             const idUser = document.getElementById('userId').dataset.id
@@ -134,19 +332,6 @@ document.addEventListener('click', async (e) => {
 
             completarPagoModalB.show()
             inputCompletarPagoReserva.value = booking.diference
-
-        } else if (e.target.id == 'buttonCreateField') {
-
-            const editFieldsForm = document.getElementById('editFields')
-
-            enterFieldsForm.classList.remove('d-none')
-            editFieldsForm.classList.add('d-none')
-            selectEditField.classList.add('d-none')
-
-        } else if (e.target.id == 'buttonEditField') {
-
-            selectEditField.classList.remove('d-none')
-            enterFieldsForm.classList.add('d-none')
 
         } else if (e.target.id == 'eliminarReservaModal') {
             idBooking = e.target.dataset.id
@@ -962,12 +1147,13 @@ async function getBooking(id) {
 
 async function getEditField(id) {
     try {
+        clearFieldFormMessage()
         const response = await fetch(`${baseUrl}getField/${id}`);
 
         const responseData = await response.json();
 
         if (responseData.data != '') {
-
+            if (fieldFormModalTitle) fieldFormModalTitle.textContent = 'Editar servicio'
             fillDiv(responseData.data)
 
         } else {
@@ -983,55 +1169,90 @@ async function getEditField(id) {
 function fillDiv(field) {
     let div = ''
 
-    let disabledCheck
+    let disabledCheck = ''
     if (field.disabled == 1) { disabledCheck = 'checked' }
+    let roofedCheck = ''
+    if (field.roofed == 1) { roofedCheck = 'checked' }
+    const serviceType = field.service_type || 'football'
+    const blockMinutes = field.block_minutes || (serviceType === 'padel' ? 90 : 60)
+    const serviceOptionName = `editServiceTypeOption${field.id}`
+    const serviceSelectId = `editServiceType${field.id}`
+    const blockMinutesId = `editBlockMinutes${field.id}`
 
     div = `
         <div class="editFields" id="editFields">
-            <form action="${webBaseUrl}editField/${field.id}" method="POST">
+            <form action="${webBaseUrl}editField/${field.id}" method="POST" class="field-ajax-form">
 
                 <div class="form-check form-switch mt-4">
                     <input class="form-check-input" type="checkbox" role="switch" name="disabled" id="disableField" ${disabledCheck}>
-                    <label class="form-check-label" for="disableField">Deshabilitar cancha</label>
+                    <label class="form-check-label" for="disableField">Deshabilitar servicio</label>
                 </div>
 
                 <div class="input-group mt-3 mb-3">
-                    <span class="input-group-text" id="basic-addon1">Nombre cancha</span>
-                    <input type="text" class="form-control" value="${field.name}" name="nombre" placeholder="Ingrese el nombre de la cancha" aria-label="Nombre cancha" aria-describedby="basic-addon1">
+                    <span class="input-group-text" id="basic-addon1">Nombre servicio</span>
+                    <input type="text" class="form-control" value="${escapeHtml(field.name)}" name="nombre" placeholder="Ingrese el nombre del servicio" aria-label="Nombre servicio" aria-describedby="basic-addon1">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label d-block mb-2">Tipo de reserva</label>
+                    <select class="form-select visually-hidden" name="serviceType" id="${serviceSelectId}" aria-hidden="true" tabindex="-1">
+                        <option value="football" ${serviceType === 'football' ? 'selected' : ''}>Cancha / Fútbol</option>
+                        <option value="padel" ${serviceType === 'padel' ? 'selected' : ''}>Pádel</option>
+                        <option value="quincho" ${serviceType === 'quincho' ? 'selected' : ''}>Quincho</option>
+                        <option value="eventos" ${serviceType === 'eventos' ? 'selected' : ''}>Eventos / Confitería</option>
+                    </select>
+                    <div class="service-type-options">
+                        <input class="btn-check" type="radio" name="${serviceOptionName}" id="${serviceSelectId}Football" value="football" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" autocomplete="off" ${serviceType === 'football' ? 'checked' : ''}>
+                        <label class="service-type-option" for="${serviceSelectId}Football">Cancha / Fútbol</label>
+
+                        <input class="btn-check" type="radio" name="${serviceOptionName}" id="${serviceSelectId}Padel" value="padel" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" autocomplete="off" ${serviceType === 'padel' ? 'checked' : ''}>
+                        <label class="service-type-option" for="${serviceSelectId}Padel">Pádel</label>
+
+                        <input class="btn-check" type="radio" name="${serviceOptionName}" id="${serviceSelectId}Quincho" value="quincho" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" autocomplete="off" ${serviceType === 'quincho' ? 'checked' : ''}>
+                        <label class="service-type-option" for="${serviceSelectId}Quincho">Quincho</label>
+
+                        <input class="btn-check" type="radio" name="${serviceOptionName}" id="${serviceSelectId}Eventos" value="eventos" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" autocomplete="off" ${serviceType === 'eventos' ? 'checked' : ''}>
+                        <label class="service-type-option" for="${serviceSelectId}Eventos">Eventos / Confitería</label>
+                    </div>
+                </div>
+
+                <div class="input-group mb-3">
+                    <span class="input-group-text">Duración del bloque</span>
+                    <input type="number" class="form-control" id="${blockMinutesId}" value="${blockMinutes}" name="blockMinutes" min="30" step="30" aria-label="Duracion del bloque">
                 </div>
 
                 <div class="input-group mb-3">
                     <span class="input-group-text" id="basic-addon3">Medidas</span>
-                    <input type="text" class="form-control" value="${field.sizes}" name="medidas" placeholder="Ingrese las medidas de la cancha" aria-label="Medidas" aria-describedby="basic-addon3">
+                    <input type="text" class="form-control" value="${escapeHtml(field.sizes || '')}" name="medidas" placeholder="Ingrese las medidas de la cancha" aria-label="Medidas" aria-describedby="basic-addon3">
                 </div>
 
                 <div class="input-group mb-3">
                     <span class="input-group-text" id="basic-addon2">Tipo de piso</span>
-                    <input type="text" class="form-control" value="${field.floor_type}" name="tipoPiso" placeholder="Ingrese el tipo de piso de la cancha" aria-label="Tipo piso" aria-describedby="basic-addon2">
+                    <input type="text" class="form-control" value="${escapeHtml(field.floor_type || '')}" name="tipoPiso" placeholder="Ingrese el tipo de piso de la cancha" aria-label="Tipo piso" aria-describedby="basic-addon2">
                 </div>
 
                 <div class="input-group mb-3">
-                    <span class="input-group-text" id="basic-addon4">Tipo de cancha</span>
-                    <input type="text" class="form-control" value="${field.field_type}" name="tipoCancha" placeholder="Ingrese el tipo de cancha (futbol 5, 7, 11)" aria-label="Tipo cancha" aria-describedby="basic-addon4">
+                    <span class="input-group-text" id="basic-addon4">Detalle</span>
+                    <input type="text" class="form-control" value="${escapeHtml(field.field_type || '')}" name="tipoCancha" placeholder="Detalle opcional" aria-label="Detalle" aria-describedby="basic-addon4">
                 </div>
 
                 <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="tipoTecho" role="switch" id="tipoTecho">
-                    <label class="form-check-label" for="tipoTecho">Es techada</label>
+                    <input class="form-check-input" type="checkbox" name="tipoTecho" role="switch" id="tipoTechoEdit${field.id}" ${roofedCheck}>
+                    <label class="form-check-label" for="tipoTechoEdit${field.id}">Es techada</label>
                 </div>
 
                 <div class="input-group mb-3">
-                    <span class="input-group-text">Valor sin iluminacion</span>
-                    <input type="text" class="form-control" value="${field.value}" name="valor" placeholder="Ingrese valor por hora sin iluminacion" aria-label="Valor">
+                    <span class="input-group-text">Precio base</span>
+                    <input type="text" class="form-control" value="${escapeHtml(field.value || '')}" name="valor" placeholder="Precio por hora o bloque" aria-label="Valor">
                 </div>
 
                 <div class="input-group mb-3">
-                    <span class="input-group-text">Valor con iluminacion</span>
-                    <input type="text" class="form-control" value="${field.ilumination_value}" name="valorIluminacion" placeholder="Ingrese valor por hora con iluminacion" aria-label="Valor">
+                    <span class="input-group-text">Precio nocturno</span>
+                    <input type="text" class="form-control" value="${escapeHtml(field.ilumination_value || '')}" name="valorIluminacion" placeholder="Si no aplica, repetir precio base" aria-label="Valor nocturno">
                 </div>
 
                 <button type="submit" class="btn btn-success">Guardar</button>
-                <a href="${webBaseUrl}" type="button" class="btn btn-danger">Cancelar</a>
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancelar</button>
             </form>
         </div>
         `

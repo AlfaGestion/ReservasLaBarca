@@ -143,12 +143,12 @@
 
                 <div class="form-floating" id="divSelectCancha">
                     <select class="form-select mb-3" name="cancha" id="cancha" aria-label="Default floating label">
-                        <option value="">Canchas disponibles</option>
+                        <option value="">Servicios disponibles</option>
                         <?php foreach ($fields as $field) : ?>
                             <option value="<?= $field['id'] ?>"><?= $field['name'] ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <label for="cancha">Seleccionar cancha</label>
+                    <label for="cancha">Seleccionar servicio</label>
                 </div>
 
                 <div class="form-floating flex-nowrap mb-3" id="div-monto">
@@ -207,7 +207,7 @@
         <thead>
             <tr>
                 <th scope="col">Fecha</th>
-                <th scope="col">Cancha</th>
+                <th scope="col">Servicio</th>
                 <th scope="col">Horario</th>
                 <th scope="col">Nombre</th>
                 <th scope="col">Teléfono</th>

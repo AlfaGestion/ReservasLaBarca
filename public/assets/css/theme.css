@@ -166,6 +166,60 @@ body.theme-dark .input-group-text {
     color: #e8f3ff !important;
 }
 
+body.theme-dark .form-control:-webkit-autofill,
+body.theme-dark .form-control:-webkit-autofill:hover,
+body.theme-dark .form-control:-webkit-autofill:focus,
+body.theme-dark .form-control:-webkit-autofill:active {
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #ffffff;
+    box-shadow: 0 0 0 1000px #10253a inset !important;
+    border-color: #3a5f80 !important;
+    transition: background-color 9999s ease-in-out 0s;
+}
+
+body.theme-dark .form-control::placeholder {
+    color: #91a9bf !important;
+}
+
+body.theme-dark .form-floating > .form-control::placeholder {
+    color: transparent !important;
+}
+
+body.theme-dark .form-floating > .form-control:-webkit-autofill ~ label {
+    color: #b9c9d8 !important;
+}
+
+body.theme-dark .service-type-option {
+    background: #10253a;
+    border-color: #3a5f80;
+    color: #e8f3ff;
+}
+
+body.theme-dark .service-type-option:hover {
+    border-color: #f39323;
+    color: #ffc56f;
+}
+
+body.theme-dark .btn-check:checked + .service-type-option {
+    background: #f39323;
+    border-color: #f39323;
+    color: #ffffff;
+}
+
+body.theme-dark .locality-suggestions {
+    background: #10253a;
+    border-color: #3a5f80;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, .24);
+}
+
+body.theme-dark .locality-suggestion-item {
+    color: #e8f3ff;
+}
+
+body.theme-dark .locality-suggestion-item:hover {
+    background: #16314a;
+}
+
 body.theme-dark .form-control:focus,
 body.theme-dark .form-select:focus,
 body.theme-dark textarea.form-control:focus,

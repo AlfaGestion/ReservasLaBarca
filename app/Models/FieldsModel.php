@@ -13,7 +13,7 @@ class FieldsModel extends Model
     protected $returnType       = 'array';
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
-    protected $allowedFields    = ['name', 'floor_type', 'sizes', 'ilumination', 'field_type', 'roofed', 'value', 'ilumination_value', 'elements_rent', 'disabled'];
+    protected $allowedFields    = ['name', 'floor_type', 'sizes', 'ilumination', 'field_type', 'service_type', 'block_minutes', 'price_unit_label', 'roofed', 'value', 'ilumination_value', 'elements_rent', 'disabled'];
 
     // Dates
     protected $useTimestamps = false;
@@ -40,11 +40,30 @@ class FieldsModel extends Model
     protected $afterDelete    = [];
 
     public function getFields(){
-        $fields = $this->where('disabled', 0)->findAll();
+        $fields = $this->where('disabled', 0)
+            ->orderBy('service_type', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->findAll();
 
         // log_message('debug', 'CANCHAS', var_dump($fields));
 
         return $fields;
+    }
+
+    public function getByServiceType(string $serviceType)
+    {
+        return $this->where('disabled', 0)
+            ->where('service_type', $serviceType)
+            ->orderBy('id', 'ASC')
+            ->findAll();
+    }
+
+    public function getQuincho()
+    {
+        return $this->where('disabled', 0)
+            ->where('service_type', 'quincho')
+            ->orderBy('id', 'ASC')
+            ->first();
     }
 
     public function getField($id){

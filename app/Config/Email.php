@@ -14,13 +14,13 @@ class Email extends BaseConfig
             'fromEmail' => 'enviosreservaalfagestion@gmail.com',
             'fromName' => 'Reservas',
             'SMTPUser' => 'enviosreservaalfagestion@gmail.com',
-            'SMTPPass' => 'ukag ewra bmcl zqpq',
+            'SMTPPass' => 'ukagewrabmclzqpq',
         ],
         [
             'fromEmail' => 'enviosalfagestion@gmail.com',
             'fromName' => 'Reservas',
             'SMTPUser' => 'enviosalfagestion@gmail.com',
-            'SMTPPass' => 'vheq qqxs ifrr jlat',
+            'SMTPPass' => 'vheqqqxsifrrjlat',
         ],
     ];
 
@@ -52,7 +52,7 @@ class Email extends BaseConfig
     /**
      * SMTP Password
      */
-    public string $SMTPPass = 'vheq qqxs ifrr jlat';
+    public string $SMTPPass = 'vheqqqxsifrrjlat';
 
     /**
      * SMTP Port

@@ -50,12 +50,12 @@ $fieldsModel = new FieldsModel()
                 <li><strong>Teléfono:</strong> <?= $booking['phone'] ?></li>
                 <li><strong>Fecha:</strong> <?= $fechaReservaFormateada ?></li>
                 <li><strong>Horario:</strong> <?= $booking['time_from'] . 'hs' . ' ' . $booking['time_until'] . 'hs' ?></li>
-                <li><strong>Cancha:</strong> <?= $fieldsModel->getField($booking['id_field'])['name'] ?></li>
+                <li><strong>Tipo de reserva:</strong> <?= $fieldsModel->getField($booking['id_field'])['name'] ?></li>
                 <hr>
                 <li><strong>Id de pago de Mercado Pago:</strong> <?= $mercadoPago['payment_id'] ?> </li>
                 <li><strong>Estado del pago:</strong> <?= $mercadoPago['status'] ?></li>
                 <hr>
-                <li><strong>Valor total de la cancha:</strong> $<?= $booking['total'] ?></li>
+                <li><strong>Valor total de la reserva:</strong> $<?= $booking['total'] ?></li>
                 <li><strong>Pagado:</strong> $<?= $booking['payment'] ?></li>
                 <li><strong>Restan:</strong> $<?= $booking['diference'] ?></li>
                 <li><strong>Detalle:</strong> <?= $booking['description']  == '' || $booking['description'] == null ? 'Reserva' : $booking['description'] ?></li>

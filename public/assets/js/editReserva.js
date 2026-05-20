@@ -106,6 +106,19 @@ function setupLocalityAutocomplete(inputEl, datalistId) {
     })
 }
 
+function normalizeTimeValue(value) {
+    const raw = String(value || '').trim()
+    if (!raw) return ''
+    if (/^\d{1,2}$/.test(raw)) return `${raw.padStart(2, '0')}:00`
+    const parts = raw.split(':')
+    return `${String(parts[0] || '0').padStart(2, '0')}:${String(parts[1] || '0').padStart(2, '0')}`
+}
+
+function timeToMinutes(value) {
+    const [h, m] = normalizeTimeValue(value).split(':').map(Number)
+    return (h * 60) + m
+}
+
 let bookingId
 let updateData
 
@@ -178,8 +191,7 @@ document.addEventListener('click', async (e) => {
                 return;
             }
 
-            if (horarioDesde.value == '23' && horarioHasta.value == '00' || horarioDesde.value == '23' && horarioHasta.value == '01' || horarioDesde.value == '22' && horarioHasta.value == '00' || horarioDesde.value == '22' && horarioHasta.value == '01') {
-            } else if (parseInt(horarioDesde.value) >= parseInt(horarioHasta.value)) {
+            if (timeToMinutes(horarioDesde.value) >= timeToMinutes(horarioHasta.value) && timeToMinutes(horarioHasta.value) !== 0) {
                 alert('El horario de inicio no puede ser mayor o igual al horario de fin.')
                 return;
             }
@@ -429,23 +441,10 @@ async function getAmount(field = "1") {
 
 // Calcula el total $ de la reserva
 function calculateAmount(from, until, amount) {
-    let hours = 0
-    let result = ''
-
-    if (Number(from) == 23 && Number(until) == 0) {
-        hours = 1
-    } else if (Number(from) == 23 && Number(until == 1)) {
-        hours = 2
-    }
-
-    for (i = Number(from); i < Number(until); i++) {
-
-        hours = hours + 1
-    }
-
-    result = parseInt(hours) * parseInt(amount)
-
-    return result
+    let fromMinutes = timeToMinutes(from)
+    let untilMinutes = timeToMinutes(until)
+    if (untilMinutes <= fromMinutes) untilMinutes += 1440
+    return Math.round(((untilMinutes - fromMinutes) / 60) * Number(amount || 0))
 }
 
 async function getRate() {

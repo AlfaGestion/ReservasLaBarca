@@ -86,6 +86,29 @@ $mpKeys = $mpKeysModel->first();
                 </div>
                 <div id="closureNotice" class="alert alert-warning d-none"></div>
 
+                <div class="mb-3 service-type-field">
+                    <label class="form-label d-block mb-2" id="serviceTypeLabel">Tipo de reserva</label>
+                    <select class="form-select visually-hidden" name="serviceType" id="serviceType" aria-hidden="true" tabindex="-1">
+                        <option value="football">Cancha / Fútbol</option>
+                        <option value="padel">Pádel</option>
+                        <option value="quincho">Quincho</option>
+                        <option value="eventos">Eventos / Confitería</option>
+                    </select>
+                    <div class="service-type-options" role="radiogroup" aria-labelledby="serviceTypeLabel">
+                        <input class="btn-check" type="radio" name="serviceTypeOption" id="serviceTypeFootball" value="football" autocomplete="off" checked>
+                        <label class="service-type-option" for="serviceTypeFootball">Cancha / Fútbol</label>
+
+                        <input class="btn-check" type="radio" name="serviceTypeOption" id="serviceTypePadel" value="padel" autocomplete="off">
+                        <label class="service-type-option" for="serviceTypePadel">Pádel</label>
+
+                        <input class="btn-check" type="radio" name="serviceTypeOption" id="serviceTypeQuincho" value="quincho" autocomplete="off">
+                        <label class="service-type-option" for="serviceTypeQuincho">Quincho</label>
+
+                        <input class="btn-check" type="radio" name="serviceTypeOption" id="serviceTypeEventos" value="eventos" autocomplete="off">
+                        <label class="service-type-option" for="serviceTypeEventos">Eventos / Confitería</label>
+                    </div>
+                </div>
+
                 <div class="horario d-flex flex-row">
                     <div class="form-floating" id="div-time-h" style="width: 100%;">
                         <select class="form-select mb-3" name="horarioDesde" id="horarioDesde" aria-label="l">
@@ -99,7 +122,7 @@ $mpKeys = $mpKeysModel->first();
 
                             ?>
 
-                                    <option value="<?= $hour ?>"><?= $hour . ':00' ?></option>
+                                    <option value="<?= str_pad($hour, 2, '0', STR_PAD_LEFT) . ':00' ?>"><?= str_pad($hour, 2, '0', STR_PAD_LEFT) . ':00' ?></option>
 
                             <?php
                                 endif;
@@ -115,7 +138,7 @@ $mpKeys = $mpKeysModel->first();
                         <select class="form-select mb-3" name="horarioHasta" id="horarioHasta" aria-label="">
                             <option value="">Seleccionar</option>
                             <?php foreach ($time as $hour) : ?>
-                                <option value="<?= $hour ?>"><?= $hour . ':00' ?></option>
+                                <option value="<?= str_pad($hour, 2, '0', STR_PAD_LEFT) . ':00' ?>"><?= str_pad($hour, 2, '0', STR_PAD_LEFT) . ':00' ?></option>
                             <?php endforeach; ?>
                         </select>
                         <label for="horarioHasta">Horario hasta</label>
@@ -124,12 +147,32 @@ $mpKeys = $mpKeysModel->first();
 
                 <div class="form-floating" id="divSelectCancha">
                     <select class="form-select mb-3 d-none" name="cancha" id="cancha" aria-label="Default floating label">
-                        <option value="">Canchas disponibles</option>
+                        <option value="">Elegí una cancha o espacio</option>
                         <?php foreach ($fields as $field) : ?>
-                            <option value="<?= $field['id'] ?>"><?= $field['name'] ?></option>
+                            <option value="<?= $field['id'] ?>" data-service-type="<?= esc($field['service_type'] ?? 'football') ?>" data-block-minutes="<?= esc($field['block_minutes'] ?? 60) ?>" data-price="<?= esc($field['value'] ?? 0) ?>" data-price-light="<?= esc($field['ilumination_value'] ?? $field['value'] ?? 0) ?>"><?= $field['name'] ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <label for="cancha">Seleccionar cancha</label>
+                    <label for="cancha">Cancha o espacio</label>
+                </div>
+
+                <div id="quinchoAdditionalBox" class="border rounded p-3 mb-3 d-none">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="addQuincho" autocomplete="off">
+                        <label class="form-check-label" for="addQuincho">Agregar quincho como adicional</label>
+                    </div>
+                    <div id="quinchoAdditionalFields" class="d-none">
+                        <div class="horario d-flex flex-row">
+                            <div class="form-floating" style="width: 49%;">
+                                <select class="form-select mb-3" id="quinchoDesde" aria-label="Quincho desde"></select>
+                                <label for="quinchoDesde">Quincho desde</label>
+                            </div>
+                            <div class="form-floating ms-4" style="width: 49%;">
+                                <select class="form-select mb-3" id="quinchoHasta" aria-label="Quincho hasta"></select>
+                                <label for="quinchoHasta">Quincho hasta</label>
+                            </div>
+                        </div>
+                        <div id="quinchoAvailabilityMessage" class="alert alert-warning d-none"></div>
+                    </div>
                 </div>
 
                 <div class="form-floating flex-nowrap mb-3 d-none" id="div-monto">
@@ -312,9 +355,11 @@ $mpKeys = $mpKeysModel->first();
     $formReservaPath = FCPATH . $formReservaRelativePath;
     $formReservaVersion = is_file($formReservaPath) ? filemtime($formReservaPath) : time();
     ?>
-    <script src="<?= base_url(PUBLIC_FOLDER . $formReservaRelativePath . "?v=" . $formReservaVersion) ?>"></script>
     <script>
         let esDomingo = <?php echo json_encode($esDomingo); ?>;
+        window.bookingFields = <?= json_encode($fields) ?>;
+        window.bookingOpeningTime = <?= json_encode($time) ?>;
     </script>
+    <script src="<?= base_url(PUBLIC_FOLDER . $formReservaRelativePath . "?v=" . $formReservaVersion) ?>"></script>
 
     <?php echo $this->endSection() ?>

@@ -18,10 +18,136 @@ use CodeIgniter\I18n\Time;
 
 class Bookings extends BaseController
 {
-    private function createEmailService()
+    private function normalizeTime($time): string
     {
-        $email = \Config\Services::email();
-        $email->SMTPTimeout = 8;
+        $slotModel = new BookingSlotsModel();
+        return $slotModel->normalizeTime($time);
+    }
+
+    private function hasBookingOverlap(BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, $date, $fieldId, $timeFrom, $timeUntil, ?int $ignoreBookingId = null): bool
+    {
+        $timeFrom = $bookingSlotsModel->normalizeTime($timeFrom);
+        $timeUntil = $bookingSlotsModel->normalizeTime($timeUntil);
+
+        $builder = $bookingsModel->where('date', $date)
+            ->where('id_field', $fieldId)
+            ->where('annulled', 0);
+
+        if ($ignoreBookingId !== null) {
+            $builder->where('id !=', $ignoreBookingId);
+        }
+
+        foreach ($builder->findAll() as $booking) {
+            if ($bookingSlotsModel->rangesOverlap($timeFrom, $timeUntil, $booking['time_from'], $booking['time_until'])) {
+                return true;
+            }
+        }
+
+        return $bookingSlotsModel->hasActiveOverlap($date, $fieldId, $timeFrom, $timeUntil, $ignoreBookingId);
+    }
+
+    private function extractBookingItems($data): array
+    {
+        $items = [[
+            'fecha' => $data->fecha ?? null,
+            'cancha' => $data->cancha ?? null,
+            'horarioDesde' => $data->horarioDesde ?? null,
+            'horarioHasta' => $data->horarioHasta ?? null,
+            'is_additional' => false,
+        ]];
+
+        $additional = $data->additionalQuincho ?? null;
+        if ($additional && !empty($additional->enabled)) {
+            $items[] = [
+                'fecha' => $additional->fecha ?? ($data->fecha ?? null),
+                'cancha' => $additional->cancha ?? null,
+                'horarioDesde' => $additional->horarioDesde ?? null,
+                'horarioHasta' => $additional->horarioHasta ?? null,
+                'is_additional' => true,
+            ];
+        }
+
+        return $items;
+    }
+
+    private function validateItemsAvailability(array $items, BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, ?int $ignoreBookingId = null): ?string
+    {
+        $fieldsModel = new FieldsModel();
+        foreach ($items as $index => $item) {
+            if (empty($item['fecha']) || empty($item['cancha']) || empty($item['horarioDesde']) || empty($item['horarioHasta'])) {
+                return 'Faltan datos de fecha, servicio u horario.';
+            }
+            $field = $fieldsModel->getField($item['cancha']);
+            if (!$field) {
+                return 'El servicio seleccionado no existe.';
+            }
+            $from = $bookingSlotsModel->timeToMinutes($item['horarioDesde']);
+            $until = $bookingSlotsModel->timeToMinutes($item['horarioHasta']);
+            if ($until <= $from) {
+                $until += 24 * 60;
+            }
+            $duration = $until - $from;
+            $blockMinutes = (int)($field['block_minutes'] ?? 60);
+            if (($field['service_type'] ?? 'football') === 'padel' && $duration !== 90) {
+                return 'Pádel se reserva únicamente en bloques de 1 hora y 30 minutos.';
+            }
+            if (($field['service_type'] ?? 'football') !== 'padel' && ($duration <= 0 || $duration % max(1, $blockMinutes) !== 0)) {
+                return 'La duración seleccionada no es válida para el servicio.';
+            }
+            if ($this->isClosedForDateField($item['fecha'], $item['cancha'])) {
+                return 'No se puede reservar: hay un cierre informado para esa fecha.';
+            }
+            if ($this->hasBookingOverlap($bookingsModel, $bookingSlotsModel, $item['fecha'], $item['cancha'], $item['horarioDesde'], $item['horarioHasta'], $ignoreBookingId)) {
+                return $index === 0
+                    ? 'El horario seleccionado ya está ocupado o en proceso.'
+                    : 'El quincho no está disponible en el horario seleccionado.';
+            }
+        }
+
+        return null;
+    }
+
+    private function buildSlotData(array $item, string $status, ?int $bookingId = null): array
+    {
+        $slot = [
+            'date' => $item['fecha'],
+            'id_field' => $item['cancha'],
+            'time_from' => $this->normalizeTime($item['horarioDesde']),
+            'time_until' => $this->normalizeTime($item['horarioHasta']),
+            'status' => $status,
+            'active' => 1,
+            'expires_at' => $status === 'pending' ? date('Y-m-d H:i:s', strtotime('+5 minutes')) : null,
+            'created_at' => date('Y-m-d H:i:s'),
+        ];
+
+        if ($bookingId !== null) {
+            $slot['booking_id'] = $bookingId;
+        }
+
+        return $slot;
+    }
+
+    private function createEmailService(array $account = [])
+    {
+        $emailConfig = config('Email');
+        $email = \Config\Services::email(null, false);
+        $email->initialize([
+            'protocol' => $emailConfig->protocol,
+            'SMTPHost' => $emailConfig->SMTPHost,
+            'SMTPUser' => $account['SMTPUser'] ?? $emailConfig->SMTPUser,
+            'SMTPPass' => str_replace(' ', '', (string)($account['SMTPPass'] ?? $emailConfig->SMTPPass)),
+            'SMTPPort' => $emailConfig->SMTPPort,
+            'SMTPTimeout' => $emailConfig->SMTPTimeout ?: 8,
+            'SMTPKeepAlive' => false,
+            'SMTPCrypto' => $emailConfig->SMTPCrypto,
+            'SMTPOptions' => $emailConfig->SMTPOptions,
+            'mailType' => $emailConfig->mailType,
+            'charset' => $emailConfig->charset,
+            'wordWrap' => $emailConfig->wordWrap,
+            'CRLF' => $emailConfig->CRLF,
+            'newline' => $emailConfig->newline,
+            'validate' => $emailConfig->validate,
+        ]);
 
         return $email;
     }
@@ -42,12 +168,10 @@ class Bookings extends BaseController
 
         foreach ($accounts as $account) {
             try {
-                $email = $this->createEmailService();
-                $email->fromEmail = $account['fromEmail'] ?? $emailConfig->fromEmail;
-                $email->fromName = $account['fromName'] ?? $emailConfig->fromName;
-                $email->SMTPUser = $account['SMTPUser'] ?? $emailConfig->SMTPUser;
-                $email->SMTPPass = $account['SMTPPass'] ?? $emailConfig->SMTPPass;
-                $email->setFrom($email->fromEmail, $email->fromName);
+                $email = $this->createEmailService($account);
+                $fromEmail = $account['fromEmail'] ?? $emailConfig->fromEmail;
+                $fromName = $account['fromName'] ?? $emailConfig->fromName;
+                $email->setFrom($fromEmail, $fromName);
                 $email->setTo($to);
                 $email->setSubject($subject);
                 $email->setMessage($message);
@@ -56,13 +180,21 @@ class Bookings extends BaseController
                     return true;
                 }
 
-                log_message('error', 'Fallo envio SMTP con ' . ($email->fromEmail ?? 'sin cuenta') . ': ' . $email->printDebugger(['headers']));
+                log_message('error', 'Fallo envio SMTP con ' . ($fromEmail ?: 'sin cuenta') . ': ' . $email->printDebugger(['headers']));
             } catch (\Throwable $e) {
                 log_message('error', 'Fallo envio SMTP con ' . (($account['fromEmail'] ?? '') ?: 'sin cuenta') . ': ' . $e->getMessage());
             }
         }
 
         return false;
+    }
+
+    private function parseEmailRecipients(string $toEmail): array
+    {
+        return array_values(array_filter(array_map(
+            static fn($email) => filter_var(trim((string) $email), FILTER_VALIDATE_EMAIL) ?: null,
+            preg_split('/[;,\s]+/', $toEmail) ?: []
+        )));
     }
 
     private function isClosedForDateField($date, $fieldId)
@@ -92,14 +224,13 @@ class Bookings extends BaseController
         $toRow = $configModel->where('clave', 'email_reservas')->first();
         $toEmail = $toRow['valor'] ?? '';
         if (!is_string($toEmail) || trim($toEmail) === '') {
+            log_message('warning', 'No se envia email de reserva: no hay destinatarios configurados en email_reservas.');
             return;
         }
 
-        $toEmails = array_values(array_filter(array_map(
-            static fn($email) => filter_var(trim((string) $email), FILTER_VALIDATE_EMAIL) ?: null,
-            explode(';', $toEmail)
-        )));
+        $toEmails = $this->parseEmailRecipients($toEmail);
         if ($toEmails === []) {
+            log_message('warning', 'No se envia email de reserva: email_reservas no contiene destinatarios validos.');
             return;
         }
 
@@ -121,7 +252,7 @@ class Bookings extends BaseController
             . "Localidad: " . ($localidad !== '' ? $localidad : 'N/D') . "\n"
             . "Fecha: {$fecha}\n"
             . "Horario: {$horario}\n"
-            . "Cancha: {$fieldName}\n";
+            . "Tipo de reserva: {$fieldName}\n";
 
         $caPath = ROOTPATH . 'cacert.pem';
         if (is_file($caPath)) {
@@ -137,7 +268,9 @@ class Bookings extends BaseController
         ]);
         $subjectName = trim((string)($booking['name'] ?? 'Cliente'));
         $subjectDate = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'Sin fecha';
-        $this->sendEmailWithFallback($toEmails, "Reserva: {$subjectName} - {$subjectDate}", $message);
+        if (!$this->sendEmailWithFallback($toEmails, "Reserva: {$subjectName} - {$subjectDate}", $message)) {
+            log_message('error', 'No se pudo enviar email de reserva #' . $bookingId . ' con ninguna cuenta SMTP configurada.');
+        }
     }
 
     public function saveBooking()
@@ -149,12 +282,17 @@ class Bookings extends BaseController
         $data = $this->request->getJSON();
         $db = \Config\Database::connect();
         $this->ensureLocalityExists($data->localidad ?? null);
+        $items = $this->extractBookingItems($data);
+        $availabilityError = $this->validateItemsAvailability($items, $bookingsModel, $bookingSlotsModel);
+        if ($availabilityError !== null) {
+            return $this->response->setJSON($this->setResponse(409, true, null, $availabilityError));
+        }
 
         $queryBooking = [
             'date'                  => $data->fecha,
             'id_field'              => $data->cancha,
-            'time_from'             => $data->horarioDesde,
-            'time_until'            => $data->horarioHasta,
+            'time_from'             => $this->normalizeTime($data->horarioDesde),
+            'time_until'            => $this->normalizeTime($data->horarioHasta),
             'name'                  => $data->nombre,
             'phone'                 => $data->telefono,
             'locality'              => $data->localidad ?? null,
@@ -183,22 +321,6 @@ class Bookings extends BaseController
             'offer' => 0,
             'city'  => $data->localidad ?? null,
         ];
-
-        if ($this->isClosedForDateField($data->fecha, $data->cancha)) {
-            return $this->response->setJSON($this->setResponse(409, true, null, 'No se puede reservar: hay un cierre informado para esa fecha.'));
-        }
-
-        // Verificar si ya existe una reserva activa
-        $existingBooking = $bookingsModel->where('date', $data->fecha)
-            ->where('id_field', $data->cancha)
-            ->where('time_from', $data->horarioDesde)
-            ->where('time_until', $data->horarioHasta)
-            ->where('annulled', 0) // Solo trae las no anuladas
-            ->first();
-
-        if ($existingBooking) {
-            return $this->response->setJSON($this->setResponse(400, true, null, 'Ya existe una reserva activa para esa fecha, cancha y horario.'));
-        }
 
         $existingCustomer = $customersModel->findAll();
         $exist = true;
@@ -231,18 +353,7 @@ class Bookings extends BaseController
             if (count($queryBooking) != 0) {
                 $db->transBegin();
 
-                $slotData = [
-                    'date' => $data->fecha,
-                    'id_field' => $data->cancha,
-                    'time_from' => $data->horarioDesde,
-                    'time_until' => $data->horarioHasta,
-                    'status' => 'pending',
-                    'active' => 1,
-                    'expires_at' => date('Y-m-d H:i:s', strtotime('+5 minutes')),
-                    'created_at' => date('Y-m-d H:i:s'),
-                ];
-
-                $slotId = $bookingSlotsModel->insert($slotData, true);
+                $slotId = $bookingSlotsModel->createSlot($this->buildSlotData($items[0], 'pending'));
                 if (!$slotId) {
                     $db->transRollback();
                     return $this->response->setJSON($this->setResponse(409, true, null, 'El horario ya está en proceso de reserva.'));
@@ -252,6 +363,31 @@ class Bookings extends BaseController
                 $bookingId = $bookingsModel->getInsertID();
 
                 $bookingSlotsModel->update($slotId, ['booking_id' => $bookingId]);
+
+                if (count($items) > 1) {
+                    $additional = $items[1];
+                    $additionalQuery = $queryBooking;
+                    $additionalQuery['date'] = $additional['fecha'];
+                    $additionalQuery['id_field'] = $additional['cancha'];
+                    $additionalQuery['time_from'] = $this->normalizeTime($additional['horarioDesde']);
+                    $additionalQuery['time_until'] = $this->normalizeTime($additional['horarioHasta']);
+                    $additionalQuery['total'] = 0;
+                    $additionalQuery['parcial'] = 0;
+                    $additionalQuery['diference'] = 0;
+                    $additionalQuery['reservation'] = 0;
+                    $additionalQuery['payment'] = 0;
+                    $additionalQuery['description'] = trim(($additionalQuery['description'] ?? '') . ' Quincho adicional de la reserva #' . $bookingId);
+
+                    $additionalSlotId = $bookingSlotsModel->createSlot($this->buildSlotData($additional, 'pending'));
+                    if (!$additionalSlotId) {
+                        $db->transRollback();
+                        return $this->response->setJSON($this->setResponse(409, true, null, 'El quincho no está disponible en el horario seleccionado.'));
+                    }
+
+                    $bookingsModel->insert($additionalQuery);
+                    $additionalBookingId = $bookingsModel->getInsertID();
+                    $bookingSlotsModel->update($additionalSlotId, ['booking_id' => $additionalBookingId]);
+                }
 
                 $db->transCommit();
                 $this->sendBookingEmail($bookingId);
@@ -318,37 +454,18 @@ class Bookings extends BaseController
         $timeBookings = [];
 
         foreach ($occupied as $slot) {
-            $found = false;
-
-            foreach ($timeBookings as &$timeBooking) {
-                if (intval($timeBooking['id_cancha']) === intval($slot['id_field'])) {
-                    $indexFrom = array_search($slot['time_from'], $time);
-                    $indexUntil = array_search($slot['time_until'], $time);
-
-                    for ($currentTime = $indexFrom; $currentTime <= $indexUntil; $currentTime++) {
-                        $timeBooking['time'][] = strval(sprintf("%02d", $time[$currentTime]));
-                    }
-                    $found = true;
-                    break;
-                }
-            }
-
-            if (!$found) {
-                $reserva = [
-                    'id_cancha' => $slot['id_field'],
-                    'nombre_cancha' => $fieldsModel->getField($slot['id_field'])['name'],
-                    'time' => [],
-                ];
-
-                $indexFrom = array_search($slot['time_from'], $time);
-                $indexUntil = array_search($slot['time_until'], $time);
-
-                for ($currentTime = $indexFrom; $currentTime <= $indexUntil; $currentTime++) {
-                    $reserva['time'][] = strval(sprintf("%02d", $time[$currentTime]));
-                }
-
-                $timeBookings[] = $reserva;
-            }
+            $field = $fieldsModel->getField($slot['id_field']);
+            $timeBookings[] = [
+                'id_cancha' => $slot['id_field'],
+                'nombre_cancha' => $field['name'] ?? 'N/D',
+                'service_type' => $field['service_type'] ?? 'football',
+                'time_from' => $bookingSlotsModel->normalizeTime($slot['time_from']),
+                'time_until' => $bookingSlotsModel->normalizeTime($slot['time_until']),
+                'time' => [
+                    $bookingSlotsModel->normalizeTime($slot['time_from']),
+                    $bookingSlotsModel->normalizeTime($slot['time_until']),
+                ],
+            ];
         }
 
         try {
@@ -618,8 +735,8 @@ class Bookings extends BaseController
             'id_field' => $data->cancha,
             'diference' => $data->diferencia,
             'date' => $data->fecha,
-            'time_from' => $data->horarioDesde,
-            'time_until' => $data->horarioHasta,
+            'time_from' => $this->normalizeTime($data->horarioDesde),
+            'time_until' => $this->normalizeTime($data->horarioHasta),
             'total_payment' => $data->pagoTotal,
             'parcial' => $data->parcial,
             'total' => $data->total,
@@ -638,11 +755,22 @@ class Bookings extends BaseController
             $db->transBegin();
 
             if ($changedSlot) {
+                $availabilityError = $this->validateItemsAvailability([[
+                    'fecha' => $data->fecha,
+                    'cancha' => $data->cancha,
+                    'horarioDesde' => $data->horarioDesde,
+                    'horarioHasta' => $data->horarioHasta,
+                ]], $bookingsModel, $bookingSlotsModel, (int)$idBooking);
+                if ($availabilityError !== null) {
+                    $db->transRollback();
+                    return $this->response->setJSON($this->setResponse(409, true, null, $availabilityError));
+                }
+
                 $slotData = [
                     'date' => $data->fecha,
                     'id_field' => $data->cancha,
-                    'time_from' => $data->horarioDesde,
-                    'time_until' => $data->horarioHasta,
+                    'time_from' => $this->normalizeTime($data->horarioDesde),
+                    'time_until' => $this->normalizeTime($data->horarioHasta),
                     'status' => 'confirmed',
                     'active' => 1,
                     'expires_at' => null,
@@ -650,7 +778,7 @@ class Bookings extends BaseController
                     'booking_id' => $idBooking,
                 ];
 
-                $slotId = $bookingSlotsModel->insert($slotData, true);
+                $slotId = $bookingSlotsModel->createSlot($slotData, (int)$idBooking);
                 if (!$slotId) {
                     $db->transRollback();
                     return $this->response->setJSON($this->setResponse(409, true, null, 'El horario ya está ocupado o en proceso.'));
@@ -739,12 +867,17 @@ class Bookings extends BaseController
         $db = \Config\Database::connect();
         $this->ensureLocalityExists($data->localidad ?? null);
         $pagoTotal = $data->monto == $data->total ? 1 : 0;
+        $items = $this->extractBookingItems($data);
+        $availabilityError = $this->validateItemsAvailability($items, $bookingsModel, $bookingSlotsModel);
+        if ($availabilityError !== null) {
+            return $this->response->setJSON($this->setResponse(409, true, null, $availabilityError));
+        }
 
         $queryBooking = [
             'date'            => $data->fecha,
             'id_field'        => $data->cancha,
-            'time_from'       => $data->horarioDesde,
-            'time_until'      => $data->horarioHasta,
+            'time_from'       => $this->normalizeTime($data->horarioDesde),
+            'time_until'      => $this->normalizeTime($data->horarioHasta),
             'name'            => $data->nombre,
             'phone'           => $data->telefono,
             'locality'        => $data->localidad ?? null,
@@ -765,18 +898,7 @@ class Bookings extends BaseController
         try {
             $db->transBegin();
 
-            $slotData = [
-                'date' => $data->fecha,
-                'id_field' => $data->cancha,
-                'time_from' => $data->horarioDesde,
-                'time_until' => $data->horarioHasta,
-                'status' => 'confirmed',
-                'active' => 1,
-                'expires_at' => null,
-                'created_at' => date('Y-m-d H:i:s'),
-            ];
-
-            $slotId = $bookingSlotsModel->insert($slotData, true);
+            $slotId = $bookingSlotsModel->createSlot($this->buildSlotData($items[0], 'confirmed'));
             if (!$slotId) {
                 $db->transRollback();
                 return $this->response->setJSON($this->setResponse(409, true, null, 'Ya existe una reserva activa o en proceso para esa fecha, cancha y horario.'));
@@ -789,6 +911,28 @@ class Bookings extends BaseController
             }
             $bookingId = $bookingsModel->getInsertID();
             $bookingSlotsModel->update($slotId, ['booking_id' => $bookingId]);
+
+            if (count($items) > 1) {
+                $additional = $items[1];
+                $additionalQuery = $queryBooking;
+                $additionalQuery['date'] = $additional['fecha'];
+                $additionalQuery['id_field'] = $additional['cancha'];
+                $additionalQuery['time_from'] = $this->normalizeTime($additional['horarioDesde']);
+                $additionalQuery['time_until'] = $this->normalizeTime($additional['horarioHasta']);
+                $additionalQuery['total'] = 0;
+                $additionalQuery['payment'] = 0;
+                $additionalQuery['diference'] = 0;
+                $additionalQuery['description'] = trim(($additionalQuery['description'] ?? '') . ' Quincho adicional de la reserva #' . $bookingId);
+
+                $additionalSlotId = $bookingSlotsModel->createSlot($this->buildSlotData($additional, 'confirmed'));
+                if (!$additionalSlotId) {
+                    $db->transRollback();
+                    return $this->response->setJSON($this->setResponse(409, true, null, 'El quincho no está disponible en el horario seleccionado.'));
+                }
+                $bookingsModel->insert($additionalQuery);
+                $additionalBookingId = $bookingsModel->getInsertID();
+                $bookingSlotsModel->update($additionalSlotId, ['booking_id' => $additionalBookingId]);
+            }
 
             if (!empty($data->telefono)) {
                 $existingCustomer = $customersModel->where('phone', $data->telefono)->first();
@@ -839,7 +983,7 @@ class Bookings extends BaseController
             'nombre' => $booking['name'],
             'telefono' => $booking['phone'],
             'fecha' => $booking['date'],
-            'horario' => $booking['time_from'] . 'hs' . ' a ' . $booking['time_until'] . 'hs',
+            'horario' => $this->normalizeTime($booking['time_from']) . ' a ' . $this->normalizeTime($booking['time_until']),
             'cancha' => $fieldsModel->getField($booking['id_field'])['name'],
             'id_mercado_pago' => $mpPayment['payment_id'],
             'estado_pago' => $mpPayment['status'],

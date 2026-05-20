@@ -63,6 +63,69 @@ select {
     cursor: pointer;
 }
 
+.service-type-options {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.service-type-option {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #212529;
+    cursor: pointer;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: center;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+.service-type-option:hover {
+    border-color: #f39323;
+    color: #dd8218;
+}
+
+.btn-check:focus + .service-type-option {
+    box-shadow: 0 0 0 .2rem rgba(243, 147, 35, .22);
+}
+
+.btn-check:checked + .service-type-option {
+    background: #f39323;
+    border-color: #f39323;
+    color: #ffffff;
+}
+
+.locality-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    display: none;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid #cfd4da;
+    border-top: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+}
+
+.locality-suggestion-item {
+    padding: 8px 12px;
+    color: #212529;
+    cursor: pointer;
+}
+
+.locality-suggestion-item:hover {
+    background: #f1f3f5;
+}
+
 #checkout-btn-total {
     display: none;
 }
@@ -129,6 +192,16 @@ select {
 @media (max-width: 600px) {
     .mainModalImg {
         width: 330px;
+    }
+
+    .service-type-options {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .service-type-option {
+        min-height: 44px;
+        padding: 9px 8px;
+        font-size: .9rem;
     }
 }
 

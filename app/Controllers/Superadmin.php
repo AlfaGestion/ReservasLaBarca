@@ -207,6 +207,7 @@ class Superadmin extends BaseController
     public function saveField()
     {
         $fieldsModel = new FieldsModel();
+        $isAjax = $this->request->isAJAX();
 
         $this->request->getVar('iluminacion') ? $iluminacion = true : $iluminacion = false;
         $this->request->getVar('tipoTecho') ? $techada = true : $techada = false;
@@ -215,6 +216,9 @@ class Superadmin extends BaseController
         $medidas = $this->request->getVar('medidas');
         $tipoPiso = $this->request->getVar('tipoPiso');
         $tipoCancha = $this->request->getVar('tipoCancha');
+        $serviceType = $this->request->getVar('serviceType') ?: 'football';
+        $blockMinutes = (int)($this->request->getVar('blockMinutes') ?: ($serviceType === 'padel' ? 90 : 60));
+        $priceUnitLabel = $serviceType === 'padel' ? 'por bloque de 1:30' : 'por hora';
         $valor = $this->request->getVar('valor');
         $valorIluminacion = $this->request->getVar('valorIluminacion');
 
@@ -224,6 +228,9 @@ class Superadmin extends BaseController
             'sizes' => $medidas,
             'floor_type' => $tipoPiso,
             'field_type' => $tipoCancha,
+            'service_type' => $serviceType,
+            'block_minutes' => $blockMinutes,
+            'price_unit_label' => $priceUnitLabel,
             'ilumination' => $iluminacion,
             'roofed' => $techada,
             'value' => $valor,
@@ -231,23 +238,43 @@ class Superadmin extends BaseController
             'disabled' => 0,
         ];
 
-        if ($nombre == '' || $medidas == '' || $tipoPiso == '' || $tipoCancha == '' || $valor == '' || $valorIluminacion == '') {
+        if ($nombre == '' || $valor == '') {
+            if ($isAjax) {
+                return $this->response->setStatusCode(422)->setJSON([
+                    'error' => true,
+                    'message' => 'Debe ingresar todos los datos',
+                ]);
+            }
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Debe ingresar todos los datos']);
         }
 
 
         try {
-            $fieldsModel->insert($query);
+            $id = $fieldsModel->insert($query);
+            if ($isAjax) {
+                return $this->response->setJSON([
+                    'error' => false,
+                    'message' => 'Servicio creado correctamente',
+                    'data' => $fieldsModel->find($id),
+                ]);
+            }
         } catch (\Exception $e) {
+            if ($isAjax) {
+                return $this->response->setStatusCode(500)->setJSON([
+                    'error' => true,
+                    'message' => 'Error al insertar datos: ' . $e->getMessage(),
+                ]);
+            }
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Error al insertar datos: ' . $e->getMessage()]);
         }
 
-        return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Cancha creada correctamente']);
+        return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Servicio creado correctamente']);
     }
 
     public function editField($id)
     {
         $fieldsModel = new FieldsModel();
+        $isAjax = $this->request->isAJAX();
 
         $this->request->getVar('iluminacion') ? $iluminacion = true : $iluminacion = false;
         $this->request->getVar('tipoTecho') ? $techada = true : $techada = false;
@@ -256,9 +283,12 @@ class Superadmin extends BaseController
         $medidas = $this->request->getVar('medidas');
         $tipoPiso = $this->request->getVar('tipoPiso');
         $tipoCancha = $this->request->getVar('tipoCancha');
+        $serviceType = $this->request->getVar('serviceType') ?: 'football';
+        $blockMinutes = (int)($this->request->getVar('blockMinutes') ?: ($serviceType === 'padel' ? 90 : 60));
+        $priceUnitLabel = $serviceType === 'padel' ? 'por bloque de 1:30' : 'por hora';
         $valor = $this->request->getVar('valor');
         $valorIluminacion = $this->request->getVar('valorIluminacion');
-        $disabled = $this->request->getVar('disabled');
+        $disabled = $this->request->getVar('disabled') ? 1 : 0;
 
 
         $query = [
@@ -266,6 +296,9 @@ class Superadmin extends BaseController
             'sizes' => $medidas,
             'floor_type' => $tipoPiso,
             'field_type' => $tipoCancha,
+            'service_type' => $serviceType,
+            'block_minutes' => $blockMinutes,
+            'price_unit_label' => $priceUnitLabel,
             'ilumination' => $iluminacion,
             'roofed' => $techada,
             'value' => $valor,
@@ -273,18 +306,37 @@ class Superadmin extends BaseController
             'disabled' => $disabled,
         ];
 
-        if ($nombre == '' || $medidas == '' || $tipoPiso == '' || $tipoCancha == '' || $valor == '' || $valorIluminacion == '') {
+        if ($nombre == '' || $valor == '') {
+            if ($isAjax) {
+                return $this->response->setStatusCode(422)->setJSON([
+                    'error' => true,
+                    'message' => 'Debe ingresar todos los datos',
+                ]);
+            }
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Debe ingresar todos los datos']);
         }
 
 
         try {
             $fieldsModel->update($id, $query);
+            if ($isAjax) {
+                return $this->response->setJSON([
+                    'error' => false,
+                    'message' => 'Servicio editado correctamente',
+                    'data' => $fieldsModel->find($id),
+                ]);
+            }
         } catch (\Exception $e) {
+            if ($isAjax) {
+                return $this->response->setStatusCode(500)->setJSON([
+                    'error' => true,
+                    'message' => 'Error al insertar datos: ' . $e->getMessage(),
+                ]);
+            }
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Error al insertar datos: ' . $e->getMessage()]);
         }
 
-        return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Cancha editada correctamente']);
+        return redirect()->to('abmAdmin')->with('msg', ['type' => 'success', 'body' => 'Servicio editado correctamente']);
     }
 
     public function getActiveBookings()
