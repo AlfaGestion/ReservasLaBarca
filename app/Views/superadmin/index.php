@@ -39,6 +39,46 @@
     .superadmin-reservas .modal-content {
         border-color: #d8e6f4;
     }
+    .service-config-grid {
+        display: grid;
+        gap: 1rem;
+    }
+    .service-config-card {
+        display: grid;
+        gap: 1rem;
+        padding: 1rem;
+        border: 1px solid #d8e6f4;
+        border-radius: 8px;
+        background: #ffffff;
+    }
+    .service-config-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+    .service-config-section {
+        padding: 1rem;
+        border: 1px solid #e3edf7;
+        border-radius: 8px;
+        background: #f8fbfe;
+    }
+    .service-config-section h6 {
+        margin-bottom: .85rem;
+        color: #1f4467;
+        font-weight: 700;
+    }
+    .service-duration-preview,
+    .service-offer-preview {
+        padding: .55rem .75rem;
+        border-radius: 6px;
+        background: #eef6ff;
+        color: #1f4467;
+        font-weight: 600;
+        min-height: 38px;
+        display: flex;
+        align-items: center;
+    }
 
     body.theme-dark .superadmin-reservas {
         color: #dbe9f8;
@@ -87,6 +127,20 @@
         --bs-table-striped-color: #dbe9f8;
         --bs-table-color: #dbe9f8;
         --bs-table-border-color: #33506e;
+    }
+    body.theme-dark .service-config-card,
+    body.theme-dark .service-config-section {
+        background: #182d42;
+        border-color: #33506e;
+    }
+    body.theme-dark .service-config-section h6,
+    body.theme-dark .service-duration-preview,
+    body.theme-dark .service-offer-preview {
+        color: #dbe9f8;
+    }
+    body.theme-dark .service-duration-preview,
+    body.theme-dark .service-offer-preview {
+        background: #21374d;
     }
     body.theme-dark .superadmin-reservas .form-control,
     body.theme-dark .superadmin-reservas .form-select,

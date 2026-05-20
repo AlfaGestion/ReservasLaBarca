@@ -361,10 +361,22 @@ class MercadoPago extends BaseController
             $bookingField = $booking->cancha ?? $booking['cancha'] ?? null;
             $items = $this->extractBookingItems($booking);
             $fieldsModel = new \App\Models\FieldsModel();
+            $primaryField = null;
             foreach ($items as $index => $item) {
                 $field = $fieldsModel->getField($item['cancha']);
                 if (!$field) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'El servicio seleccionado no existe.'));
+                }
+                if ((int)($field['service_active'] ?? 1) !== 1 || (string)($field['disabled'] ?? '0') === '1') {
+                    return $this->response->setJSON($this->setResponse(409, true, null, 'El servicio seleccionado no esta activo.'));
+                }
+                if ((int)($field['online_available'] ?? 1) !== 1) {
+                    return $this->response->setJSON($this->setResponse(409, true, null, 'El servicio seleccionado no esta disponible para reservar online.'));
+                }
+                if ($index === 0) {
+                    $primaryField = $field;
+                } elseif (($field['service_type'] ?? '') !== 'quincho' || (int)($primaryField['allows_quincho_addon'] ?? 0) !== 1) {
+                    return $this->response->setJSON($this->setResponse(409, true, null, 'El quincho adicional no esta habilitado para este servicio.'));
                 }
                 $from = $bookingSlotsModel->timeToMinutes($item['horarioDesde']);
                 $until = $bookingSlotsModel->timeToMinutes($item['horarioHasta']);
@@ -372,11 +384,8 @@ class MercadoPago extends BaseController
                     $until += 24 * 60;
                 }
                 $duration = $until - $from;
-                $blockMinutes = (int)($field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? 60);
-                if (false && ($field['service_type'] ?? 'football') === 'padel' && $duration !== 90) {
-                    return $this->response->setJSON($this->setResponse(409, true, null, 'Pádel se reserva únicamente en bloques de 1 hora y 30 minutos.'));
-                }
-                if ($duration <= 0 || $duration % max(1, $blockMinutes) !== 0) {
+                $blockMinutes = (int)($field['duration_minutes'] ?? $field['block_minutes'] ?? $field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? 60);
+                if ($duration <= 0 || $duration !== max(1, $blockMinutes)) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'La duración seleccionada no es válida para el servicio.'));
                 }
                 if ($this->isClosedForDateField($item['fecha'], $item['cancha'])) {

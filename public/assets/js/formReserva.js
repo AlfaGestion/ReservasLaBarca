@@ -2,7 +2,7 @@ const confirmarReservabutton = document.getElementById('confirmarReserva')
 const bookingForm = document.getElementById('bookingForm')
 const selectCancha = document.getElementById('cancha')
 const serviceTypeSelect = document.getElementById('serviceType')
-const serviceTypeOptions = document.querySelectorAll('input[name="serviceTypeOption"]')
+let serviceTypeOptions = document.querySelectorAll('input[name="serviceTypeOption"]')
 const fechaInput = document.getElementById('fecha')
 const horarioDesde = document.getElementById('horarioDesde')
 const horarioHasta = document.getElementById('horarioHasta')
@@ -58,6 +58,7 @@ const allFields = Array.isArray(window.bookingFields) ? window.bookingFields : A
         disabled: 0,
     }))
 const openingTime = Array.isArray(window.bookingOpeningTime) ? window.bookingOpeningTime : []
+const bookingServices = Array.isArray(window.bookingServices) ? window.bookingServices : []
 
 let data = {}
 let preferencesIds = {}
@@ -69,6 +70,42 @@ let closureLoadNoticeShown = false
 // let idCustomer
 let closureInfo = { closed: false, scope: 'none', label: '', fecha: '', closedAll: false, closedFields: [] }
 let currentOccupiedSlots = []
+
+function renderServiceTypeOptions() {
+    if (!serviceTypeSelect || bookingServices.length === 0) return
+    const wrapper = document.querySelector('.service-type-options')
+    serviceTypeSelect.innerHTML = ''
+    if (wrapper) wrapper.innerHTML = ''
+
+    bookingServices
+        .filter(service => String(service.active ?? '1') !== '0' && String(service.online_available ?? '1') !== '0')
+        .forEach((service, index) => {
+            const code = service.code || 'football'
+            serviceTypeSelect.appendChild(new Option(service.name || code, code, index === 0, index === 0))
+            if (!wrapper) return
+            const id = `serviceType${String(code).replace(/[^A-Za-z0-9]/g, '')}`
+            const input = document.createElement('input')
+            input.className = 'btn-check'
+            input.type = 'radio'
+            input.name = 'serviceTypeOption'
+            input.id = id
+            input.value = code
+            input.autocomplete = 'off'
+            input.checked = index === 0
+
+            const label = document.createElement('label')
+            label.className = 'service-type-option'
+            label.htmlFor = id
+            label.textContent = service.name || code
+
+            wrapper.appendChild(input)
+            wrapper.appendChild(label)
+        })
+
+    serviceTypeOptions = document.querySelectorAll('input[name="serviceTypeOption"]')
+}
+
+renderServiceTypeOptions()
 
 let dataOferta = {
     valor: 0,
@@ -779,7 +816,7 @@ function getCurrentBlockMinutes() {
     const selected = getFieldById(selectCancha?.value)
     if (selected?.duration_minutes) return Number(selected.duration_minutes)
     if (selected?.block_minutes) return Number(selected.block_minutes)
-    return getSelectedServiceType() === 'padel' ? 90 : 60
+    return 60
 }
 
 function getCurrentSlotIntervalMinutes() {
@@ -841,7 +878,11 @@ function updateServiceOptions() {
     getFieldsByService(selectedService).forEach((field) => {
         const option = new Option(field.name, field.id)
         option.dataset.serviceType = field.service_type || 'football'
-        option.dataset.blockMinutes = field.duration_minutes || field.block_minutes || (selectedService === 'padel' ? 90 : 60)
+        option.dataset.blockMinutes = field.duration_minutes || field.block_minutes || 60
+        option.dataset.durationMinutes = field.duration_minutes || field.block_minutes || 60
+        option.dataset.slotIntervalMinutes = field.slot_interval_minutes || field.booking_interval_minutes || field.duration_minutes || field.block_minutes || 60
+        option.dataset.openingTime = field.opening_time || ''
+        option.dataset.closingTime = field.closing_time || ''
         option.textContent = `${field.name} - ${minutesToHuman(field.duration_minutes || field.block_minutes || 60)}`
         selectCancha.appendChild(option)
     })
@@ -858,7 +899,8 @@ function updateServiceOptions() {
 
 function updateAdditionalQuinchoVisibility() {
     const quincho = getQuinchoField()
-    const canOffer = Boolean(quincho && selectCancha?.value && String(selectCancha.value) !== String(quincho.id))
+    const selected = getFieldById(selectCancha?.value)
+    const canOffer = Boolean(quincho && selected && String(selected.id) !== String(quincho.id) && String(selected.allows_quincho_addon ?? '0') !== '0')
     if (!quinchoAdditionalBox) return
     quinchoAdditionalBox.classList.toggle('d-none', !canOffer)
     if (!canOffer && addQuincho) {
@@ -1725,9 +1767,7 @@ function calculateAmount(from, until, amount) {
     let untilMinutes = timeToMinutes(until)
     if (untilMinutes <= fromMinutes) untilMinutes += 1440
     const minutes = Math.max(0, untilMinutes - fromMinutes)
-    const multiplier = (field?.service_type || getSelectedServiceType()) === 'padel'
-        ? Math.ceil(minutes / blockMinutes)
-        : minutes / 60
+    const multiplier = minutes / Math.max(1, blockMinutes)
     let total = multiplier * Number(amount || 0)
 
     if (addQuincho?.checked) {
@@ -1736,7 +1776,8 @@ function calculateAmount(from, until, amount) {
             let qFrom = timeToMinutes(quinchoDesde.value)
             let qUntil = timeToMinutes(quinchoHasta.value)
             if (qUntil <= qFrom) qUntil += 1440
-            total += ((qUntil - qFrom) / 60) * Number(quincho.value || 0)
+            const qBlockMinutes = Number(quincho.duration_minutes || quincho.block_minutes || 60)
+            total += ((qUntil - qFrom) / Math.max(1, qBlockMinutes)) * Number(quincho.value || 0)
         }
     }
 

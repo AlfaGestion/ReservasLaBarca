@@ -29,7 +29,6 @@ const fieldFormModal = fieldFormModalElement ? new bootstrap.Modal(fieldFormModa
 const fieldFormModalTitle = document.getElementById('fieldFormModalTitle')
 const fieldFormMessage = document.getElementById('fieldFormMessage')
 const serviceFieldsTableBody = document.getElementById('serviceFieldsTableBody')
-const newServicePanel = document.getElementById('newServicePanel')
 const adminTabs = new bootstrap.Tab(document.getElementById('nav-tab'))
 const toggleCancelReservations = document.getElementById('toggleCancelReservations')
 const cancelReservationsPanel = document.getElementById('cancelReservationsPanel')
@@ -68,6 +67,43 @@ function minutesToHuman(minutes) {
     return `${total} min (${parts.length ? parts.join(' ') : '0 min'})`
 }
 
+function minutesToAdminHuman(totalMinutes) {
+    const total = Math.max(0, Number(totalMinutes || 0))
+    const hours = Math.floor(total / 60)
+    const remainder = total % 60
+    if (hours > 0 && remainder > 0) return `${hours} hs ${remainder} min`
+    if (hours > 0) return `${hours} hs`
+    return `${remainder} min`
+}
+
+function updateServiceConfigForm(form) {
+    const hours = Number(form.querySelector('.service-duration-hours')?.value || 0)
+    const minutes = Number(form.querySelector('.service-duration-minutes')?.value || 0)
+    const total = Math.max(0, (hours * 60) + minutes)
+    const durationPreview = form.querySelector('.service-duration-preview')
+    if (durationPreview) {
+        durationPreview.textContent = `${total} min (${minutesToAdminHuman(total)})`
+    }
+
+    const offerToggle = form.querySelector('.service-offer-toggle')
+    const offerFields = form.querySelector('.service-offer-fields')
+    const offerEnabled = Boolean(offerToggle?.checked)
+    offerFields?.classList.toggle('d-none', !offerEnabled)
+    offerFields?.querySelectorAll('input, select, textarea').forEach(input => {
+        input.disabled = !offerEnabled
+    })
+
+    const preview = form.querySelector('.service-offer-preview')
+    if (!preview) return
+    const text = form.querySelector('.service-offer-text')?.value?.trim() || 'Oferta'
+    const type = form.querySelector('.service-discount-type:checked')?.value || 'percentage'
+    const rawValue = String(form.querySelector('.service-discount-value')?.value || '0').replace(/\./g, '').replace(',', '.')
+    const value = Number(rawValue) || 0
+    const fixedValue = formatPriceAR(value)
+    const discount = type === 'fixed' ? `${fixedValue} de descuento` : `${value}% OFF`
+    preview.textContent = offerEnabled && value > 0 ? `Se mostrará como: ${text} - ${discount}` : 'Se mostrará como: -'
+}
+
 function getLocalDateISO(date = new Date()) {
     const d = new Date(date)
     const year = d.getFullYear()
@@ -86,6 +122,12 @@ const fieldServiceLabels = {
 document.querySelectorAll('#createServiceType option').forEach((option) => {
     fieldServiceLabels[option.value] = option.textContent
 })
+
+function initServiceConfigForms(scope = document) {
+    scope.querySelectorAll('.service-config-form').forEach(updateServiceConfigForm)
+}
+
+initServiceConfigForms()
 
 function getServiceTypeOptions() {
     return Array.from(document.querySelectorAll('[name="createServiceTypeOption"]')).map(option => ({
@@ -120,7 +162,7 @@ function clearFieldFormMessage() {
 function setFieldModalMode(mode) {
     clearFieldFormMessage()
     if (fieldFormModalTitle) {
-        fieldFormModalTitle.textContent = mode === 'create' ? 'Crear servicio' : 'Editar servicio'
+        fieldFormModalTitle.textContent = mode === 'create' ? 'Crear precio' : 'Editar precio'
     }
     enterFieldsForm?.classList.toggle('d-none', mode !== 'create')
     selectEditField?.classList.toggle('d-none', mode !== 'selectEdit')
@@ -227,6 +269,11 @@ if (selectEditField) {
 }
 
 document.addEventListener('change', (e) => {
+    const serviceForm = e.target.closest('.service-config-form')
+    if (serviceForm) {
+        updateServiceConfigForm(serviceForm)
+    }
+
     const serviceTypeOption = e.target.closest('[data-service-select]')
     if (!serviceTypeOption) return
 
@@ -236,11 +283,70 @@ document.addEventListener('change', (e) => {
         select.value = serviceTypeOption.value
     }
     if (blockMinutes) {
-        blockMinutes.value = serviceTypeOption.dataset.durationMinutes || (serviceTypeOption.value === 'padel' ? 90 : 60)
+        blockMinutes.value = serviceTypeOption.dataset.durationMinutes || 60
     }
 })
 
+document.addEventListener('input', (e) => {
+    const serviceForm = e.target.closest('.service-config-form')
+    if (serviceForm) {
+        updateServiceConfigForm(serviceForm)
+    }
+})
+
+async function refreshServicesPanelFromServer() {
+    const currentPanel = document.getElementById('services-panel')
+    if (!currentPanel) return
+
+    const response = await fetch(`${webBaseUrl}abmAdmin`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    const html = await response.text()
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const freshPanel = doc.getElementById('services-panel')
+    if (!freshPanel) return
+
+    currentPanel.innerHTML = freshPanel.innerHTML
+    initServiceConfigForms(currentPanel)
+    updateServicesRatesNewButton()
+}
+
 document.addEventListener('submit', async (e) => {
+    const serviceForm = e.target.closest('.service-config-form')
+    if (serviceForm) {
+        e.preventDefault()
+        const submitButton = serviceForm.querySelector('[type="submit"]')
+        const originalText = submitButton ? submitButton.textContent : ''
+        if (submitButton) {
+            submitButton.disabled = true
+            submitButton.textContent = 'Guardando...'
+        }
+
+        try {
+            const response = await fetch(serviceForm.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'text/html,application/json',
+                },
+                body: new FormData(serviceForm),
+            })
+            if (!response.ok) {
+                throw new Error('No se pudo guardar el servicio.')
+            }
+            await refreshServicesPanelFromServer()
+        } catch (error) {
+            console.error('Error:', error)
+            alert('No se pudo guardar el servicio. Intenta nuevamente.')
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false
+                submitButton.textContent = originalText
+            }
+        }
+        return
+    }
+
     const form = e.target.closest('.field-ajax-form')
     if (!form) return
 
@@ -287,15 +393,46 @@ document.addEventListener('submit', async (e) => {
 })
 
 
+function updateServicesRatesNewButton() {
+    const button = document.getElementById('buttonCreateField')
+    if (!button) return
+    const servicesPanelIsActive = document.getElementById('services-panel')?.classList.contains('active')
+    button.innerHTML = servicesPanelIsActive
+        ? '<i class="fa-solid fa-plus me-1"></i>Nuevo servicio'
+        : '<i class="fa-solid fa-plus me-1"></i>Nuevo precio'
+}
+
+document.querySelectorAll('#servicesRatesTabs [data-bs-toggle="tab"]').forEach(tab => {
+    tab.addEventListener('shown.bs.tab', updateServicesRatesNewButton)
+})
+updateServicesRatesNewButton()
+
 document.addEventListener('click', async (e) => {
     if (e.target) {
+        const serviceEditAction = e.target.closest('.service-edit-row')
+        if (serviceEditAction) {
+            const panel = document.getElementById(`serviceEditPanel${serviceEditAction.dataset.serviceId}`)
+            if (!panel) return
+            document.querySelectorAll('.service-edit-panel').forEach(row => {
+                if (row !== panel) row.classList.add('d-none')
+            })
+            panel.classList.toggle('d-none')
+            if (!panel.classList.contains('d-none')) {
+                panel.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }
+            return
+        }
+
         const fieldAction = e.target.closest('#buttonCreateField, .field-edit-row')
         if (fieldAction?.id == 'buttonCreateField') {
             const servicesPanelIsActive = document.getElementById('services-panel')?.classList.contains('active')
-            if (servicesPanelIsActive && newServicePanel) {
-                newServicePanel.classList.toggle('d-none')
-                if (!newServicePanel.classList.contains('d-none')) {
-                    newServicePanel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            if (servicesPanelIsActive) {
+                const currentNewServicePanel = document.getElementById('newServicePanel')
+                if (!currentNewServicePanel) return
+                currentNewServicePanel.classList.toggle('d-none')
+                document.querySelectorAll('.service-edit-panel').forEach(row => row.classList.add('d-none'))
+                if (!currentNewServicePanel.classList.contains('d-none')) {
+                    currentNewServicePanel.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 }
                 return
             }
@@ -1185,7 +1322,7 @@ async function getEditField(id) {
         const responseData = await response.json();
 
         if (responseData.data != '') {
-            if (fieldFormModalTitle) fieldFormModalTitle.textContent = 'Editar servicio'
+            if (fieldFormModalTitle) fieldFormModalTitle.textContent = 'Editar precio'
             fillDiv(responseData.data)
 
         } else {
@@ -1206,7 +1343,7 @@ function fillDiv(field) {
     let roofedCheck = ''
     if (field.roofed == 1) { roofedCheck = 'checked' }
     const serviceType = field.service_type || 'football'
-    const blockMinutes = field.duration_minutes || field.block_minutes || (serviceType === 'padel' ? 90 : 60)
+    const blockMinutes = field.duration_minutes || field.block_minutes || 60
     const serviceOptionName = `editServiceTypeOption${field.id}`
     const serviceSelectId = `editServiceType${field.id}`
     const blockMinutesId = `editBlockMinutes${field.id}`

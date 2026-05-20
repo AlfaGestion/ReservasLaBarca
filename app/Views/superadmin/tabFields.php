@@ -20,68 +20,118 @@ $splitMinutes = static function ($minutes): array {
 };
 $renderServiceForm = static function (array $service, bool $isCreate = false) use ($splitMinutes): void {
     $duration = (int)($service['duration_minutes'] ?? $service['minimum_duration_minutes'] ?? 60);
-    $interval = (int)($service['slot_interval_minutes'] ?? $service['booking_interval_minutes'] ?? $duration);
     [$durationHours, $durationMinutesRemainder] = $splitMinutes($duration);
-    [$intervalHours, $intervalMinutesRemainder] = $splitMinutes($interval);
     $action = $isCreate ? base_url('saveService') : base_url('editService/' . $service['id']);
+    $code = (string)($service['code'] ?? '');
+    $offerActive = !empty($service['offer_active']);
     ?>
-    <form action="<?= $action ?>" method="POST" class="row g-2 align-items-end">
-        <div class="col-lg-2">
-            <label class="form-label small mb-1">Servicio</label>
-            <input class="form-control form-control-sm" name="name" value="<?= esc($service['name'] ?? '') ?>" required>
-            <?php if ($isCreate) : ?>
-                <input class="form-control form-control-sm mt-1" name="code" placeholder="codigo_sin_espacios" required>
-            <?php else : ?>
-                <div class="small text-muted"><code><?= esc($service['code'] ?? '') ?></code></div>
-            <?php endif; ?>
+    <form action="<?= $action ?>" method="POST" class="service-config-card service-config-form">
+        <div class="service-config-header">
+            <div>
+                <div class="text-uppercase small text-muted fw-semibold">Servicio</div>
+                <h5 class="mb-1"><?= esc($service['name'] ?? 'Nuevo servicio') ?></h5>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar</button>
         </div>
-        <div class="col-lg-2">
-            <label class="form-label small mb-1">Horario</label>
-            <div class="d-flex gap-1">
-                <input type="time" class="form-control form-control-sm" name="opening_time" value="<?= esc(substr((string)($service['opening_time'] ?? '07:00'), 0, 5)) ?>">
-                <input type="time" class="form-control form-control-sm" name="closing_time" value="<?= esc(substr((string)($service['closing_time'] ?? '23:00'), 0, 5)) ?>">
+
+        <input type="hidden" name="code" value="<?= esc($code) ?>">
+
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <label class="form-label">Nombre visible</label>
+                <input class="form-control" name="name" value="<?= esc($service['name'] ?? '') ?>" required>
+            </div>
+            <div class="col-lg-7">
+                <div class="service-config-section h-100">
+                    <h6>Estados</h6>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="active<?= esc($code) ?>" name="active" <?= !array_key_exists('active', $service) || !empty($service['active']) ? 'checked' : '' ?>>
+                                <label class="form-check-label fw-semibold" for="active<?= esc($code) ?>">Activo</label>
+                                <div class="small text-muted">Permite usar este servicio en el sistema.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="online<?= esc($code) ?>" name="online_available" <?= !array_key_exists('online_available', $service) || !empty($service['online_available']) ? 'checked' : '' ?>>
+                                <label class="form-check-label fw-semibold" for="online<?= esc($code) ?>">Visible online</label>
+                                <div class="small text-muted">Lo muestra en la web para que los clientes lo puedan reservar.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="quinchoAddon<?= esc($code) ?>" name="allows_quincho_addon" <?= !array_key_exists('allows_quincho_addon', $service) || !empty($service['allows_quincho_addon']) ? 'checked' : '' ?>>
+                                <label class="form-check-label fw-semibold" for="quinchoAddon<?= esc($code) ?>">Permite quincho adicional</label>
+                                <div class="small text-muted">Después de reservar este servicio, ofrece agregar quincho si está disponible.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="col-lg-2">
-            <label class="form-label small mb-1">Duraci&oacute;n <?= esc(minutesToHuman($duration)) ?></label>
-            <div class="d-flex gap-1">
-                <input type="number" class="form-control form-control-sm" name="duration_hours" min="0" step="1" value="<?= esc($durationHours) ?>" aria-label="Horas de duracion">
-                <input type="number" class="form-control form-control-sm" name="duration_minutes_remainder" min="0" max="59" step="15" value="<?= esc($durationMinutesRemainder) ?>" aria-label="Minutos de duracion">
+
+        <div class="service-config-section">
+            <h6>Horarios y duración</h6>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Desde</label>
+                    <input type="time" class="form-control" name="opening_time" value="<?= esc(substr((string)($service['opening_time'] ?? '07:00'), 0, 5)) ?>">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Hasta</label>
+                    <input type="time" class="form-control" name="closing_time" value="<?= esc(substr((string)($service['closing_time'] ?? '23:00'), 0, 5)) ?>">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Horas</label>
+                    <input type="number" class="form-control service-duration-hours" name="duration_hours" min="0" step="1" value="<?= esc($durationHours) ?>">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Minutos</label>
+                    <input type="number" class="form-control service-duration-minutes" name="duration_minutes_remainder" min="0" max="59" step="15" value="<?= esc($durationMinutesRemainder) ?>">
+                </div>
+                <div class="col-md-2">
+                    <div class="service-duration-preview"><?= esc($duration) ?> min (<?= esc(minutesToHuman($duration)) ?>)</div>
+                </div>
             </div>
         </div>
-        <div class="col-lg-2">
-            <label class="form-label small mb-1">Intervalo <?= esc(minutesToHuman($interval)) ?></label>
-            <div class="d-flex gap-1">
-                <input type="number" class="form-control form-control-sm" name="slot_interval_hours" min="0" step="1" value="<?= esc($intervalHours) ?>" aria-label="Horas de intervalo">
-                <input type="number" class="form-control form-control-sm" name="slot_interval_minutes_remainder" min="0" max="59" step="15" value="<?= esc($intervalMinutesRemainder) ?>" aria-label="Minutos de intervalo">
+
+        <div class="service-config-section service-offer-section">
+            <h6>Oferta</h6>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input service-offer-toggle" type="checkbox" role="switch" id="offer<?= esc($code) ?>" name="offer_active" <?= $offerActive ? 'checked' : '' ?>>
+                <label class="form-check-label fw-semibold" for="offer<?= esc($code) ?>">Activar oferta</label>
             </div>
-        </div>
-        <div class="col-lg-2">
-            <label class="form-label small mb-1">Estados</label>
-            <div class="d-flex flex-wrap gap-2 small">
-                <label><input type="checkbox" name="active" <?= !array_key_exists('active', $service) || !empty($service['active']) ? 'checked' : '' ?>> Activo</label>
-                <label><input type="checkbox" name="online_available" <?= !array_key_exists('online_available', $service) || !empty($service['online_available']) ? 'checked' : '' ?>> Online</label>
-                <label><input type="checkbox" name="allows_quincho_addon" <?= !array_key_exists('allows_quincho_addon', $service) || !empty($service['allows_quincho_addon']) ? 'checked' : '' ?>> Quincho</label>
+            <div class="service-offer-fields <?= $offerActive ? '' : 'd-none' ?>">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label d-block">Tipo de descuento</label>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check service-discount-type" name="discount_type" id="discountPct<?= esc($code) ?>" value="percentage" <?= ($service['discount_type'] ?? '') !== 'fixed' ? 'checked' : '' ?>>
+                            <label class="btn btn-outline-secondary" for="discountPct<?= esc($code) ?>">Porcentaje %</label>
+                            <input type="radio" class="btn-check service-discount-type" name="discount_type" id="discountFixed<?= esc($code) ?>" value="fixed" <?= ($service['discount_type'] ?? '') === 'fixed' ? 'checked' : '' ?>>
+                            <label class="btn btn-outline-secondary" for="discountFixed<?= esc($code) ?>">Monto fijo $</label>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Valor</label>
+                        <input class="form-control service-discount-value" name="discount_value" value="<?= esc($service['discount_value'] ?? 0) ?>">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Texto para mostrar</label>
+                        <input class="form-control service-offer-text" name="offer_text" placeholder="Promo verano" value="<?= esc($service['offer_text'] ?? '') ?>">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Desde</label>
+                        <input type="date" class="form-control" name="offer_start_date" value="<?= esc($service['offer_start_date'] ?? '') ?>">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Hasta</label>
+                        <input type="date" class="form-control" name="offer_end_date" value="<?= esc($service['offer_end_date'] ?? '') ?>">
+                    </div>
+                </div>
+                <div class="service-offer-preview mt-3">Se mostrará como: -</div>
             </div>
-        </div>
-        <div class="col-lg-3">
-            <label class="form-label small mb-1">Oferta</label>
-            <div class="d-flex gap-1 mb-1">
-                <select class="form-select form-select-sm" name="discount_type">
-                    <option value="percentage" <?= ($service['discount_type'] ?? '') !== 'fixed' ? 'selected' : '' ?>>%</option>
-                    <option value="fixed" <?= ($service['discount_type'] ?? '') === 'fixed' ? 'selected' : '' ?>>$</option>
-                </select>
-                <input class="form-control form-control-sm" name="discount_value" value="<?= esc($service['discount_value'] ?? 0) ?>">
-                <input type="date" class="form-control form-control-sm" name="offer_start_date" value="<?= esc($service['offer_start_date'] ?? '') ?>">
-                <input type="date" class="form-control form-control-sm" name="offer_end_date" value="<?= esc($service['offer_end_date'] ?? '') ?>">
-            </div>
-            <div class="d-flex gap-2">
-                <label class="small"><input type="checkbox" name="offer_active" <?= !empty($service['offer_active']) ? 'checked' : '' ?>> Activa</label>
-                <input class="form-control form-control-sm" name="offer_text" placeholder="Texto de oferta" value="<?= esc($service['offer_text'] ?? '') ?>">
-            </div>
-        </div>
-        <div class="col-lg-1 text-end">
-            <button type="submit" class="btn btn-sm btn-primary">Guardar</button>
         </div>
     </form>
     <?php
@@ -100,54 +150,70 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
 <div class="tab-content" id="servicesRatesTabsContent">
 <div class="tab-pane fade show active" id="services-panel" role="tabpanel" aria-labelledby="services-subtab">
 
-<div class="table-responsive mt-3 d-none" id="newServicePanel">
+<div class="d-none mt-3" id="newServicePanel">
+    <?php $renderServiceForm([
+        'opening_time' => '07:00',
+        'closing_time' => '23:00',
+        'duration_minutes' => 60,
+        'active' => 1,
+        'online_available' => 1,
+        'allows_quincho_addon' => 1,
+        'discount_type' => 'percentage',
+    ], true); ?>
+</div>
+
+<div class="table-responsive mt-3">
     <table class="table table-striped table-hover align-middle">
-        <tbody>
+        <thead>
             <tr>
-                <td>
-                    <?php $renderServiceForm([
-                        'opening_time' => '07:00',
-                        'closing_time' => '23:00',
-                        'duration_minutes' => 60,
-                        'slot_interval_minutes' => 60,
-                        'active' => 1,
-                        'online_available' => 1,
-                        'allows_quincho_addon' => 1,
-                    ], true); ?>
-                </td>
+                <th>Servicio</th>
+                <th>Horario</th>
+                <th>Duraci&oacute;n</th>
+                <th>Estado</th>
+                <th>Online</th>
+                <th>Oferta</th>
+                <th class="text-end">Acciones</th>
             </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($services as $service) : ?>
+                <?php
+                $serviceId = (int)($service['id'] ?? 0);
+                $duration = (int)($service['duration_minutes'] ?? $service['minimum_duration_minutes'] ?? 60);
+                $active = !array_key_exists('active', $service) || !empty($service['active']);
+                $online = !array_key_exists('online_available', $service) || !empty($service['online_available']);
+                $offer = !empty($service['offer_active']);
+                ?>
+                <tr>
+                    <td>
+                        <div class="fw-semibold"><?= esc($service['name'] ?? '') ?></div>
+                    </td>
+                    <td><?= esc(substr((string)($service['opening_time'] ?? '07:00'), 0, 5)) ?> a <?= esc(substr((string)($service['closing_time'] ?? '23:00'), 0, 5)) ?></td>
+                    <td><?= esc(minutesToHuman($duration)) ?></td>
+                    <td><span class="badge <?= $active ? 'bg-success' : 'bg-secondary' ?>"><?= $active ? 'Activo' : 'Inactivo' ?></span></td>
+                    <td><span class="badge <?= $online ? 'bg-primary' : 'bg-secondary' ?>"><?= $online ? 'Visible' : 'Oculto' ?></span></td>
+                    <td>
+                        <?php if ($offer) : ?>
+                            <span class="badge bg-warning text-dark"><?= esc($service['offer_text'] ?: 'Oferta activa') ?></span>
+                        <?php else : ?>
+                            <span class="text-muted">Sin oferta</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-sm btn-outline-primary service-edit-row" data-service-id="<?= esc($serviceId) ?>">
+                            <i class="fa-solid fa-pen-to-square me-1"></i>Editar
+                        </button>
+                    </td>
+                </tr>
+                <tr class="service-edit-panel d-none" id="serviceEditPanel<?= esc($serviceId) ?>">
+                    <td colspan="7">
+                        <?php $renderServiceForm($service); ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
         </tbody>
     </table>
 </div>
-
-<?php if (!empty($services)) : ?>
-    <div class="table-responsive mt-3">
-        <table class="table table-striped table-hover align-middle">
-            <thead>
-                <tr>
-                    <th>Servicio</th>
-                    <th>C&oacute;digo</th>
-                    <th>Horario</th>
-                    <th>Duraci&oacute;n</th>
-                    <th>Intervalo</th>
-                    <th>Online</th>
-                    <th>Oferta</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($services as $service) : ?>
-                    <tr>
-                        <td colspan="7">
-                            <?php $renderServiceForm($service); ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-<?php else : ?>
-    <div class="text-center text-muted py-4">No hay servicios cargados.</div>
-<?php endif; ?>
 
 </div>
 <div class="tab-pane fade" id="prices-panel" role="tabpanel" aria-labelledby="prices-subtab">
@@ -192,7 +258,7 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                 <?php endforeach; ?>
             <?php else : ?>
                 <tr id="serviceFieldsEmptyRow">
-                    <td colspan="7" class="text-center text-muted py-4">No hay servicios cargados.</td>
+                    <td colspan="7" class="text-center text-muted py-4">No hay precios o espacios cargados.</td>
                 </tr>
             <?php endif; ?>
         </tbody>
@@ -206,7 +272,7 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="fieldFormModalTitle">Servicio</h5>
+                <h5 class="modal-title" id="fieldFormModalTitle">Precio</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
@@ -276,13 +342,13 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                 </div>
 
                 <div class="form-floating d-none mt-3" id="selectEditField">
-                    <select class="form-select" id="selectEditFields" aria-label="Editar servicio">
+                    <select class="form-select" id="selectEditFields" aria-label="Editar precio">
                         <option value="">Seleccionar</option>
                         <?php foreach ($fields as $field) : ?>
                             <option value="<?= $field['id'] ?>"><?= $field['name'] ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <label for="selectEditFields">Editar servicio</label>
+                    <label for="selectEditFields">Editar precio</label>
                 </div>
 
                 <div id="editFieldDiv"></div>

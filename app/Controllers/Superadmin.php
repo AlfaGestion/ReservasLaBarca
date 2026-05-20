@@ -250,7 +250,9 @@ class Superadmin extends BaseController
         }
 
         $fields = $fieldsModel->enrichFields($fieldsModel->findAll());
-        $services = (new ServicesModel())->getServices();
+        $servicesModel = new ServicesModel();
+        $servicesModel->ensureDefaultServices();
+        $services = $servicesModel->getServices();
 
         $customers = $customersModel->findAll();
         $localities = $localitiesModel->orderBy('name', 'ASC')->findAll();
@@ -295,8 +297,9 @@ class Superadmin extends BaseController
         $tipoPiso = $this->request->getVar('tipoPiso');
         $tipoCancha = $this->request->getVar('tipoCancha');
         $serviceType = $this->request->getVar('serviceType') ?: 'football';
-        $blockMinutes = (int)($this->request->getVar('blockMinutes') ?: ($serviceType === 'padel' ? 90 : 60));
-        $priceUnitLabel = $serviceType === 'padel' ? 'por bloque de 1:30' : 'por hora';
+        $service = (new ServicesModel())->getByCode($serviceType);
+        $blockMinutes = (int)($service['duration_minutes'] ?? $this->request->getVar('blockMinutes') ?? 60);
+        $priceUnitLabel = $blockMinutes === 60 ? 'por hora' : 'por bloque de ' . minutesToHuman($blockMinutes);
         $valor = parse_price_ar($this->request->getVar('valor'));
         $valorIluminacion = parse_price_ar($this->request->getVar('valorIluminacion'));
 
@@ -365,8 +368,9 @@ class Superadmin extends BaseController
         $tipoPiso = $this->request->getVar('tipoPiso');
         $tipoCancha = $this->request->getVar('tipoCancha');
         $serviceType = $this->request->getVar('serviceType') ?: 'football';
-        $blockMinutes = (int)($this->request->getVar('blockMinutes') ?: ($serviceType === 'padel' ? 90 : 60));
-        $priceUnitLabel = $serviceType === 'padel' ? 'por bloque de 1:30' : 'por hora';
+        $service = (new ServicesModel())->getByCode($serviceType);
+        $blockMinutes = (int)($service['duration_minutes'] ?? $this->request->getVar('blockMinutes') ?? 60);
+        $priceUnitLabel = $blockMinutes === 60 ? 'por hora' : 'por bloque de ' . minutesToHuman($blockMinutes);
         $valor = parse_price_ar($this->request->getVar('valor'));
         $valorIluminacion = parse_price_ar($this->request->getVar('valorIluminacion'));
         $disabled = $this->request->getVar('disabled') ? 1 : 0;
@@ -433,10 +437,7 @@ class Superadmin extends BaseController
             $this->request->getVar('duration_hours'),
             $this->request->getVar('duration_minutes_remainder')
         );
-        $intervalMinutes = combine_duration_minutes(
-            $this->request->getVar('slot_interval_hours'),
-            $this->request->getVar('slot_interval_minutes_remainder')
-        );
+        $intervalMinutes = $durationMinutes;
 
         if ($durationMinutes <= 0) {
             $durationMinutes = 60;
@@ -445,12 +446,12 @@ class Superadmin extends BaseController
             $intervalMinutes = $durationMinutes;
         }
 
-        if ($durationMinutes < $intervalMinutes || $durationMinutes % $intervalMinutes !== 0 || $durationMinutes % 15 !== 0 || $intervalMinutes % 15 !== 0) {
-            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Duracion e intervalo deben ser multiplos de 15 minutos y la duracion no puede ser menor al intervalo.']);
+        if ($durationMinutes % 15 !== 0) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'La duracion debe ser multiplo de 15 minutos.']);
         }
 
         $name = trim((string)$this->request->getVar('name'));
-        $code = strtolower(trim((string)$this->request->getVar('code')));
+        $code = strtolower(trim((string)($this->request->getVar('code') ?: $name)));
         $code = preg_replace('/[^a-z0-9_]+/', '_', $code);
         $code = trim((string)$code, '_');
 
@@ -510,10 +511,7 @@ class Superadmin extends BaseController
             $this->request->getVar('duration_hours'),
             $this->request->getVar('duration_minutes_remainder')
         );
-        $intervalMinutes = combine_duration_minutes(
-            $this->request->getVar('slot_interval_hours'),
-            $this->request->getVar('slot_interval_minutes_remainder')
-        );
+        $intervalMinutes = $durationMinutes;
 
         if ($durationMinutes <= 0) {
             $durationMinutes = (int)($oldService['duration_minutes'] ?? $oldService['minimum_duration_minutes'] ?? 60);
@@ -522,8 +520,8 @@ class Superadmin extends BaseController
             $intervalMinutes = (int)($oldService['slot_interval_minutes'] ?? $oldService['booking_interval_minutes'] ?? $durationMinutes);
         }
 
-        if ($durationMinutes < $intervalMinutes || $durationMinutes % $intervalMinutes !== 0 || $durationMinutes % 15 !== 0 || $intervalMinutes % 15 !== 0) {
-            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Duracion e intervalo deben ser multiplos de 15 minutos y la duracion no puede ser menor al intervalo.']);
+        if ($durationMinutes % 15 !== 0) {
+            return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'La duracion debe ser multiplo de 15 minutos.']);
         }
 
         $payload = [

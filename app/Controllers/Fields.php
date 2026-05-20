@@ -4,11 +4,13 @@ namespace App\Controllers;
 
 use App\Controllers\BaseController;
 use App\Models\FieldsModel;
+use App\Models\ServicesModel;
 
 class Fields extends BaseController
 {
     public function getFields()
     {
+        (new ServicesModel())->ensureDefaultServices();
         $fieldsModel = new FieldsModel();
 
         $fields = $fieldsModel->getFields();
@@ -22,6 +24,7 @@ class Fields extends BaseController
 
     public function getField($id)
     {
+        (new ServicesModel())->ensureDefaultServices();
         $fieldsModel = new FieldsModel();
 
         $field = $fieldsModel->getField($id);

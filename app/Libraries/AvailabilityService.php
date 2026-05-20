@@ -52,12 +52,12 @@ class AvailabilityService
         }
     }
 
-    public function checkAvailability($fieldId, $date, $from, $to, ?int $ignoreBookingId = null): bool
+    public function checkAvailability($fieldId, $date, $from, $to, ?int $ignoreBookingId = null, bool $onlineOnly = true): bool
     {
-        return $this->availabilityError($fieldId, $date, $from, $to, $ignoreBookingId) === null;
+        return $this->availabilityError($fieldId, $date, $from, $to, $ignoreBookingId, $onlineOnly) === null;
     }
 
-    public function availabilityError($fieldId, $date, $from, $to, ?int $ignoreBookingId = null): ?string
+    public function availabilityError($fieldId, $date, $from, $to, ?int $ignoreBookingId = null, bool $onlineOnly = true): ?string
     {
         $this->cleanupExpiredPending();
 
@@ -71,7 +71,10 @@ class AvailabilityService
         }
 
         $service = $this->services->getByField($field);
-        if ($service && ((int)($service['active'] ?? 1) !== 1 || (int)($service['online_available'] ?? 1) !== 1)) {
+        if ($service && (int)($service['active'] ?? 1) !== 1) {
+            return 'El servicio seleccionado no esta activo.';
+        }
+        if ($onlineOnly && $service && (int)($service['online_available'] ?? 1) !== 1) {
             return 'El servicio seleccionado no esta disponible para reservar online.';
         }
 
@@ -90,10 +93,10 @@ class AvailabilityService
 
         $minimum = (int)($service['duration_minutes'] ?? $service['minimum_duration_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? 60);
         $interval = (int)($service['slot_interval_minutes'] ?? $service['booking_interval_minutes'] ?? $field['slot_interval_minutes'] ?? $field['block_minutes'] ?? 60);
-        if ($minimum <= 0 || $interval <= 0 || $minimum < $interval || $minimum % $interval !== 0) {
+        if ($minimum <= 0 || $interval <= 0) {
             return 'La configuracion de duracion del servicio no es valida.';
         }
-        if ($duration < max(1, $minimum) || $duration % max(1, $interval) !== 0) {
+        if ($duration !== $minimum) {
             return 'La duracion seleccionada no es valida para el servicio.';
         }
 

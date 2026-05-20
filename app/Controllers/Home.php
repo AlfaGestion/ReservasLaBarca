@@ -11,6 +11,7 @@ use App\Models\FieldsModel;
 use App\Models\LocalitiesModel;
 use App\Models\MercadoPagoModel;
 use App\Models\OffersModel;
+use App\Models\ServicesModel;
 use App\Models\TimeModel;
 use DateInterval;
 use DateTime;
@@ -40,6 +41,9 @@ class Home extends BaseController
 
         $oferta = $offersModel->first();
 
+        $servicesModel = new ServicesModel();
+        $servicesModel->ensureDefaultServices();
+        $services = $servicesModel->getActiveServices(true);
         $fieldsModel = new FieldsModel();
         $fields = $fieldsModel->getFields();
 
@@ -81,7 +85,7 @@ class Home extends BaseController
         //     }
         // }
 
-        return view('index', ['fields' => $fields, 'time' => $openingTime, 'oferta' => $oferta, 'esDomingo' => $isSunday, 'localities' => $localities]);
+        return view('index', ['fields' => $fields, 'services' => $services, 'time' => $openingTime, 'oferta' => $oferta, 'esDomingo' => $isSunday, 'localities' => $localities]);
     }
 
     // public function deleteRejected()

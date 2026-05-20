@@ -47,9 +47,9 @@ class Bookings extends BaseController
         return $slotModel->normalizeTime($time);
     }
 
-    private function hasBookingOverlap(BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, $date, $fieldId, $timeFrom, $timeUntil, ?int $ignoreBookingId = null): bool
+    private function hasBookingOverlap(BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, $date, $fieldId, $timeFrom, $timeUntil, ?int $ignoreBookingId = null, bool $onlineOnly = true): bool
     {
-        return !(new AvailabilityService())->checkAvailability($fieldId, $date, $timeFrom, $timeUntil, $ignoreBookingId);
+        return !(new AvailabilityService())->checkAvailability($fieldId, $date, $timeFrom, $timeUntil, $ignoreBookingId, $onlineOnly);
 
         $timeFrom = $bookingSlotsModel->normalizeTime($timeFrom);
         $timeUntil = $bookingSlotsModel->normalizeTime($timeUntil);
@@ -95,9 +95,10 @@ class Bookings extends BaseController
         return $items;
     }
 
-    private function validateItemsAvailability(array $items, BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, ?int $ignoreBookingId = null): ?string
+    private function validateItemsAvailability(array $items, BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, ?int $ignoreBookingId = null, bool $onlineOnly = true): ?string
     {
         $fieldsModel = new FieldsModel();
+        $primaryField = null;
         foreach ($items as $index => $item) {
             if (empty($item['fecha']) || empty($item['cancha']) || empty($item['horarioDesde']) || empty($item['horarioHasta'])) {
                 return 'Faltan datos de fecha, servicio u horario.';
@@ -106,23 +107,31 @@ class Bookings extends BaseController
             if (!$field) {
                 return 'El servicio seleccionado no existe.';
             }
+            if ((int)($field['service_active'] ?? 1) !== 1 || (string)($field['disabled'] ?? '0') === '1') {
+                return 'El servicio seleccionado no esta activo.';
+            }
+            if ($onlineOnly && (int)($field['online_available'] ?? 1) !== 1) {
+                return 'El servicio seleccionado no esta disponible para reservar online.';
+            }
+            if ($index === 0) {
+                $primaryField = $field;
+            } elseif (($field['service_type'] ?? '') !== 'quincho' || (int)($primaryField['allows_quincho_addon'] ?? 0) !== 1) {
+                return 'El quincho adicional no esta habilitado para este servicio.';
+            }
             $from = $bookingSlotsModel->timeToMinutes($item['horarioDesde']);
             $until = $bookingSlotsModel->timeToMinutes($item['horarioHasta']);
             if ($until <= $from) {
                 $until += 24 * 60;
             }
             $duration = $until - $from;
-            $blockMinutes = (int)($field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? 60);
-            if (false && ($field['service_type'] ?? 'football') === 'padel' && $duration !== 90) {
-                return 'Pádel se reserva únicamente en bloques de 1 hora y 30 minutos.';
-            }
-            if ($duration <= 0 || $duration % max(1, $blockMinutes) !== 0) {
+            $blockMinutes = (int)($field['duration_minutes'] ?? $field['block_minutes'] ?? $field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? 60);
+            if ($duration <= 0 || $duration !== max(1, $blockMinutes)) {
                 return 'La duración seleccionada no es válida para el servicio.';
             }
             if ($this->isClosedForDateField($item['fecha'], $item['cancha'])) {
                 return 'No se puede reservar: hay un cierre informado para esa fecha.';
             }
-            if ($this->hasBookingOverlap($bookingsModel, $bookingSlotsModel, $item['fecha'], $item['cancha'], $item['horarioDesde'], $item['horarioHasta'], $ignoreBookingId)) {
+            if ($this->hasBookingOverlap($bookingsModel, $bookingSlotsModel, $item['fecha'], $item['cancha'], $item['horarioDesde'], $item['horarioHasta'], $ignoreBookingId, $onlineOnly)) {
                 return $index === 0
                     ? 'El horario seleccionado ya está ocupado o en proceso.'
                     : 'El quincho no está disponible en el horario seleccionado.';
@@ -316,7 +325,7 @@ class Bookings extends BaseController
         $db = \Config\Database::connect();
         $this->ensureLocalityExists($data->localidad ?? null);
         $items = $this->extractBookingItems($data);
-        $availabilityError = $this->validateItemsAvailability($items, $bookingsModel, $bookingSlotsModel);
+        $availabilityError = $this->validateItemsAvailability($items, $bookingsModel, $bookingSlotsModel, null, true);
         if ($availabilityError !== null) {
             return $this->response->setJSON($this->setResponse(409, true, null, $availabilityError));
         }
@@ -795,7 +804,7 @@ class Bookings extends BaseController
                     'cancha' => $data->cancha,
                     'horarioDesde' => $data->horarioDesde,
                     'horarioHasta' => $data->horarioHasta,
-                ]], $bookingsModel, $bookingSlotsModel, (int)$idBooking);
+                ]], $bookingsModel, $bookingSlotsModel, (int)$idBooking, false);
                 if ($availabilityError !== null) {
                     $db->transRollback();
                     return $this->response->setJSON($this->setResponse(409, true, null, $availabilityError));
@@ -904,7 +913,7 @@ class Bookings extends BaseController
         $this->ensureLocalityExists($data->localidad ?? null);
         $pagoTotal = $data->monto == $data->total ? 1 : 0;
         $items = $this->extractBookingItems($data);
-        $availabilityError = $this->validateItemsAvailability($items, $bookingsModel, $bookingSlotsModel);
+        $availabilityError = $this->validateItemsAvailability($items, $bookingsModel, $bookingSlotsModel, null, false);
         if ($availabilityError !== null) {
             return $this->response->setJSON($this->setResponse(409, true, null, $availabilityError));
         }

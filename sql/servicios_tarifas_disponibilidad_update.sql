@@ -88,6 +88,174 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
+SET @has_minimum_duration_minutes := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'minimum_duration_minutes'
+);
+SET @sql := IF(@has_minimum_duration_minutes = 0,
+    'ALTER TABLE services ADD COLUMN minimum_duration_minutes INT NOT NULL DEFAULT 60 AFTER slot_interval_minutes',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_booking_interval_minutes := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'booking_interval_minutes'
+);
+SET @sql := IF(@has_booking_interval_minutes = 0,
+    'ALTER TABLE services ADD COLUMN booking_interval_minutes INT NOT NULL DEFAULT 60 AFTER minimum_duration_minutes',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_active := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'active'
+);
+SET @sql := IF(@has_active = 0,
+    'ALTER TABLE services ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1 AFTER booking_interval_minutes',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_online_available := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'online_available'
+);
+SET @sql := IF(@has_online_available = 0,
+    'ALTER TABLE services ADD COLUMN online_available TINYINT(1) NOT NULL DEFAULT 1 AFTER active',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_allows_quincho_addon := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'allows_quincho_addon'
+);
+SET @sql := IF(@has_allows_quincho_addon = 0,
+    'ALTER TABLE services ADD COLUMN allows_quincho_addon TINYINT(1) NOT NULL DEFAULT 1 AFTER online_available',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_display_order := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'display_order'
+);
+SET @sql := IF(@has_display_order = 0,
+    'ALTER TABLE services ADD COLUMN display_order INT NOT NULL DEFAULT 0 AFTER allows_quincho_addon',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_color := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'color'
+);
+SET @sql := IF(@has_color = 0,
+    'ALTER TABLE services ADD COLUMN color VARCHAR(20) NULL AFTER display_order',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_icon := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'icon'
+);
+SET @sql := IF(@has_icon = 0,
+    'ALTER TABLE services ADD COLUMN icon VARCHAR(80) NULL AFTER color',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_offer_active := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'offer_active'
+);
+SET @sql := IF(@has_offer_active = 0,
+    'ALTER TABLE services ADD COLUMN offer_active TINYINT(1) NOT NULL DEFAULT 0 AFTER icon',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_offer_text := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'offer_text'
+);
+SET @sql := IF(@has_offer_text = 0,
+    'ALTER TABLE services ADD COLUMN offer_text VARCHAR(255) NULL AFTER offer_active',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_discount_type := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'discount_type'
+);
+SET @sql := IF(@has_discount_type = 0,
+    "ALTER TABLE services ADD COLUMN discount_type ENUM('percentage','fixed') NOT NULL DEFAULT 'percentage' AFTER offer_text",
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_discount_value := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'discount_value'
+);
+SET @sql := IF(@has_discount_value = 0,
+    'ALTER TABLE services ADD COLUMN discount_value DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER discount_type',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_offer_start_date := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'offer_start_date'
+);
+SET @sql := IF(@has_offer_start_date = 0,
+    'ALTER TABLE services ADD COLUMN offer_start_date DATE NULL AFTER discount_value',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_offer_end_date := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'offer_end_date'
+);
+SET @sql := IF(@has_offer_end_date = 0,
+    'ALTER TABLE services ADD COLUMN offer_end_date DATE NULL AFTER offer_start_date',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 INSERT INTO services
     (name, code, opening_time, closing_time, duration_minutes, slot_interval_minutes, minimum_duration_minutes, booking_interval_minutes, active, online_available, allows_quincho_addon, display_order, color, icon)
 VALUES
@@ -96,6 +264,14 @@ VALUES
     ('Quincho', 'quincho', '07:00:00', '23:00:00', 60, 60, 60, 60, 1, 1, 0, 30, '#6c757d', 'fa-champagne-glasses'),
     ('Eventos / Confitería', 'eventos', '07:00:00', '23:00:00', 60, 60, 60, 60, 1, 1, 1, 40, '#dc3545', 'fa-calendar-check')
 ON DUPLICATE KEY UPDATE
+    name = CASE WHEN services.name IS NULL OR services.name = '' THEN VALUES(name) ELSE services.name END,
+    opening_time = COALESCE(services.opening_time, VALUES(opening_time)),
+    closing_time = COALESCE(services.closing_time, VALUES(closing_time)),
+    duration_minutes = CASE WHEN services.duration_minutes IS NULL OR services.duration_minutes = 0 THEN VALUES(duration_minutes) ELSE services.duration_minutes END,
+    slot_interval_minutes = CASE WHEN services.slot_interval_minutes IS NULL OR services.slot_interval_minutes = 0 THEN VALUES(slot_interval_minutes) ELSE services.slot_interval_minutes END,
+    minimum_duration_minutes = CASE WHEN services.minimum_duration_minutes IS NULL OR services.minimum_duration_minutes = 0 THEN VALUES(minimum_duration_minutes) ELSE services.minimum_duration_minutes END,
+    booking_interval_minutes = CASE WHEN services.booking_interval_minutes IS NULL OR services.booking_interval_minutes = 0 THEN VALUES(booking_interval_minutes) ELSE services.booking_interval_minutes END,
+    display_order = CASE WHEN services.display_order IS NULL OR services.display_order = 0 THEN VALUES(display_order) ELSE services.display_order END,
     code = VALUES(code);
 
 INSERT INTO service_prices (service_id, base_price, charge_type, active)
@@ -119,6 +295,30 @@ SET @has_service_id := (
 );
 SET @sql := IF(@has_service_id = 0,
     'ALTER TABLE fields ADD COLUMN service_id INT UNSIGNED NULL AFTER field_type',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_opening_time := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'opening_time'
+);
+SET @sql := IF(@has_opening_time = 0,
+    "ALTER TABLE services ADD COLUMN opening_time TIME NOT NULL DEFAULT '07:00:00' AFTER code",
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @has_closing_time := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'services' AND COLUMN_NAME = 'closing_time'
+);
+SET @sql := IF(@has_closing_time = 0,
+    "ALTER TABLE services ADD COLUMN closing_time TIME NOT NULL DEFAULT '23:00:00' AFTER opening_time",
     'SELECT 1'
 );
 PREPARE stmt FROM @sql;
@@ -191,9 +391,8 @@ SET f.service_id = s.id,
     f.service_type = s.code,
     f.block_minutes = COALESCE(NULLIF(s.duration_minutes, 0), s.minimum_duration_minutes),
     f.price_unit_label = CASE
-        WHEN s.code = 'padel' THEN 'por bloque de 1:30'
-        WHEN s.code = 'eventos' THEN 'por hora'
-        ELSE 'por hora'
+        WHEN COALESCE(NULLIF(s.duration_minutes, 0), s.minimum_duration_minutes) = 60 THEN 'por hora'
+        ELSE CONCAT('por bloque de ', COALESCE(NULLIF(s.duration_minutes, 0), s.minimum_duration_minutes), ' min')
     END
 WHERE f.service_id IS NULL OR f.service_type IS NULL OR f.service_type = '';
 
