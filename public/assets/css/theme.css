@@ -196,13 +196,13 @@ body.theme-dark .service-type-option {
 }
 
 body.theme-dark .service-type-option:hover {
-    border-color: #f39323;
-    color: #ffc56f;
+    border-color: var(--service-color) !important;
+    color: #ffffff;
 }
 
 body.theme-dark .btn-check:checked + .service-type-option {
-    background: #f39323;
-    border-color: #f39323;
+    background: var(--service-color) !important;
+    border-color: var(--service-color) !important;
     color: #ffffff;
 }
 

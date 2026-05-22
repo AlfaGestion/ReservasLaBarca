@@ -134,6 +134,7 @@ function getServiceTypeOptions() {
         value: option.value,
         label: fieldServiceLabels[option.value] || option.value,
         duration: option.dataset.durationMinutes || 60,
+        color: option.dataset.color || '#F39323',
     }))
 }
 
@@ -1354,7 +1355,7 @@ function fillDiv(field) {
         const optionId = `${serviceSelectId}${String(option.value).replace(/[^A-Za-z0-9]/g, '')}`
         return `
                         <input class="btn-check" type="radio" name="${serviceOptionName}" id="${optionId}" value="${escapeHtml(option.value)}" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" data-duration-minutes="${escapeHtml(option.duration)}" autocomplete="off" ${serviceType === option.value ? 'checked' : ''}>
-                        <label class="service-type-option" for="${optionId}">${escapeHtml(option.label)}</label>`
+                        <label class="service-type-option" style="--service-color: ${escapeHtml(option.color || '#F39323')};" for="${optionId}">${escapeHtml(option.label)}</label>`
     }).join('')
 
     div = `

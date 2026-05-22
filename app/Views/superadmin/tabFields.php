@@ -41,7 +41,11 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                 <label class="form-label">Nombre visible</label>
                 <input class="form-control" name="name" value="<?= esc($service['name'] ?? '') ?>" required>
             </div>
-            <div class="col-lg-7">
+            <div class="col-lg-2">
+                <label class="form-label">Color</label>
+                <input type="color" class="form-control form-control-color" name="color" value="<?= esc($service['color'] ?? '#F39323') ?>" title="Color del botón de este tipo de reserva">
+            </div>
+            <div class="col-lg-5">
                 <div class="service-config-section h-100">
                     <h6>Estados</h6>
                     <div class="row g-2">
@@ -295,8 +299,8 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                             <div class="service-type-options">
                                 <?php foreach ($services as $index => $service) : ?>
                                     <?php $optionId = 'createServiceType' . preg_replace('/[^A-Za-z0-9]/', '', (string)$service['code']); ?>
-                                    <input class="btn-check" type="radio" name="createServiceTypeOption" id="<?= esc($optionId) ?>" value="<?= esc($service['code']) ?>" data-service-select="#createServiceType" data-block-minutes-target="#createBlockMinutes" data-duration-minutes="<?= esc($service['duration_minutes'] ?? $service['minimum_duration_minutes'] ?? 60) ?>" autocomplete="off" <?= $index === 0 ? 'checked' : '' ?>>
-                                    <label class="service-type-option" for="<?= esc($optionId) ?>"><?= esc($service['name']) ?></label>
+                                    <input class="btn-check" type="radio" name="createServiceTypeOption" id="<?= esc($optionId) ?>" value="<?= esc($service['code']) ?>" data-service-select="#createServiceType" data-block-minutes-target="#createBlockMinutes" data-duration-minutes="<?= esc($service['duration_minutes'] ?? $service['minimum_duration_minutes'] ?? 60) ?>" data-color="<?= esc($service['color'] ?? '#F39323') ?>" autocomplete="off" <?= $index === 0 ? 'checked' : '' ?>>
+                                    <label class="service-type-option" style="--service-color: <?= esc($service['color'] ?? '#F39323') ?>;" for="<?= esc($optionId) ?>"><?= esc($service['name']) ?></label>
                                 <?php endforeach; ?>
                             </div>
                         </div>

@@ -89,23 +89,21 @@ $mpKeys = $mpKeysModel->first();
                 <div class="mb-3 service-type-field">
                     <label class="form-label d-block mb-2" id="serviceTypeLabel">Tipo de reserva</label>
                     <select class="form-select visually-hidden" name="serviceType" id="serviceType" aria-hidden="true" tabindex="-1">
-                        <option value="football">Cancha / Fútbol</option>
-                        <option value="padel">Pádel</option>
-                        <option value="quincho">Quincho</option>
-                        <option value="eventos">Eventos / Confitería</option>
+                        <?php
+                        $activeOnlineServices = array_values(array_filter(($services ?? []), static function ($service) {
+                            return (int)($service['active'] ?? 1) === 1 && (int)($service['online_available'] ?? 1) === 1;
+                        }));
+                        ?>
+                        <?php foreach ($activeOnlineServices as $index => $service) : ?>
+                            <option value="<?= esc($service['code'] ?? 'football') ?>" <?= $index === 0 ? 'selected' : '' ?>><?= esc($service['name'] ?? ($service['code'] ?? 'Servicio')) ?></option>
+                        <?php endforeach; ?>
                     </select>
                     <div class="service-type-options" role="radiogroup" aria-labelledby="serviceTypeLabel">
-                        <input class="btn-check" type="radio" name="serviceTypeOption" id="serviceTypeFootball" value="football" autocomplete="off" checked>
-                        <label class="service-type-option" for="serviceTypeFootball">Cancha / Fútbol</label>
-
-                        <input class="btn-check" type="radio" name="serviceTypeOption" id="serviceTypePadel" value="padel" autocomplete="off">
-                        <label class="service-type-option" for="serviceTypePadel">Pádel</label>
-
-                        <input class="btn-check" type="radio" name="serviceTypeOption" id="serviceTypeQuincho" value="quincho" autocomplete="off">
-                        <label class="service-type-option" for="serviceTypeQuincho">Quincho</label>
-
-                        <input class="btn-check" type="radio" name="serviceTypeOption" id="serviceTypeEventos" value="eventos" autocomplete="off">
-                        <label class="service-type-option" for="serviceTypeEventos">Eventos / Confitería</label>
+                        <?php foreach ($activeOnlineServices as $index => $service) : ?>
+                            <?php $optionId = 'serviceType' . preg_replace('/[^A-Za-z0-9]/', '', (string)($service['code'] ?? 'service')); ?>
+                            <input class="btn-check" type="radio" name="serviceTypeOption" id="<?= esc($optionId) ?>" value="<?= esc($service['code'] ?? 'football') ?>" autocomplete="off" <?= $index === 0 ? 'checked' : '' ?>>
+                            <label class="service-type-option" style="--service-color: <?= esc($service['color'] ?? '#F39323') ?>;" for="<?= esc($optionId) ?>"><?= esc($service['name'] ?? ($service['code'] ?? 'Servicio')) ?></label>
+                        <?php endforeach; ?>
                     </div>
                 </div>
 

@@ -14,12 +14,65 @@ use App\Models\CustomersModel;
 use App\Models\FieldsModel;
 use App\Models\MercadoPagoModel;
 use App\Models\PaymentsModel;
+use App\Models\ServicesModel;
 use App\Models\TimeModel;
 use App\Models\UsersModel;
 use CodeIgniter\I18n\Time;
 
 class Bookings extends BaseController
 {
+    private function normalizeColorHex(?string $color): string
+    {
+        $value = strtoupper(trim((string)$color));
+        return preg_match('/^#[0-9A-F]{6}$/', $value) ? $value : '#F39323';
+    }
+
+    private function bookingEmailHtml(array $booking, string $fieldName, string $serviceColor, string $fecha, string $horario, string $duracion, string $localidad): string
+    {
+        $cliente = htmlspecialchars((string)($booking['name'] ?? 'N/D'), ENT_QUOTES, 'UTF-8');
+        $telefono = htmlspecialchars((string)($booking['phone'] ?? 'N/D'), ENT_QUOTES, 'UTF-8');
+        $localidadLabel = htmlspecialchars($localidad !== '' ? $localidad : 'N/D', ENT_QUOTES, 'UTF-8');
+        $tipoReserva = htmlspecialchars($fieldName, ENT_QUOTES, 'UTF-8');
+        $fechaLabel = htmlspecialchars($fecha, ENT_QUOTES, 'UTF-8');
+        $horarioLabel = htmlspecialchars($horario, ENT_QUOTES, 'UTF-8');
+        $duracionLabel = htmlspecialchars($duracion, ENT_QUOTES, 'UTF-8');
+        $total = format_price_ar((float)($booking['total'] ?? 0));
+        $pagado = format_price_ar((float)($booking['payment'] ?? 0));
+        $saldo = format_price_ar((float)($booking['diference'] ?? 0));
+        $detalle = htmlspecialchars((string)($booking['description'] ?? 'Reserva'), ENT_QUOTES, 'UTF-8');
+
+        return "
+        <div style=\"margin:0;padding:24px;background:#f3f6fb;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;\">
+            <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"max-width:680px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;\">
+                <tr>
+                    <td style=\"padding:22px 24px;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#ffffff;\">
+                        <div style=\"font-size:22px;font-weight:700;\">Nueva reserva recibida</div>
+                        <div style=\"font-size:13px;opacity:.9;margin-top:4px;\">Detalle completo de la operación</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td style=\"padding:20px 24px;\">
+                        <div style=\"margin-bottom:14px;\">
+                            <span style=\"display:inline-block;background:{$serviceColor};color:#fff;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.3px;\">{$tipoReserva}</span>
+                        </div>
+                        <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-size:14px;border-collapse:collapse;\">
+                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Cliente</td><td style=\"padding:8px 0;font-weight:600;\">{$cliente}</td></tr>
+                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Teléfono</td><td style=\"padding:8px 0;font-weight:600;\">{$telefono}</td></tr>
+                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Localidad</td><td style=\"padding:8px 0;font-weight:600;\">{$localidadLabel}</td></tr>
+                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Fecha</td><td style=\"padding:8px 0;font-weight:600;\">{$fechaLabel}</td></tr>
+                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Horario</td><td style=\"padding:8px 0;font-weight:600;\">{$horarioLabel}</td></tr>
+                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Duración</td><td style=\"padding:8px 0;font-weight:600;\">{$duracionLabel}</td></tr>
+                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Total</td><td style=\"padding:8px 0;font-weight:700;\">{$total}</td></tr>
+                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Pagado</td><td style=\"padding:8px 0;font-weight:700;color:#065f46;\">{$pagado}</td></tr>
+                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Saldo</td><td style=\"padding:8px 0;font-weight:700;color:#b45309;\">{$saldo}</td></tr>
+                            <tr><td style=\"padding:8px 0;color:#6b7280;vertical-align:top;\">Detalle</td><td style=\"padding:8px 0;font-weight:600;\">{$detalle}</td></tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </div>";
+    }
+
     private function logAdminAction(string $action, string $entityType, $entityId, $oldData = null, $newData = null): void
     {
         try {
@@ -175,7 +228,7 @@ class Bookings extends BaseController
             'SMTPKeepAlive' => false,
             'SMTPCrypto' => $emailConfig->SMTPCrypto,
             'SMTPOptions' => $emailConfig->SMTPOptions,
-            'mailType' => $emailConfig->mailType,
+            'mailType' => 'html',
             'charset' => $emailConfig->charset,
             'wordWrap' => $emailConfig->wordWrap,
             'CRLF' => $emailConfig->CRLF,
@@ -270,12 +323,17 @@ class Bookings extends BaseController
 
         $bookingsModel = new BookingsModel();
         $fieldsModel = new FieldsModel();
+        $servicesModel = new ServicesModel();
         $booking = $bookingsModel->getBooking($bookingId);
         if (!$booking) {
             return;
         }
 
-        $fieldName = $fieldsModel->getField($booking['id_field'])['name'] ?? 'N/D';
+        $field = $fieldsModel->getField($booking['id_field']);
+        $fieldName = $field['name'] ?? 'N/D';
+        $serviceType = (string)($field['service_type'] ?? 'football');
+        $service = $servicesModel->getByCode($serviceType);
+        $serviceColor = $this->normalizeColorHex($service['color'] ?? null);
         $fecha = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'N/D';
         $horario = ($booking['time_from'] ?? '') . ' a ' . ($booking['time_until'] ?? '');
         $slotModel = new BookingSlotsModel();
@@ -286,15 +344,7 @@ class Bookings extends BaseController
         }
         $duracion = minutesToHuman($untilMinutes - $fromMinutes);
         $localidad = $booking['locality'] ?? '';
-
-        $message = "Nueva reserva\n\n"
-            . "Nombre: {$booking['name']}\n"
-            . "Teléfono: {$booking['phone']}\n"
-            . "Localidad: " . ($localidad !== '' ? $localidad : 'N/D') . "\n"
-            . "Fecha: {$fecha}\n"
-            . "Horario: {$horario}\n"
-            . "Duracion: {$duracion}\n"
-            . "Tipo de reserva: {$fieldName}\n";
+        $message = $this->bookingEmailHtml($booking, $fieldName, $serviceColor, $fecha, $horario, $duracion, $localidad);
 
         $caPath = ROOTPATH . 'cacert.pem';
         if (is_file($caPath)) {

@@ -22,6 +22,16 @@ use App\Models\UsersModel;
 
 class Superadmin extends BaseController
 {
+    private function normalizeServiceColor(?string $value): string
+    {
+        $color = trim((string)$value);
+        if (preg_match('/^#([A-Fa-f0-9]{6})$/', $color)) {
+            return strtoupper($color);
+        }
+
+        return '#F39323';
+    }
+
     private function logAdminAction(string $action, string $entityType, $entityId, $oldData = null, $newData = null): void
     {
         try {
@@ -476,6 +486,7 @@ class Superadmin extends BaseController
             'online_available' => $this->request->getVar('online_available') ? 1 : 0,
             'allows_quincho_addon' => $this->request->getVar('allows_quincho_addon') ? 1 : 0,
             'display_order' => (int)($this->request->getVar('display_order') ?: 100),
+            'color' => $this->normalizeServiceColor($this->request->getVar('color')),
             'offer_active' => $this->request->getVar('offer_active') ? 1 : 0,
             'offer_text' => trim((string)$this->request->getVar('offer_text')),
             'discount_type' => $this->request->getVar('discount_type') === 'fixed' ? 'fixed' : 'percentage',
@@ -535,6 +546,7 @@ class Superadmin extends BaseController
             'active' => $this->request->getVar('active') ? 1 : 0,
             'online_available' => $this->request->getVar('online_available') ? 1 : 0,
             'allows_quincho_addon' => $this->request->getVar('allows_quincho_addon') ? 1 : 0,
+            'color' => $this->normalizeServiceColor($this->request->getVar('color') ?: ($oldService['color'] ?? null)),
             'offer_active' => $this->request->getVar('offer_active') ? 1 : 0,
             'offer_text' => trim((string)$this->request->getVar('offer_text')),
             'discount_type' => $this->request->getVar('discount_type') === 'fixed' ? 'fixed' : 'percentage',

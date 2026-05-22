@@ -70,6 +70,7 @@ select {
 }
 
 .service-type-option {
+    --service-color: #f39323;
     min-height: 48px;
     display: inline-flex;
     align-items: center;
@@ -87,17 +88,18 @@ select {
 }
 
 .service-type-option:hover {
-    border-color: #f39323;
-    color: #dd8218;
+    border-color: var(--service-color);
+    color: var(--service-color);
 }
 
 .btn-check:focus + .service-type-option {
-    box-shadow: 0 0 0 .2rem rgba(243, 147, 35, .22);
+    border-color: var(--service-color);
+    box-shadow: 0 0 0 .2rem rgba(0, 0, 0, .12);
 }
 
 .btn-check:checked + .service-type-option {
-    background: #f39323;
-    border-color: #f39323;
+    background: var(--service-color);
+    border-color: var(--service-color);
     color: #ffffff;
 }
 
@@ -269,4 +271,33 @@ select {
     30% { transform: translateX(-5px); }
     60% { transform: translateX(5px); }
     100% { transform: translateX(0); }
+}
+
+/* Defensive kill-switch for third-party floating chat/WhatsApp widgets */
+#wh-widget-send-button,
+#chat-widget-container,
+#chat-application,
+#launcher,
+.joinchat,
+.chaty-widget,
+.chaty-whatsapp,
+.floating-wpp,
+.wpp-widget,
+.whatsapp-widget,
+.whatsapp-float,
+[id*="whatsapp-chat"],
+[class*="whatsapp"][class*="float"],
+[class*="chat"][class*="floating"],
+iframe[src*="tawk.to"],
+iframe[src*="tidio"],
+iframe[src*="smartsupp"],
+iframe[src*="zendesk"],
+iframe[src*="intercom"],
+iframe[src*="crisp.chat"],
+iframe[src*="jivo"],
+iframe[src*="drift.com"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
 }

@@ -97,6 +97,7 @@ function renderServiceTypeOptions() {
             label.className = 'service-type-option'
             label.htmlFor = id
             label.textContent = service.name || code
+            label.style.setProperty('--service-color', service.color || '#F39323')
 
             wrapper.appendChild(input)
             wrapper.appendChild(label)

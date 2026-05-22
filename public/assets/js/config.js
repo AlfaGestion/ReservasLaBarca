@@ -84,3 +84,74 @@ window.alert = function patchedAlert(message) {
 
     return showAppAlert(text)
 }
+
+// Remove third-party floating chat/WhatsApp widgets injected at runtime.
+;(function blockFloatingWidgets() {
+    const SELECTORS = [
+        '#wh-widget-send-button',
+        '#chat-widget-container',
+        '#chat-application',
+        '#launcher',
+        '.joinchat',
+        '.chaty-widget',
+        '.chaty-whatsapp',
+        '.floating-wpp',
+        '.wpp-widget',
+        '.whatsapp-widget',
+        '.whatsapp-float',
+        '[id*="whatsapp-chat"]',
+        '[class*="whatsapp"][class*="float"]',
+        '[class*="chat"][class*="floating"]',
+        'iframe[src*="tawk.to"]',
+        'iframe[src*="tidio"]',
+        'iframe[src*="smartsupp"]',
+        'iframe[src*="zendesk"]',
+        'iframe[src*="intercom"]',
+        'iframe[src*="crisp.chat"]',
+        'iframe[src*="jivo"]',
+        'iframe[src*="drift.com"]',
+    ]
+
+    function looksLikeFloatingWaAnchor(el) {
+        if (!el || el.tagName !== 'A') return false
+        const href = (el.getAttribute('href') || '').toLowerCase()
+        if (!(href.includes('wa.me') || href.includes('api.whatsapp.com') || href.includes('whatsapp'))) return false
+        const style = window.getComputedStyle(el)
+        const isFixed = style.position === 'fixed'
+        const bottom = parseInt(style.bottom || '0', 10)
+        const right = parseInt(style.right || '0', 10)
+        return isFixed && bottom >= 0 && right >= 0
+    }
+
+    function removeWidgetNodes(root = document) {
+        SELECTORS.forEach((selector) => {
+            root.querySelectorAll(selector).forEach((el) => el.remove())
+        })
+        root.querySelectorAll('a[href]').forEach((el) => {
+            if (looksLikeFloatingWaAnchor(el)) el.remove()
+        })
+    }
+
+    function run() {
+        removeWidgetNodes(document)
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                mutation.addedNodes.forEach((node) => {
+                    if (!(node instanceof Element)) return
+                    if (node.matches && SELECTORS.some((s) => node.matches(s))) {
+                        node.remove()
+                        return
+                    }
+                    removeWidgetNodes(node)
+                })
+            }
+        })
+        observer.observe(document.documentElement, { childList: true, subtree: true })
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', run)
+    } else {
+        run()
+    }
+})()
