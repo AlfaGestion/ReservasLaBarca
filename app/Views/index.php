@@ -20,7 +20,7 @@ $mpKeys = $mpKeysModel->first();
 
 <?php echo $this->section('content') ?>
 
-<div class="container">
+<div class="container booking-page-container">
 
 
     <!-- Modal de bienvenida -->

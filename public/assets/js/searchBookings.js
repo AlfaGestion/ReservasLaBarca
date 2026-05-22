@@ -22,6 +22,22 @@ function formatDateTime(dateTime) {
     return timePart ? `${formattedDate} ${timePart}` : formattedDate
 }
 
+function normalizeHexColor(color) {
+    const value = String(color || '').trim().toUpperCase()
+    return /^#[0-9A-F]{6}$/.test(value) ? value : '#F39323'
+}
+
+function renderServiceBadge(serviceName, serviceColor) {
+    const safeName = String(serviceName || 'N/D')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;')
+    const color = normalizeHexColor(serviceColor)
+    return `<span class="badge" style="background-color:${color};color:#fff;font-weight:700;">${safeName}</span>`
+}
+
 document.addEventListener('DOMContentLoaded', async (e) => {
     const fechaActual = new Date().toISOString().split('T')[0]
     inputDesdeBooking.value = fechaActual
@@ -265,7 +281,7 @@ async function fillTableBookings(data) {
         tr += `
         <tr class="${rowClass}">
             <td>${reserva.fecha}</th>
-            <td>${reserva.cancha}</td>
+            <td>${renderServiceBadge(reserva.cancha, reserva.service_color || reserva.color || reserva.field_color)}</td>
             <td>${reserva.horario}</td>
             <td>${reserva.nombre}</td>
             <td>${reserva.telefono}</td>

@@ -1,4 +1,4 @@
-﻿const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+﻿ï»¿const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 const apiBaseUrlMeta = document.querySelector('meta[name="app-base-url"]')
 const webBaseUrlMeta = document.querySelector('meta[name="app-web-base-url"]')
 //const apiBaseUrl = apiBaseUrlMeta?.content ? apiBaseUrlMeta.content : (isLocalhost ? 'http://localhost:8080/' : 'https://alfagestion.com.ar/cancha-test/')
@@ -64,7 +64,7 @@ function showAppAlert(text) {
 
 window.alert = function patchedAlert(message) {
     let text = String(message || '')
-    const isGenericSuccess = text === 'Operacion realizada correctamente.' || text === 'Operación realizada correctamente.' || text === 'OperaciÃ³n realizada correctamente.'
+    const isGenericSuccess = text === 'Operacion realizada correctamente.' || text === 'OperaciÃ³n realizada correctamente.' || text === 'OperaciÃÂ³n realizada correctamente.'
 
     if (isGenericSuccess) {
         if (lastClickedActionId === 'confirmCancelReservations') {
@@ -126,38 +126,12 @@ window.alert = function patchedAlert(message) {
         return isFixed && bottom >= 0 && right >= 0
     }
 
-    function looksLikeGenericFloatingLauncher(el) {
-        if (!el || !(el instanceof Element)) return false
-        const style = window.getComputedStyle(el)
-        if (style.position !== 'fixed') return false
-
-        const right = parseInt(style.right || '-9999', 10)
-        const bottom = parseInt(style.bottom || '-9999', 10)
-        if (Number.isNaN(right) || Number.isNaN(bottom)) return false
-        if (right < -5 || bottom < -5 || right > 120 || bottom > 120) return false
-
-        const rect = el.getBoundingClientRect()
-        if (!rect || rect.width <= 0 || rect.height <= 0) return false
-        if (rect.width > 140 || rect.height > 140) return false
-
-        const zIndex = parseInt(style.zIndex || '0', 10)
-        const hasHighZ = !Number.isNaN(zIndex) && zIndex >= 999
-        const roleHint = ((el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.className || '')).toLowerCase()
-        const hasWidgetHint = /(chat|help|support|whatsapp|launcher|widget|donweb)/.test(roleHint)
-        const hasIconChild = !!el.querySelector('svg, img, i, canvas')
-
-        return hasHighZ || hasWidgetHint || hasIconChild
-    }
-
     function removeWidgetNodes(root = document) {
         SELECTORS.forEach((selector) => {
             root.querySelectorAll(selector).forEach((el) => el.remove())
         })
         root.querySelectorAll('a[href]').forEach((el) => {
             if (looksLikeFloatingWaAnchor(el)) el.remove()
-        })
-        root.querySelectorAll('*').forEach((el) => {
-            if (looksLikeGenericFloatingLauncher(el)) el.remove()
         })
     }
 
@@ -184,3 +158,4 @@ window.alert = function patchedAlert(message) {
         run()
     }
 })()
+

@@ -6,8 +6,10 @@
 $services = $services ?? [];
 $fields = $fields ?? [];
 $serviceLabels = [];
+$serviceColors = [];
 foreach ($services as $serviceForLabel) {
     $serviceLabels[$serviceForLabel['code']] = $serviceForLabel['name'];
+    $serviceColors[$serviceForLabel['code']] = $serviceForLabel['color'] ?? '#F39323';
 }
 $defaultService = $services[0] ?? [
     'code' => 'football',
@@ -187,10 +189,14 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                 $active = !array_key_exists('active', $service) || !empty($service['active']);
                 $online = !array_key_exists('online_available', $service) || !empty($service['online_available']);
                 $offer = !empty($service['offer_active']);
+                $serviceBadgeColor = strtoupper((string)($service['color'] ?? '#F39323'));
+                if (!preg_match('/^#[0-9A-F]{6}$/', $serviceBadgeColor)) {
+                    $serviceBadgeColor = '#F39323';
+                }
                 ?>
                 <tr>
                     <td>
-                        <div class="fw-semibold"><?= esc($service['name'] ?? '') ?></div>
+                        <span class="badge" style="background-color: <?= esc($serviceBadgeColor) ?>; color:#fff; font-weight:700;"><?= esc($service['name'] ?? '') ?></span>
                     </td>
                     <td><?= esc(substr((string)($service['opening_time'] ?? '07:00'), 0, 5)) ?> a <?= esc(substr((string)($service['closing_time'] ?? '23:00'), 0, 5)) ?></td>
                     <td><?= esc(minutesToHuman($duration)) ?></td>
@@ -241,10 +247,14 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                     <?php
                     $serviceType = $field['service_type'] ?? 'football';
                     $disabled = (string)($field['disabled'] ?? '0') === '1';
+                    $serviceColor = strtoupper((string)($serviceColors[$serviceType] ?? '#F39323'));
+                    if (!preg_match('/^#[0-9A-F]{6}$/', $serviceColor)) {
+                        $serviceColor = '#F39323';
+                    }
                     ?>
                     <tr data-field-row="<?= esc($field['id']) ?>">
                         <td><?= esc($field['name'] ?? '') ?></td>
-                        <td><?= esc($serviceLabels[$serviceType] ?? $serviceType) ?></td>
+                        <td><span class="badge" style="background-color: <?= esc($serviceColor) ?>; color:#fff; font-weight:700;"><?= esc($serviceLabels[$serviceType] ?? $serviceType) ?></span></td>
                         <td><?= esc(minutesToHuman($field['duration_minutes'] ?? $field['block_minutes'] ?? 60)) ?></td>
                         <td><?= format_price_ar($field['value'] ?? 0) ?></td>
                         <td><?= format_price_ar($field['ilumination_value'] ?? 0) ?></td>

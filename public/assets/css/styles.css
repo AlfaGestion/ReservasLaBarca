@@ -191,6 +191,25 @@ select {
     color: #595959;
 }
 
+.booking-page-container {
+    width: min(96vw, 1600px);
+    max-width: 1600px;
+}
+
+.booking-shell {
+    width: min(100%, 1180px);
+    margin: 0 auto;
+    padding: 18px 22px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .78);
+    border: 1px solid rgba(18, 57, 95, .14);
+    box-shadow: 0 16px 36px rgba(16, 52, 90, .12);
+}
+
+body.theme-dark .booking-shell {
+    background: rgba(16, 37, 58, .78) !important;
+}
+
 @media (max-width: 600px) {
     .mainModalImg {
         width: 330px;
@@ -204,6 +223,16 @@ select {
         min-height: 44px;
         padding: 9px 8px;
         font-size: .9rem;
+    }
+
+    .booking-page-container {
+        width: 100%;
+    }
+
+    .booking-shell {
+        width: 100%;
+        padding: 12px 10px;
+        border-radius: 10px;
     }
 }
 
@@ -295,7 +324,10 @@ iframe[src*="zendesk"],
 iframe[src*="intercom"],
 iframe[src*="crisp.chat"],
 iframe[src*="jivo"],
-iframe[src*="drift.com"] {
+iframe[src*="drift.com"],
+iframe[src*="donweb"],
+[id*="donweb"][style*="position: fixed"],
+[class*="donweb"][style*="position: fixed"] {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;

@@ -574,6 +574,7 @@ class Superadmin extends BaseController
         $this->cleanupExpiredPendingBookings();
 
         $fieldsModel = new FieldsModel();
+        $servicesModel = new ServicesModel();
         $bookingsModel = new BookingsModel();
         $paymentsModel = new PaymentsModel();
         $data = $this->request->getJSON();
@@ -601,6 +602,9 @@ class Superadmin extends BaseController
         }
 
         foreach ($getBookings as $booking) {
+            $fieldData = $fieldsModel->getField($booking['id_field']);
+            $serviceType = (string)($fieldData['service_type'] ?? 'football');
+            $serviceData = $servicesModel->getByCode($serviceType);
             $bookingId = (int)$booking['id'];
             $paymentsSum = $paidByBooking[$bookingId] ?? 0.0;
             $bookingPaid = (float)($booking['payment'] ?? 0);
@@ -611,11 +615,17 @@ class Superadmin extends BaseController
                 $difference = 0;
             }
 
+            $serviceColor = $serviceData['color'] ?? $fieldData['service_color'] ?? '#F39323';
+
             $reserva = [
                 'id' => $booking['id'],
-                'cancha' => $fieldsModel->getField($booking['id_field'])['name'],
+                'cancha' => $fieldData['name'] ?? 'N/D',
+                'service_type' => $serviceType,
+                'field_color' => $fieldData['color'] ?? null,
+                'service_color' => $serviceColor,
+                'color' => $serviceColor,
                 'fecha' => date("d/m/Y", strtotime($booking['date'])),
-                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'] . ' (' . $this->bookingDurationLabel($booking) . ')',
+                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'],
                 'nombre' => $booking['name'],
                 'telefono' => $booking['phone'],
                 'creado_por' => $booking['created_by_name'] ?? $booking['created_by_type'] ?? 'N/D',
@@ -644,6 +654,7 @@ class Superadmin extends BaseController
     public function getAnnulledBookings()
     {
         $fieldsModel = new FieldsModel();
+        $servicesModel = new ServicesModel();
         $bookingsModel = new BookingsModel();
         $paymentsModel = new PaymentsModel();
         $data = $this->request->getJSON();
@@ -671,6 +682,9 @@ class Superadmin extends BaseController
         }
 
         foreach ($getBookings as $booking) {
+            $fieldData = $fieldsModel->getField($booking['id_field']);
+            $serviceType = (string)($fieldData['service_type'] ?? 'football');
+            $serviceData = $servicesModel->getByCode($serviceType);
             $bookingId = (int)$booking['id'];
             $paymentsSum = $paidByBooking[$bookingId] ?? 0.0;
             $bookingPaid = (float)($booking['payment'] ?? 0);
@@ -681,11 +695,17 @@ class Superadmin extends BaseController
                 $difference = 0;
             }
 
+            $serviceColor = $serviceData['color'] ?? $fieldData['service_color'] ?? '#F39323';
+
             $reserva = [
                 'id' => $booking['id'],
-                'cancha' => $fieldsModel->getField($booking['id_field'])['name'],
+                'cancha' => $fieldData['name'] ?? 'N/D',
+                'service_type' => $serviceType,
+                'field_color' => $fieldData['color'] ?? null,
+                'service_color' => $serviceColor,
+                'color' => $serviceColor,
                 'fecha' => date("d/m/Y", strtotime($booking['date'])),
-                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'] . ' (' . $this->bookingDurationLabel($booking) . ')',
+                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'],
                 'nombre' => $booking['name'],
                 'telefono' => $booking['phone'],
                 'creado_por' => $booking['created_by_name'] ?? $booking['created_by_type'] ?? 'N/D',

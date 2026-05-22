@@ -8,6 +8,13 @@
 <?php echo $this->section('content') ?>
 
 <style>
+    .superadmin-reservas-shell {
+        width: min(98vw, 1760px);
+        max-width: 1760px;
+        margin: 0 auto;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
     .superadmin-reservas .nav-tabs {
         border-bottom-color: #cfe0f1;
     }
@@ -34,6 +41,9 @@
     .superadmin-reservas .table td,
     .superadmin-reservas .table th {
         vertical-align: middle;
+    }
+    .superadmin-reservas .table-responsive {
+        width: 100%;
     }
     .superadmin-reservas .card,
     .superadmin-reservas .modal-content {
@@ -220,7 +230,7 @@
     </div>
 <?php endif; ?>
 
-<div class="container superadmin-reservas">
+<div class="container-fluid superadmin-reservas-shell superadmin-reservas">
     <div class="row">
         <div class="col-12">
             <nav>

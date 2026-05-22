@@ -118,9 +118,13 @@ const fieldServiceLabels = {
     quincho: 'Quincho',
     eventos: 'Eventos / Confitería',
 }
+const fieldServiceColors = {}
 
 document.querySelectorAll('#createServiceType option').forEach((option) => {
     fieldServiceLabels[option.value] = option.textContent
+})
+document.querySelectorAll('[name="createServiceTypeOption"]').forEach((option) => {
+    fieldServiceColors[option.value] = option.dataset.color || '#F39323'
 })
 
 function initServiceConfigForms(scope = document) {
@@ -145,6 +149,17 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;')
+}
+
+function normalizeHexColor(color) {
+    const value = String(color || '').trim().toUpperCase()
+    return /^#[0-9A-F]{6}$/.test(value) ? value : '#F39323'
+}
+
+function renderServiceTypeBadge(serviceType) {
+    const label = fieldServiceLabels[serviceType] || serviceType
+    const color = normalizeHexColor(fieldServiceColors[serviceType] || '#F39323')
+    return `<span class="badge" style="background-color:${escapeHtml(color)};color:#fff;font-weight:700;">${escapeHtml(label)}</span>`
 }
 
 function showFieldFormMessage(type, message) {
@@ -188,7 +203,7 @@ function renderServiceFieldRow(field) {
     return `
         <tr data-field-row="${escapeHtml(field.id)}">
             <td>${escapeHtml(field.name)}</td>
-            <td>${escapeHtml(fieldServiceLabels[serviceType] || serviceType)}</td>
+            <td>${renderServiceTypeBadge(serviceType)}</td>
             <td>${escapeHtml(minutesToHuman(field.duration_minutes || field.block_minutes || 60))}</td>
             <td>${formatPriceAR(field.value || 0)}</td>
             <td>${formatPriceAR(field.ilumination_value || 0)}</td>
