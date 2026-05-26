@@ -78,6 +78,23 @@
         color: #1f4467;
         font-weight: 700;
     }
+    .prices-table-modern {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(15, 54, 97, .08);
+    }
+    .prices-table-modern thead th {
+        background: linear-gradient(180deg, #f7fbff 0%, #edf5fd 100%);
+        border-bottom: 1px solid #d8e6f4;
+        font-weight: 700;
+    }
+    #fieldFormModal .modal-content {
+        border-radius: 14px;
+        box-shadow: 0 16px 36px rgba(12, 46, 84, .18);
+    }
+    #fieldFormModal .modal-header {
+        background: linear-gradient(90deg, #f8fbff 0%, #eef5fc 100%);
+    }
     .service-duration-preview,
     .service-offer-preview {
         padding: .55rem .75rem;
@@ -88,6 +105,63 @@
         min-height: 38px;
         display: flex;
         align-items: center;
+    }
+    .edit-field-frame {
+        border: 1px solid #2f5d86;
+        border-radius: 10px;
+        padding: 12px;
+        background: rgba(19, 52, 84, .25);
+    }
+    .edit-field-frame-title {
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        font-size: .78rem;
+        font-weight: 700;
+        color: #9fc6ea;
+        margin-bottom: 10px;
+    }
+    .admin-history-list {
+        display: grid;
+        gap: 8px;
+    }
+    .admin-history-item {
+        border: 1px solid #2f5d86;
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: rgba(19, 52, 84, .2);
+    }
+    .admin-history-summary {
+        cursor: pointer;
+        list-style: none;
+        margin-bottom: 0;
+    }
+    .admin-history-summary::-webkit-details-marker {
+        display: none;
+    }
+    .admin-history-item[open] .admin-history-summary {
+        margin-bottom: 8px;
+    }
+    .admin-history-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 6px;
+        flex-wrap: wrap;
+    }
+    .history-change-item {
+        font-size: .88rem;
+        line-height: 1.35;
+    }
+    .history-table th {
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #9fc6ea;
+    }
+    .history-table td {
+        font-size: .9rem;
+        vertical-align: top;
     }
 
     body.theme-dark .superadmin-reservas {
@@ -143,6 +217,16 @@
         background: #182d42;
         border-color: #33506e;
     }
+    body.theme-dark .prices-table-modern {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, .26);
+    }
+    body.theme-dark .prices-table-modern thead th {
+        background: linear-gradient(180deg, #203a54 0%, #1a3148 100%);
+        border-bottom-color: #33506e;
+    }
+    body.theme-dark #fieldFormModal .modal-header {
+        background: #1a3148 !important;
+    }
     body.theme-dark .service-config-section h6,
     body.theme-dark .service-duration-preview,
     body.theme-dark .service-offer-preview {
@@ -151,6 +235,27 @@
     body.theme-dark .service-duration-preview,
     body.theme-dark .service-offer-preview {
         background: #21374d;
+    }
+    body.theme-dark .edit-field-frame {
+        border-color: #3a6d95;
+        background: rgba(22, 48, 74, .45);
+    }
+    body.theme-dark .edit-field-frame-title {
+        color: #b5d7f5;
+    }
+    body.theme-dark .admin-history-item {
+        border-color: #3a6d95;
+        background: rgba(22, 48, 74, .45);
+    }
+    body.theme-dark .history-table th,
+    body.theme-dark .history-table td {
+        color: #dbe9f8;
+    }
+    body.theme-dark #bookingAlertsStatus.text-success {
+        color: #7ee0a1 !important;
+    }
+    body.theme-dark #bookingAlertsStatus.text-muted {
+        color: #a9c3da !important;
     }
     body.theme-dark .superadmin-reservas .form-control,
     body.theme-dark .superadmin-reservas .form-select,

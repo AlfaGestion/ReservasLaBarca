@@ -135,10 +135,7 @@ function minutesToHuman(minutes) {
     const total = Math.max(0, Number(minutes || 0))
     const hours = Math.floor(total / 60)
     const remainder = total % 60
-    const parts = []
-    if (hours > 0) parts.push(`${hours} hs`)
-    if (remainder > 0) parts.push(`${remainder} min`)
-    return `${total} min (${parts.length ? parts.join(' ') : '0 min'})`
+    return `${hours}:${String(remainder).padStart(2, '0')}`
 }
 
 function isEmptyData(data) {
@@ -319,14 +316,16 @@ document.addEventListener('change', async (e) => {
             }
 
             inputMonto.value = 0
-            getAmount()
+            getAmount(selectCancha.value)
 
         } else if (e.target.id == 'cancha') {
             if (!sessionUserLogued) {
                 divMonto.classList.remove('d-none')
             }
 
+            updateTimeOptions()
             getAmount(selectCancha.value)
+            await getTimeFromBookings()
             await checkClosureStatus()
             updateAdditionalQuinchoVisibility()
 
@@ -861,8 +860,12 @@ function buildStartTimes(blockMinutes, stepMinutes = blockMinutes) {
 function updateTimeOptions() {
     const block = getCurrentBlockMinutes()
     const starts = buildStartTimes(block, getCurrentSlotIntervalMinutes())
-    fillTimeSelect(horarioDesde, starts)
-    fillTimeSelect(horarioHasta, starts.map(t => minutesToTime(timeToMinutes(t) + block)))
+    const selectedFieldId = selectCancha?.value || ''
+    const availableStarts = selectedFieldId
+        ? starts.filter(start => isSlotAvailable(selectedFieldId, start, minutesToTime(timeToMinutes(start) + block)))
+        : starts
+    fillTimeSelect(horarioDesde, availableStarts)
+    fillTimeSelect(horarioHasta, availableStarts.map(t => minutesToTime(timeToMinutes(t) + block)))
     if (quinchoDesde && quinchoHasta) {
         const hourlyStarts = buildStartTimes(60)
         fillTimeSelect(quinchoDesde, hourlyStarts)
@@ -1195,7 +1198,8 @@ async function getAmount(field = "1") {
 
         const nocturnalTime = await getNocturnalTime()
         if (isNocturnalBooking(nocturnalTime)) {
-            inputMonto.value = formatPriceAR(calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.ilumination_value))
+            const nightPrice = Number(selectedField.ilumination_value || 0) > 0 ? selectedField.ilumination_value : selectedField.value
+            inputMonto.value = formatPriceAR(calculateAmount(horarioDesde.value, horarioHasta.value, nightPrice))
         } else {
             inputMonto.value = formatPriceAR(calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.value))
         }
@@ -1754,6 +1758,9 @@ async function getFieldForTimeBookings(timeBookings) {
 
     applyClosedFieldsToSelect()
     validateQuinchoAdditional(false)
+    if (selectCancha.value && horarioDesde.value && horarioHasta.value) {
+        getAmount(selectCancha.value)
+    }
 }
 
 

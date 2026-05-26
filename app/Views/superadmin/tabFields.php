@@ -139,6 +139,15 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                 <div class="service-offer-preview mt-3">Se mostrará como: -</div>
             </div>
         </div>
+
+        <?php if (!$isCreate && !empty($service['id'])) : ?>
+            <div class="service-config-section">
+                <h6>Historial de cambios</h6>
+                <div class="admin-history-list" data-history-entity="service" data-history-entity-id="<?= esc($service['id']) ?>">
+                    <div class="text-muted small">Cargando historial...</div>
+                </div>
+            </div>
+        <?php endif; ?>
     </form>
     <?php
 };
@@ -169,7 +178,7 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
 </div>
 
 <div class="table-responsive mt-3">
-    <table class="table table-striped table-hover align-middle">
+    <table class="table table-striped table-hover align-middle prices-table-modern">
         <thead>
             <tr>
                 <th>Servicio</th>
@@ -340,15 +349,17 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                             <label class="form-check-label" for="tipoTecho">Es techada</label>
                         </div>
 
-                        <div class="input-group mb-3">
+                        <div class="input-group mb-1">
                             <span class="input-group-text">Precio base</span>
-                            <input type="text" class="form-control" name="valor" placeholder="Precio por hora o bloque" aria-label="Valor">
+                            <input type="text" class="form-control" name="valor" placeholder="Ej: 40,00" inputmode="decimal" aria-label="Valor">
                         </div>
+                        <small class="text-muted d-block mb-3">Acepta formato con punto o coma: `40`, `40,5`, `40.500,75`.</small>
 
-                        <div class="input-group mb-3">
+                        <div class="input-group mb-1">
                             <span class="input-group-text">Precio nocturno</span>
-                            <input type="text" class="form-control" name="valorIluminacion" placeholder="Si no aplica, repetir precio base" aria-label="Valor nocturno">
+                            <input type="text" class="form-control" name="valorIluminacion" placeholder="Ej: 50,00 (opcional)" inputmode="decimal" aria-label="Valor nocturno">
                         </div>
+                        <small class="text-muted d-block mb-3">Si queda vacío o en `0`, se usará automáticamente el precio base.</small>
 
                         <button type="submit" class="btn btn-success">Guardar</button>
                         <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancelar</button>

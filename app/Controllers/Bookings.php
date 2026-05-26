@@ -76,19 +76,36 @@ class Bookings extends BaseController
     private function logAdminAction(string $action, string $entityType, $entityId, $oldData = null, $newData = null): void
     {
         try {
-            $model = new AdminLogsModel();
-            if (! \Config\Database::connect()->tableExists('admin_logs')) {
+            $db = \Config\Database::connect();
+            if (! $db->tableExists('admin_logs')) {
                 return;
             }
-            $model->insert([
-                'admin_id' => session()->get('id_user') ?: null,
+            $adminId = session()->get('id_user') ?: null;
+            $adminName = session()->get('name') ?? session()->get('user') ?? null;
+            if (!$adminName && !$adminId) {
+                $adminName = 'CLIENTE WEB';
+            }
+            $payload = [
+                'admin_id' => $adminId,
+                'admin_name' => $adminName,
                 'action' => $action,
                 'entity_type' => $entityType,
                 'entity_id' => $entityId,
                 'old_data' => $oldData === null ? null : json_encode($oldData, JSON_UNESCAPED_UNICODE),
                 'new_data' => $newData === null ? null : json_encode($newData, JSON_UNESCAPED_UNICODE),
                 'created_at' => date('Y-m-d H:i:s'),
-            ]);
+            ];
+            $tableFields = $db->getFieldNames('admin_logs');
+            if (!is_array($tableFields) || empty($tableFields)) {
+                return;
+            }
+            $allowed = array_flip($tableFields);
+            foreach (array_keys($payload) as $key) {
+                if (!isset($allowed[$key])) {
+                    unset($payload[$key]);
+                }
+            }
+            $db->table('admin_logs')->insert($payload);
         } catch (\Throwable $e) {
             log_message('error', 'No se pudo guardar admin log: ' . $e->getMessage());
         }
@@ -453,6 +470,7 @@ class Bookings extends BaseController
 
                 $bookingsModel->insert($queryBooking);
                 $bookingId = $bookingsModel->getInsertID();
+                $this->logAdminAction('create_booking', 'booking', $bookingId, null, $queryBooking);
 
                 $bookingSlotsModel->update($slotId, ['booking_id' => $bookingId]);
 
@@ -478,6 +496,7 @@ class Bookings extends BaseController
 
                     $bookingsModel->insert($additionalQuery);
                     $additionalBookingId = $bookingsModel->getInsertID();
+                    $this->logAdminAction('create_booking', 'booking', $additionalBookingId, null, $additionalQuery);
                     $bookingSlotsModel->update($additionalSlotId, ['booking_id' => $additionalBookingId]);
                 }
 
@@ -598,6 +617,10 @@ class Bookings extends BaseController
         try {
             $bookingsModel->update($id, $queryBookings);
             $paymentsModel->insert($queryPayments);
+            $this->logAdminAction('complete_payment', 'booking', $id, $booking, array_merge($queryBookings, [
+                'payment_delta' => $data->pago,
+                'payment_method' => $data->medioPago,
+            ]));
             return  $this->response->setJSON($this->setResponse(null, null, null, 'Respuesta exitosa'));
         } catch (\Exception $e) {
             return  $this->response->setJSON($this->setResponse(404, true, null, $e->getMessage()));
@@ -945,7 +968,9 @@ class Bookings extends BaseController
         $data = $this->request->getJSON();
 
         try {
+            $currentBooking = $bookingsModel->getBooking($data->bookingId);
             $bookingsModel->update($data->bookingId, ['mp' => $data->confirm]);
+            $this->logAdminAction($data->confirm ? 'booking_payment_approved' : 'booking_payment_not_approved', 'booking', $data->bookingId, $currentBooking, ['mp' => $data->confirm]);
 
             return $this->response->setJSON($this->setResponse(null, null, null, 'Respuesta exitosa'));
         } catch (\Exception $e) {
@@ -1005,6 +1030,7 @@ class Bookings extends BaseController
                 return $this->response->setJSON($this->setResponse(500, true, null, 'No se pudo guardar la reserva. Verifica los datos e intenta nuevamente.'));
             }
             $bookingId = $bookingsModel->getInsertID();
+            $this->logAdminAction('create_booking', 'booking', $bookingId, null, $queryBooking);
             $bookingSlotsModel->update($slotId, ['booking_id' => $bookingId]);
 
             if (count($items) > 1) {
@@ -1026,6 +1052,7 @@ class Bookings extends BaseController
                 }
                 $bookingsModel->insert($additionalQuery);
                 $additionalBookingId = $bookingsModel->getInsertID();
+                $this->logAdminAction('create_booking', 'booking', $additionalBookingId, null, $additionalQuery);
                 $bookingSlotsModel->update($additionalSlotId, ['booking_id' => $additionalBookingId]);
             }
 

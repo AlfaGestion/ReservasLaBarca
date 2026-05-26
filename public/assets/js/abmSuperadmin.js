@@ -1,4 +1,4 @@
-const formBooking = document.getElementById('formBooking')
+﻿const formBooking = document.getElementById('formBooking')
 const selectMenuAbm = document.getElementById('selectMenuAbm')
 const openingTime = document.getElementById('openingTime')
 const switchCutTime = document.getElementById('switchCutTime')
@@ -57,14 +57,49 @@ function formatPriceAR(value) {
     }).format(Number(value || 0))
 }
 
+function parseLocalizedPrice(value) {
+    const raw = String(value ?? '')
+        .replace(/\$/g, '')
+        .replace(/\s/g, '')
+        .replace(/[^0-9,.\-]/g, '')
+    const lastComma = raw.lastIndexOf(',')
+    const lastDot = raw.lastIndexOf('.')
+    let normalized = raw
+
+    if (lastComma !== -1 && lastDot !== -1) {
+        if (lastComma > lastDot) {
+            normalized = raw.replace(/\./g, '').replace(',', '.')
+        } else {
+            normalized = raw.replace(/,/g, '')
+        }
+    } else if (lastComma !== -1) {
+        normalized = /,\d{1,2}$/.test(raw) ? raw.replace(',', '.') : raw.replace(/,/g, '')
+    } else if (lastDot !== -1) {
+        normalized = /\.\d{1,2}$/.test(raw) ? raw : raw.replace(/\./g, '')
+    }
+
+    const number = Number(normalized)
+    return Number.isFinite(number) ? number : 0
+}
+
+function formatPriceInputAR(value) {
+    return new Intl.NumberFormat('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Number(value || 0))
+}
+
+function normalizePriceInputValue(input) {
+    if (!input) return
+    const number = parseLocalizedPrice(input.value)
+    input.value = formatPriceInputAR(number)
+}
+
 function minutesToHuman(minutes) {
     const total = Math.max(0, Number(minutes || 0))
     const hours = Math.floor(total / 60)
     const remainder = total % 60
-    const parts = []
-    if (hours > 0) parts.push(`${hours} hs`)
-    if (remainder > 0) parts.push(`${remainder} min`)
-    return `${total} min (${parts.length ? parts.join(' ') : '0 min'})`
+    return `${hours}:${String(remainder).padStart(2, '0')} hs`
 }
 
 function minutesToAdminHuman(totalMinutes) {
@@ -101,7 +136,7 @@ function updateServiceConfigForm(form) {
     const value = Number(rawValue) || 0
     const fixedValue = formatPriceAR(value)
     const discount = type === 'fixed' ? `${fixedValue} de descuento` : `${value}% OFF`
-    preview.textContent = offerEnabled && value > 0 ? `Se mostrará como: ${text} - ${discount}` : 'Se mostrará como: -'
+    preview.textContent = offerEnabled && value > 0 ? `Se mostrarÃ¡ como: ${text} - ${discount}` : 'Se mostrarÃ¡ como: -'
 }
 
 function getLocalDateISO(date = new Date()) {
@@ -113,10 +148,10 @@ function getLocalDateISO(date = new Date()) {
 }
 
 const fieldServiceLabels = {
-    football: 'Cancha / Fútbol',
-    padel: 'Pádel',
+    football: 'Cancha / FÃºtbol',
+    padel: 'PÃ¡del',
     quincho: 'Quincho',
-    eventos: 'Eventos / Confitería',
+    eventos: 'Eventos / ConfiterÃ­a',
 }
 const fieldServiceColors = {}
 
@@ -132,6 +167,7 @@ function initServiceConfigForms(scope = document) {
 }
 
 initServiceConfigForms()
+hydrateHistoryContainers().catch(() => {})
 
 function getServiceTypeOptions() {
     return Array.from(document.querySelectorAll('[name="createServiceTypeOption"]')).map(option => ({
@@ -149,6 +185,153 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;')
+}
+
+function formatDateTime(value) {
+    if (!value) return 'N/D'
+    const d = new Date(String(value).replace(' ', 'T'))
+    if (Number.isNaN(d.getTime())) return String(value)
+    return d.toLocaleString('es-AR', { hour12: false })
+}
+
+const historyFieldLabels = {
+    name: 'Nombre',
+    service_type: 'Tipo de reserva',
+    block_minutes: 'Duración',
+    floor_type: 'Tipo de piso',
+    field_type: 'Detalle',
+    sizes: 'Medidas',
+    value: 'Precio base',
+    ilumination_value: 'Precio nocturno',
+    ilumination: 'Iluminación',
+    roofed: 'Techada',
+    disabled: 'Deshabilitado',
+    opening_time: 'Horario desde',
+    closing_time: 'Horario hasta',
+    duration_minutes: 'Duración del servicio',
+    active: 'Activo',
+    online_available: 'Visible online',
+    allows_quincho_addon: 'Permite quincho',
+    color: 'Color',
+    offer_active: 'Oferta activa',
+    offer_text: 'Texto oferta',
+    discount_type: 'Tipo descuento',
+    discount_value: 'Valor descuento',
+}
+
+function formatHistoryValue(field, value) {
+    if (value === null || value === undefined || value === '') return '∅'
+    const boolFields = new Set(['disabled', 'ilumination', 'roofed', 'active', 'online_available', 'allows_quincho_addon', 'offer_active'])
+    if (boolFields.has(field)) {
+        const normalized = String(value).toLowerCase()
+        return (normalized === '1' || normalized === 'true') ? 'Sí' : 'No'
+    }
+    if (['value', 'ilumination_value', 'discount_value', 'base_price', 'deposit_price'].includes(field)) {
+        return formatPriceAR(value)
+    }
+    return String(value)
+}
+
+function renderHistoryChanges(changes) {
+    if (!Array.isArray(changes) || changes.length === 0) return '<div class="small text-muted">Sin detalle de campos.</div>'
+    const rows = changes.map(change => {
+        const label = historyFieldLabels[change.field] || change.field
+        const oldValue = escapeHtml(formatHistoryValue(change.field, change.old))
+        const newValue = escapeHtml(formatHistoryValue(change.field, change.new))
+        return `<tr><td><strong>${escapeHtml(label)}</strong></td><td class="text-muted">${oldValue}</td><td>${newValue}</td></tr>`
+    }).join('')
+    return `
+        <div class="table-responsive">
+            <table class="table table-sm table-borderless history-table mb-0">
+                <thead>
+                    <tr><th>Campo</th><th>Antes</th><th>Después</th></tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `
+}
+
+function renderHistoryRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return '<div class="small text-muted">Aún no hay cambios registrados.</div>'
+    }
+    const items = rows.map(row => {
+        const searchText = [
+            row.action_label || row.action || '',
+            row.admin || '',
+            row.host_name || '',
+            row.created_at || '',
+            formatDateTime(row.created_at),
+            ...(Array.isArray(row.changes) ? row.changes.flatMap(change => [change.field, String(change.old ?? ''), String(change.new ?? '')]) : []),
+        ].join(' ').toLowerCase()
+
+        return `
+        <details class="admin-history-item" data-history-search="${escapeHtml(searchText)}">
+            <summary class="admin-history-head admin-history-summary">
+                <span class="badge bg-info-subtle text-info-emphasis">${escapeHtml(row.action_label || row.action || 'Cambio')}</span>
+                <span class="small text-muted">${escapeHtml(formatDateTime(row.created_at))}</span>
+                <span class="small text-muted">${escapeHtml(row.admin || 'N/D')}</span>
+            </summary>
+            <div class="pt-2">
+                ${row.host_name ? `<div class="small text-muted mb-2">Equipo: ${escapeHtml(row.host_name)}</div>` : ''}
+                <div class="small text-muted mb-2">Usuario: ${escapeHtml(row.admin || 'N/D')}</div>
+                <div class="admin-history-body">${renderHistoryChanges(row.changes)}</div>
+            </div>
+        </details>
+    `
+    }).join('')
+
+    return `
+        <div class="mb-2">
+            <input type="text" class="form-control form-control-sm admin-history-filter" placeholder="Filtrar por fecha, equipo, usuario o campo...">
+        </div>
+        <div class="admin-history-items">${items}</div>
+    `
+}
+
+function bindHistoryFilters(scope = document) {
+    const filters = Array.from(scope.querySelectorAll('.admin-history-filter'))
+    filters.forEach((input) => {
+        if (input.dataset.bound === '1') return
+        input.dataset.bound = '1'
+        input.addEventListener('input', () => {
+            const term = String(input.value || '').trim().toLowerCase()
+            const wrapper = input.closest('.admin-history-list, .service-config-section, .editFields, .modal-body, body') || document
+            const items = wrapper.querySelectorAll('.admin-history-item[data-history-search]')
+            items.forEach((item) => {
+                const haystack = String(item.getAttribute('data-history-search') || '')
+                item.classList.toggle('d-none', term !== '' && !haystack.includes(term))
+            })
+        })
+    })
+}
+
+async function fetchAdminHistory(entityType, entityId, limit = 20) {
+    const response = await fetch(`${baseUrl}getAdminLogs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entityType, entityId, limit })
+    })
+    const json = await response.json()
+    if (!response.ok || json.error) throw new Error(json.message || 'No se pudo obtener el historial.')
+    return Array.isArray(json.data) ? json.data : []
+}
+
+async function hydrateHistoryContainers(scope = document) {
+    const containers = Array.from(scope.querySelectorAll('[data-history-entity][data-history-entity-id]'))
+    await Promise.all(containers.map(async (container) => {
+        const entityType = container.getAttribute('data-history-entity')
+        const entityId = Number(container.getAttribute('data-history-entity-id') || 0)
+        if (!entityType || !entityId) return
+        try {
+            const rows = await fetchAdminHistory(entityType, entityId, 20)
+            container.innerHTML = renderHistoryRows(rows)
+            bindHistoryFilters(container)
+        } catch (error) {
+            container.innerHTML = '<div class="small text-danger">No se pudo cargar el historial.</div>'
+        }
+    }))
 }
 
 function normalizeHexColor(color) {
@@ -301,6 +484,11 @@ document.addEventListener('change', (e) => {
     if (blockMinutes) {
         blockMinutes.value = serviceTypeOption.dataset.durationMinutes || 60
     }
+
+    const priceInput = e.target.closest('input[name="valor"], input[name="valorIluminacion"], input[name="discount_value"]')
+    if (priceInput) {
+        normalizePriceInputValue(priceInput)
+    }
 })
 
 document.addEventListener('input', (e) => {
@@ -309,6 +497,12 @@ document.addEventListener('input', (e) => {
         updateServiceConfigForm(serviceForm)
     }
 })
+
+document.addEventListener('blur', (e) => {
+    const priceInput = e.target?.closest?.('input[name="valor"], input[name="valorIluminacion"], input[name="discount_value"]')
+    if (!priceInput) return
+    normalizePriceInputValue(priceInput)
+}, true)
 
 async function refreshServicesPanelFromServer() {
     const currentPanel = document.getElementById('services-panel')
@@ -324,6 +518,7 @@ async function refreshServicesPanelFromServer() {
 
     currentPanel.innerHTML = freshPanel.innerHTML
     initServiceConfigForms(currentPanel)
+    hydrateHistoryContainers(currentPanel).catch(() => {})
     updateServicesRatesNewButton()
 }
 
@@ -377,13 +572,14 @@ document.addEventListener('submit', async (e) => {
     }
 
     try {
+        const formData = new FormData(form)
         const response = await fetch(form.action, {
             method: 'POST',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             },
-            body: new FormData(form),
+            body: formData,
         })
         const result = await response.json()
         if (!response.ok || result.error) {
@@ -1352,8 +1548,6 @@ async function getEditField(id) {
 }
 
 function fillDiv(field) {
-    let div = ''
-
     let disabledCheck = ''
     if (field.disabled == 1) { disabledCheck = 'checked' }
     let roofedCheck = ''
@@ -1372,8 +1566,10 @@ function fillDiv(field) {
                         <input class="btn-check" type="radio" name="${serviceOptionName}" id="${optionId}" value="${escapeHtml(option.value)}" data-service-select="#${serviceSelectId}" data-block-minutes-target="#${blockMinutesId}" data-duration-minutes="${escapeHtml(option.duration)}" autocomplete="off" ${serviceType === option.value ? 'checked' : ''}>
                         <label class="service-type-option" style="--service-color: ${escapeHtml(option.color || '#F39323')};" for="${optionId}">${escapeHtml(option.label)}</label>`
     }).join('')
+    const basePriceDisplay = formatPriceInputAR(field.value || 0)
+    const nightPriceDisplay = formatPriceInputAR(field.ilumination_value || 0)
 
-    div = `
+    const div = `
         <div class="editFields" id="editFields">
             <form action="${webBaseUrl}editField/${field.id}" method="POST" class="field-ajax-form">
 
@@ -1397,24 +1593,27 @@ ${serviceRadioOptions}
                     </div>
                 </div>
 
-                <div class="input-group mb-3">
-                    <span class="input-group-text">Duración del bloque</span>
-                    <input type="number" class="form-control" id="${blockMinutesId}" value="${blockMinutes}" name="blockMinutes" min="30" step="30" aria-label="Duracion del bloque">
-                </div>
+                <div class="edit-field-frame mb-3">
+                    <div class="edit-field-frame-title">Servicio</div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">Duracion del servicio</span>
+                        <input type="number" class="form-control" id="${blockMinutesId}" value="${blockMinutes}" name="blockMinutes" min="30" step="30" aria-label="Duracion del servicio">
+                    </div>
 
-                <div class="input-group mb-3">
-                    <span class="input-group-text" id="basic-addon3">Medidas</span>
-                    <input type="text" class="form-control" value="${escapeHtml(field.sizes || '')}" name="medidas" placeholder="Ingrese las medidas de la cancha" aria-label="Medidas" aria-describedby="basic-addon3">
-                </div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text" id="basic-addon3">Medidas</span>
+                        <input type="text" class="form-control" value="${escapeHtml(field.sizes || '')}" name="medidas" placeholder="Ingrese las medidas de la cancha" aria-label="Medidas" aria-describedby="basic-addon3">
+                    </div>
 
-                <div class="input-group mb-3">
-                    <span class="input-group-text" id="basic-addon2">Tipo de piso</span>
-                    <input type="text" class="form-control" value="${escapeHtml(field.floor_type || '')}" name="tipoPiso" placeholder="Ingrese el tipo de piso de la cancha" aria-label="Tipo piso" aria-describedby="basic-addon2">
-                </div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text" id="basic-addon2">Tipo de piso</span>
+                        <input type="text" class="form-control" value="${escapeHtml(field.floor_type || '')}" name="tipoPiso" placeholder="Ingrese el tipo de piso de la cancha" aria-label="Tipo piso" aria-describedby="basic-addon2">
+                    </div>
 
-                <div class="input-group mb-3">
-                    <span class="input-group-text" id="basic-addon4">Detalle</span>
-                    <input type="text" class="form-control" value="${escapeHtml(field.field_type || '')}" name="tipoCancha" placeholder="Detalle opcional" aria-label="Detalle" aria-describedby="basic-addon4">
+                    <div class="input-group mb-0">
+                        <span class="input-group-text" id="basic-addon4">Detalle</span>
+                        <input type="text" class="form-control" value="${escapeHtml(field.field_type || '')}" name="tipoCancha" placeholder="Detalle opcional" aria-label="Detalle" aria-describedby="basic-addon4">
+                    </div>
                 </div>
 
                 <div class="form-check form-switch">
@@ -1422,14 +1621,24 @@ ${serviceRadioOptions}
                     <label class="form-check-label" for="tipoTechoEdit${field.id}">Es techada</label>
                 </div>
 
-                <div class="input-group mb-3">
-                    <span class="input-group-text">Precio base</span>
-                    <input type="text" class="form-control" value="${escapeHtml(field.value || '')}" name="valor" placeholder="Precio por hora o bloque" aria-label="Valor">
+                <div class="edit-field-frame mb-3 mt-3">
+                    <div class="edit-field-frame-title">Precios</div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">Base</span>
+                        <input type="text" class="form-control" value="${escapeHtml(basePriceDisplay)}" name="valor" placeholder="Ej: 40,00" inputmode="decimal" aria-label="Valor base">
+                    </div>
+
+                    <div class="input-group mb-0">
+                        <span class="input-group-text">Nocturno</span>
+                        <input type="text" class="form-control" value="${escapeHtml(nightPriceDisplay)}" name="valorIluminacion" placeholder="Ej: 50,00 (opcional)" inputmode="decimal" aria-label="Valor nocturno">
+                    </div>
                 </div>
 
-                <div class="input-group mb-3">
-                    <span class="input-group-text">Precio nocturno</span>
-                    <input type="text" class="form-control" value="${escapeHtml(field.ilumination_value || '')}" name="valorIluminacion" placeholder="Si no aplica, repetir precio base" aria-label="Valor nocturno">
+                <div class="service-config-section mb-3">
+                    <h6>Historial de cambios</h6>
+                    <div class="admin-history-list" data-history-entity="field" data-history-entity-id="${escapeHtml(field.id)}">
+                        <div class="text-muted small">Cargando historial...</div>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn btn-success">Guardar</button>
@@ -1439,5 +1648,7 @@ ${serviceRadioOptions}
         `
 
     editFieldDiv.innerHTML = div
+    hydrateHistoryContainers(editFieldDiv).catch(() => {})
 }
+
 

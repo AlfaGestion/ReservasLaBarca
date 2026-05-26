@@ -14,9 +14,14 @@ class AdminLogsModel extends Model
     protected $protectFields = true;
     protected $allowedFields = [
         'admin_id',
+        'admin_name',
         'action',
         'entity_type',
         'entity_id',
+        'ip_address',
+        'user_agent',
+        'host_name',
+        'client_device',
         'old_data',
         'new_data',
         'created_at',

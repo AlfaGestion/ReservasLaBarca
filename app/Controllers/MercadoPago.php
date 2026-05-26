@@ -10,11 +10,13 @@ use App\Models\BookingsModel;
 use App\Models\CancelReservationsModel;
 use App\Models\ConfigModel;
 use App\Models\CustomersModel;
+use App\Models\FieldsModel;
 use App\Models\MercadoPagoModel;
 use App\Models\MercadoPagoKeysModel;
 use App\Models\PaymentsModel;
 use App\Models\RateModel;
 use App\Models\ServicesModel;
+use App\Models\TimeModel;
 
 class MercadoPago extends BaseController
 {
@@ -322,6 +324,67 @@ class MercadoPago extends BaseController
         return false;
     }
 
+    private function getNocturnalHours(): array
+    {
+        $timeModel = new TimeModel();
+        $openingTime = $timeModel->getOpeningTime();
+        $timeRow = $timeModel->first();
+        if (!$timeRow || empty($openingTime) || empty($timeRow['nocturnal_time'])) {
+            return [];
+        }
+
+        $index = array_search($timeRow['nocturnal_time'], $openingTime, true);
+        if ($index === false) {
+            return [];
+        }
+
+        return array_slice($openingTime, (int)$index);
+    }
+
+    private function isNocturnalSlot(string $from, string $until, array $nocturnalHours): bool
+    {
+        if ($nocturnalHours === []) {
+            return false;
+        }
+        $slotModel = new BookingSlotsModel();
+        $fromHour = substr($slotModel->normalizeTime($from), 0, 2);
+        $untilHour = substr($slotModel->normalizeTime($until), 0, 2);
+
+        return in_array($fromHour, $nocturnalHours, true) && in_array($untilHour, $nocturnalHours, true);
+    }
+
+    private function calculateBookingTotal(array $items): float
+    {
+        $fieldsModel = new FieldsModel();
+        $slotModel = new BookingSlotsModel();
+        $nocturnalHours = $this->getNocturnalHours();
+        $total = 0.0;
+
+        foreach ($items as $item) {
+            $field = $fieldsModel->getField((int)$item['cancha']);
+            if (!$field) {
+                continue;
+            }
+            $fromMinutes = $slotModel->timeToMinutes($item['horarioDesde']);
+            $untilMinutes = $slotModel->timeToMinutes($item['horarioHasta']);
+            if ($untilMinutes <= $fromMinutes) {
+                $untilMinutes += 24 * 60;
+            }
+            $minutes = max(0, $untilMinutes - $fromMinutes);
+            $block = (int)($field['duration_minutes'] ?? $field['block_minutes'] ?? 60);
+            $units = $minutes / max(1, $block);
+            $baseAmount = (float)($field['value'] ?? 0);
+            $nightAmount = (float)($field['ilumination_value'] ?? 0);
+            $amount = $this->isNocturnalSlot((string)$item['horarioDesde'], (string)$item['horarioHasta'], $nocturnalHours) && $nightAmount > 0
+                ? $nightAmount
+                : $baseAmount;
+
+            $total += $units * $amount;
+        }
+
+        return round($total, 2);
+    }
+
     private function sendBookingEmail($bookingId)
     {
         $configModel = new ConfigModel();
@@ -390,7 +453,7 @@ class MercadoPago extends BaseController
             $bookingsModel = new BookingsModel();
             $data = $this->request->getJSON();
             $booking = $data->booking ?? null;
-            $montoTotal = $data->amount ?? 0;
+            $montoTotal = 0;
             $bookingSlotsModel = new BookingSlotsModel();
             $localidad = null;
             if (is_object($booking) && isset($booking->localidad)) {
@@ -447,6 +510,11 @@ class MercadoPago extends BaseController
                 }
             }
 
+            $montoTotal = $this->calculateBookingTotal($items);
+            if ($montoTotal <= 0) {
+                return $this->response->setJSON($this->setResponse(409, true, null, 'No se pudo calcular el monto de la reserva.'));
+            }
+
             $rate = $rateRow['value'];
             $montoParcial = (floatval($montoTotal) * floatval($rate)) / 100;
 
@@ -473,6 +541,10 @@ class MercadoPago extends BaseController
             $bookingArr['preferenceIdParcial'] = $preferenceIdParcial;
             $bookingArr['preferenceIdTotal'] = $preferenceIdTotal;
             $bookingArr['slotId'] = $slotId;
+            $bookingArr['total'] = $montoTotal;
+            $bookingArr['parcial'] = $montoParcial;
+            $bookingArr['diferencia'] = $montoTotal;
+            $bookingArr['reservacion'] = 0;
 
             // Crear reserva provisional antes del checkout para no depender de la redireccion de retorno.
             $existingBooking = $bookingsModel->where('id_preference_parcial', $preferenceIdParcial)

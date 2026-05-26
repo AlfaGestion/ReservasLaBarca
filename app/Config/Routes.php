@@ -89,12 +89,14 @@ $routes->group('', ['filter' => 'auth'], function ($routes) {
     $routes->post('editService/(:any)', 'Superadmin::editService/$1');
     $routes->post('getActiveBookings', 'Superadmin::getActiveBookings');
     $routes->post('getAnnulledBookings', 'Superadmin::getAnnulledBookings');
+    $routes->post('getBookingIssues', 'Superadmin::getBookingIssues');
     $routes->post('checkCancelReservations', 'Superadmin::checkCancelReservations');
     $routes->post('saveCancelReservations', 'Superadmin::saveCancelReservations');
     $routes->post('updateCancelReservation', 'Superadmin::updateCancelReservation');
     $routes->post('getCancelReservations', 'Superadmin::getCancelReservations');
     $routes->post('deleteCancelReservation', 'Superadmin::deleteCancelReservation');
     $routes->post('saveConfigGeneral', 'Superadmin::saveConfigGeneral');
+    $routes->post('getAdminLogs', 'Superadmin::getAdminLogs');
     $routes->post('deleteUser/(:any)', 'Superadmin::deleteUser/$1');
 
     $routes->post('saveTime', 'Time::saveTime');

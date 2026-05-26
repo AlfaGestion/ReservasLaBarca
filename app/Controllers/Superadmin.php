@@ -22,6 +22,55 @@ use App\Models\UsersModel;
 
 class Superadmin extends BaseController
 {
+    private function ensureAdminLogsTable(): void
+    {
+        $db = \Config\Database::connect();
+        if ($db->tableExists('admin_logs')) {
+            $alterStatements = [
+                'ip_address' => "ALTER TABLE admin_logs ADD COLUMN ip_address VARCHAR(64) NULL AFTER entity_id",
+                'admin_name' => "ALTER TABLE admin_logs ADD COLUMN admin_name VARCHAR(120) NULL AFTER admin_id",
+                'user_agent' => "ALTER TABLE admin_logs ADD COLUMN user_agent VARCHAR(255) NULL AFTER ip_address",
+                'host_name' => "ALTER TABLE admin_logs ADD COLUMN host_name VARCHAR(255) NULL AFTER user_agent",
+                'client_device' => "ALTER TABLE admin_logs ADD COLUMN client_device VARCHAR(255) NULL AFTER host_name",
+            ];
+            foreach ($alterStatements as $field => $sql) {
+                try {
+                    if (! $db->fieldExists($field, 'admin_logs')) {
+                        $db->query($sql);
+                    }
+                } catch (\Throwable $e) {
+                    log_message('error', 'No se pudo agregar columna [' . $field . '] en admin_logs: ' . $e->getMessage());
+                }
+            }
+            return;
+        }
+        try {
+            $db->query("
+                CREATE TABLE IF NOT EXISTS admin_logs (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    admin_id INT UNSIGNED NULL,
+                    admin_name VARCHAR(120) NULL,
+                    action VARCHAR(80) NOT NULL,
+                    entity_type VARCHAR(80) NOT NULL,
+                    entity_id VARCHAR(80) NULL,
+                    ip_address VARCHAR(64) NULL,
+                    user_agent VARCHAR(255) NULL,
+                    host_name VARCHAR(255) NULL,
+                    client_device VARCHAR(255) NULL,
+                    old_data LONGTEXT NULL,
+                    new_data LONGTEXT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY idx_admin_logs_admin_id (admin_id),
+                    KEY idx_admin_logs_entity (entity_type, entity_id),
+                    KEY idx_admin_logs_created_at (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+        } catch (\Throwable $e) {
+            log_message('error', 'No se pudo crear admin_logs: ' . $e->getMessage());
+        }
+    }
+
     private function normalizeServiceColor(?string $value): string
     {
         $color = trim((string)$value);
@@ -35,19 +84,59 @@ class Superadmin extends BaseController
     private function logAdminAction(string $action, string $entityType, $entityId, $oldData = null, $newData = null): void
     {
         try {
-            $model = new AdminLogsModel();
-            if (! \Config\Database::connect()->tableExists('admin_logs')) {
-                return;
+            $this->ensureAdminLogsTable();
+            $request = service('request');
+            $adminId = session()->get('id_user') ?? session()->get('id') ?? null;
+            $adminId = is_numeric($adminId) ? (int)$adminId : null;
+            $adminName = (string)(session()->get('name') ?? session()->get('user') ?? session()->get('email') ?? '');
+            $adminEmail = (string)(session()->get('email') ?? '');
+            if ($adminId) {
+                $admin = (new UsersModel())->find($adminId);
+                if ($admin) {
+                    $adminName = (string)($admin['name'] ?? $admin['user'] ?? $adminName);
+                    $adminEmail = (string)($admin['email'] ?? $adminEmail);
+                }
             }
-            $model->insert([
-                'admin_id' => session()->get('id_user') ?: null,
+            if ($adminEmail !== '') {
+                $adminName = trim($adminName . ' <' . $adminEmail . '>');
+            }
+            $ipAddress = method_exists($request, 'getIPAddress') ? (string)$request->getIPAddress() : null;
+            $hostName = null;
+            if (!empty($ipAddress) && filter_var($ipAddress, FILTER_VALIDATE_IP)) {
+                $resolved = @gethostbyaddr($ipAddress);
+                if ($resolved && $resolved !== $ipAddress) {
+                    $hostName = $resolved;
+                }
+            }
+            $payload = [
+                'admin_id' => $adminId,
+                'admin_name' => $adminName !== '' ? substr($adminName, 0, 120) : null,
                 'action' => $action,
                 'entity_type' => $entityType,
                 'entity_id' => $entityId,
+                'ip_address' => null,
+                'user_agent' => null,
+                'host_name' => $hostName ? substr($hostName, 0, 255) : null,
+                'client_device' => null,
                 'old_data' => $oldData === null ? null : json_encode($oldData, JSON_UNESCAPED_UNICODE),
                 'new_data' => $newData === null ? null : json_encode($newData, JSON_UNESCAPED_UNICODE),
                 'created_at' => date('Y-m-d H:i:s'),
-            ]);
+            ];
+            $db = \Config\Database::connect();
+            $tableFields = $db->getFieldNames('admin_logs');
+            if (!is_array($tableFields) || empty($tableFields)) {
+                return;
+            }
+            $allowedTableFields = array_flip($tableFields);
+            foreach (array_keys($payload) as $key) {
+                if (!isset($allowedTableFields[$key])) {
+                    unset($payload[$key]);
+                }
+            }
+            if (empty($payload['action']) || empty($payload['entity_type'])) {
+                return;
+            }
+            $db->table('admin_logs')->insert($payload);
         } catch (\Throwable $e) {
             log_message('error', 'No se pudo guardar admin log: ' . $e->getMessage());
         }
@@ -312,6 +401,9 @@ class Superadmin extends BaseController
         $priceUnitLabel = $blockMinutes === 60 ? 'por hora' : 'por bloque de ' . minutesToHuman($blockMinutes);
         $valor = parse_price_ar($this->request->getVar('valor'));
         $valorIluminacion = parse_price_ar($this->request->getVar('valorIluminacion'));
+        if ($valorIluminacion <= 0) {
+            $valorIluminacion = $valor;
+        }
 
 
         $query = [
@@ -383,6 +475,9 @@ class Superadmin extends BaseController
         $priceUnitLabel = $blockMinutes === 60 ? 'por hora' : 'por bloque de ' . minutesToHuman($blockMinutes);
         $valor = parse_price_ar($this->request->getVar('valor'));
         $valorIluminacion = parse_price_ar($this->request->getVar('valorIluminacion'));
+        if ($valorIluminacion <= 0) {
+            $valorIluminacion = $valor;
+        }
         $disabled = $this->request->getVar('disabled') ? 1 : 0;
 
 
@@ -730,6 +825,96 @@ class Superadmin extends BaseController
         }
     }
 
+    public function getBookingIssues()
+    {
+        $fieldsModel = new FieldsModel();
+        $servicesModel = new ServicesModel();
+        $bookingsModel = new BookingsModel();
+        $paymentsModel = new PaymentsModel();
+        $data = $this->request->getJSON();
+
+        $getBookings = $bookingsModel->where('date >=', $data->fechaDesde)
+            ->where('date <=', $data->fechaHasta)
+            ->groupStart()
+            ->where('annulled', 1)
+            ->orWhere('approved', 0)
+            ->groupEnd()
+            ->orderBy('time_from', 'ASC')
+            ->findAll();
+
+        $bookings = [];
+        $bookingIds = array_column($getBookings, 'id');
+        $paidByBooking = [];
+
+        if (!empty($bookingIds)) {
+            $paymentsRows = $paymentsModel
+                ->select('id_booking, SUM(amount) as paid_total')
+                ->whereIn('id_booking', $bookingIds)
+                ->groupBy('id_booking')
+                ->findAll();
+
+            foreach ($paymentsRows as $pr) {
+                $paidByBooking[(int)$pr['id_booking']] = (float)($pr['paid_total'] ?? 0);
+            }
+        }
+
+        foreach ($getBookings as $booking) {
+            $fieldData = $fieldsModel->getField($booking['id_field']);
+            $serviceType = (string)($fieldData['service_type'] ?? 'football');
+            $serviceData = $servicesModel->getByCode($serviceType);
+            $bookingId = (int)$booking['id'];
+            $paymentsSum = $paidByBooking[$bookingId] ?? 0.0;
+            $bookingPaid = (float)($booking['payment'] ?? 0);
+            $paid = max($paymentsSum, $bookingPaid);
+            $total = (float)($booking['total'] ?? 0);
+            $difference = $total - $paid;
+            if ($difference < 0) {
+                $difference = 0;
+            }
+
+            $issueReason = [];
+            if ((int)($booking['annulled'] ?? 0) === 1) {
+                $issueReason[] = 'Cancelada';
+            }
+            if ((int)($booking['approved'] ?? 0) !== 1) {
+                $issueReason[] = 'Pago no aprobado';
+            }
+            $issueLabel = implode(' · ', $issueReason);
+            if ($issueLabel === '') {
+                $issueLabel = 'Incidencia';
+            }
+
+            $serviceColor = $serviceData['color'] ?? $fieldData['service_color'] ?? '#F39323';
+
+            $bookings[] = [
+                'id' => $booking['id'],
+                'cancha' => $fieldData['name'] ?? 'N/D',
+                'service_type' => $serviceType,
+                'field_color' => $fieldData['color'] ?? null,
+                'service_color' => $serviceColor,
+                'color' => $serviceColor,
+                'fecha' => date("d/m/Y", strtotime($booking['date'])),
+                'horario' => $booking['time_from'] . ' a ' . $booking['time_until'],
+                'nombre' => $booking['name'],
+                'telefono' => $booking['phone'],
+                'creado_por' => $booking['created_by_name'] ?? $booking['created_by_type'] ?? 'N/D',
+                'editado_por' => $booking['edited_by_name'] ?? null,
+                'editado_en' => $booking['edited_at'] ?? null,
+                'pago_total' => $paid >= $total ? 'Si' : 'No',
+                'total_reserva' => $booking['total'],
+                'diferencia' => $difference,
+                'monto_reserva' => $paid,
+                'descripcion' => $booking['description'],
+                'metodo_pago' => $booking['payment_method'],
+                'anulada' => $booking['annulled'],
+                'mp' => $booking['mp'],
+                'issue_reason' => $issueLabel,
+            ];
+        }
+
+        return $this->response->setJSON($this->setResponse(null, null, $bookings, 'Respuesta exitosa'));
+    }
+
     public function checkCancelReservations()
     {
         $data = $this->request->getJSON();
@@ -1015,6 +1200,135 @@ class Superadmin extends BaseController
         } catch (\Exception $e) {
             return $this->response->setJSON($this->setResponse(500, true, null, $e->getMessage()));
         }
+    }
+
+    public function getAdminLogs()
+    {
+        $data = $this->request->getJSON(true);
+        $entityType = trim((string)($data['entityType'] ?? ''));
+        $entityId = (int)($data['entityId'] ?? 0);
+        $limit = max(1, min(100, (int)($data['limit'] ?? 25)));
+
+        if ($entityType === '' || $entityId <= 0) {
+            return $this->response->setJSON($this->setResponse(422, true, null, 'Datos de historial incompletos.'));
+        }
+
+        $this->ensureAdminLogsTable();
+
+        $logsModel = new AdminLogsModel();
+        $usersModel = new UsersModel();
+        $logs = $logsModel->where('entity_type', $entityType)
+            ->where('entity_id', $entityId)
+            ->orderBy('created_at', 'DESC')
+            ->orderBy('id', 'DESC')
+            ->limit($limit)
+            ->findAll();
+
+        $actionLabels = [
+            'create_field' => 'Creación de precio/espacio',
+            'edit_field' => 'Edición de precio/espacio',
+            'create_service' => 'Creación de servicio',
+            'edit_service' => 'Edición de servicio',
+            'change_price' => 'Cambio de tarifa',
+            'create_booking' => 'Creación de reserva',
+            'edit_booking' => 'Edición de reserva',
+            'cancel_booking' => 'Reserva cancelada',
+            'complete_payment' => 'Pago registrado',
+            'booking_payment_approved' => 'Pago aprobado',
+            'booking_payment_not_approved' => 'Pago no aprobado',
+        ];
+
+        $normalizeCompareValue = static function ($field, $value) {
+            if ($value === null || $value === '') {
+                return '';
+            }
+            $boolFields = ['disabled', 'ilumination', 'roofed', 'active', 'online_available', 'allows_quincho_addon', 'offer_active'];
+            if (in_array((string)$field, $boolFields, true)) {
+                $normalized = strtolower(trim((string)$value));
+                return in_array($normalized, ['1', 'true', 'yes', 'si', 'on'], true) ? '1' : '0';
+            }
+            if (is_numeric($value)) {
+                return number_format((float)$value, 4, '.', '');
+            }
+            return trim((string)$value);
+        };
+
+        $allowedFieldsByEntity = [
+            'field' => ['name', 'service_type', 'block_minutes', 'floor_type', 'field_type', 'sizes', 'value', 'ilumination_value', 'disabled'],
+            'service_price' => ['base_price', 'deposit_price', 'charge_type', 'active'],
+            'service' => ['name', 'opening_time', 'closing_time', 'duration_minutes', 'active', 'online_available', 'allows_quincho_addon', 'color', 'offer_active', 'offer_text', 'discount_type', 'discount_value'],
+            'booking' => ['date', 'id_field', 'time_from', 'time_until', 'payment', 'total', 'diference', 'payment_method', 'approved', 'mp', 'annulled', 'name', 'phone', 'locality', 'created_by_name', 'edited_by_name', 'edited_at', 'payment_delta'],
+        ];
+        $alwaysIncludeFieldsByEntity = [
+            'field' => ['value', 'ilumination_value'],
+        ];
+
+        $responseRows = [];
+        foreach ($logs as $log) {
+            $oldData = json_decode((string)($log['old_data'] ?? ''), true);
+            $newData = json_decode((string)($log['new_data'] ?? ''), true);
+            if (!is_array($oldData)) $oldData = [];
+            if (!is_array($newData)) $newData = [];
+
+            $changed = [];
+            $ignoredKeys = ['id', 'service_id', 'elements_rent', 'price_unit_label', 'updated_at', 'created_at', 'ilumination', 'roofed'];
+            $allowedFields = $allowedFieldsByEntity[$entityType] ?? null;
+            $keys = array_unique(array_merge(array_keys($oldData), array_keys($newData)));
+            foreach ($keys as $key) {
+                if (in_array($key, $ignoredKeys, true)) {
+                    continue;
+                }
+                if (is_array($allowedFields) && !in_array($key, $allowedFields, true)) {
+                    continue;
+                }
+                $oldValue = $oldData[$key] ?? null;
+                $newValue = $newData[$key] ?? null;
+                $alwaysInclude = in_array($key, $alwaysIncludeFieldsByEntity[$entityType] ?? [], true);
+                if ($normalizeCompareValue($key, $oldValue) === $normalizeCompareValue($key, $newValue)) {
+                    if (!$alwaysInclude) {
+                        continue;
+                    }
+                }
+                if ($alwaysInclude && !array_key_exists($key, $newData) && array_key_exists($key, $oldData)) {
+                    $newValue = $oldValue;
+                }
+                if ($alwaysInclude && !array_key_exists($key, $oldData) && array_key_exists($key, $newData)) {
+                    $oldValue = $newValue;
+                }
+                if (!$alwaysInclude && $normalizeCompareValue($key, $oldValue) === $normalizeCompareValue($key, $newValue)) {
+                    continue;
+                }
+                $changed[] = [
+                    'field' => (string)$key,
+                    'old' => $oldValue,
+                    'new' => $newValue,
+                ];
+            }
+
+            $adminName = 'N/D';
+            $adminId = (int)($log['admin_id'] ?? 0);
+            if (!empty($log['admin_name'])) {
+                $adminName = (string)$log['admin_name'];
+            } elseif ($adminId > 0) {
+                $admin = $usersModel->find($adminId);
+                if ($admin) {
+                    $adminName = $admin['name'] ?? $admin['user'] ?? ('#' . $adminId);
+                }
+            }
+
+            $action = (string)($log['action'] ?? '');
+            $responseRows[] = [
+                'id' => (int)$log['id'],
+                'action' => $action,
+                'action_label' => $actionLabels[$action] ?? $action,
+                'admin' => $adminName,
+                'created_at' => $log['created_at'] ?? null,
+                'host_name' => $log['host_name'] ?? null,
+                'changes' => $changed,
+            ];
+        }
+
+        return $this->response->setJSON($this->setResponse(null, null, $responseRows, 'Respuesta exitosa'));
     }
 
     public function configMpView()

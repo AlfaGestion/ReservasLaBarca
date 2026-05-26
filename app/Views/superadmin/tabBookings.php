@@ -14,6 +14,11 @@
     <div>
         <button type="button" id="searchBooking" class="btn btn-success">Buscar activas</button>
         <button type="button" id="searchAnnulledBooking" class="btn btn-danger">Buscar anuladas</button>
+        <button type="button" id="searchBookingIssues" class="btn btn-warning text-dark">Buscar incidencias</button>
+        <button type="button" id="toggleBookingAlerts" class="btn btn-outline-info" title="Activar alertas">
+            <i class="fa-solid fa-bell"></i>
+        </button>
+        <span id="bookingAlertsStatus" class="ms-2 small text-muted">Alertas: desactivadas</span>
     </div>
 </div>
 
@@ -229,4 +234,52 @@
 
         </tbody>
     </table>
+</div>
+
+<hr class="my-4">
+<h6 class="mb-2">Canceladas / pagos no aprobados</h6>
+<div class="table-responsive">
+    <table class="table align-middle table-striped-columns mt-2">
+        <thead>
+            <tr>
+                <th scope="col">Fecha</th>
+                <th scope="col">Servicio</th>
+                <th scope="col">Horario</th>
+                <th scope="col">Nombre</th>
+                <th scope="col">Teléfono</th>
+                <th scope="col">Creado por</th>
+                <th scope="col">Pagó total</th>
+                <th scope="col">Pagado</th>
+                <th scope="col">Total</th>
+                <th scope="col">Saldo</th>
+                <th scope="col">Método de pago</th>
+                <th scope="col">Descripción</th>
+                <th scope="col">Estado de Mercado Pago</th>
+                <th scope="col">Estado</th>
+                <th scope="col">Motivo</th>
+                <th scope="col">Acciones</th>
+            </tr>
+        </thead>
+        <tbody class="divBookingIssues"></tbody>
+    </table>
+</div>
+
+<div class="modal fade" id="bookingHistoryModal" tabindex="-1" aria-labelledby="bookingHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bookingHistoryModalLabel">Historial de reserva</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="bookingHistoryInfo" class="small text-muted mb-2"></div>
+                <div id="bookingHistoryList" class="admin-history-list">
+                    <div class="small text-muted">Cargando historial...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
 </div>

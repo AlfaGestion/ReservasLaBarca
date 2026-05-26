@@ -28,8 +28,31 @@ if (! function_exists('parse_price_ar')) {
 
         $value = trim((string) $amount);
         $value = str_replace(['$', ' '], '', $value);
-        $value = str_replace('.', '', $value);
-        $value = str_replace(',', '.', $value);
+        $value = preg_replace('/[^0-9,.\-]/', '', $value);
+
+        $commaPos = strrpos($value, ',');
+        $dotPos = strrpos($value, '.');
+
+        if ($commaPos !== false && $dotPos !== false) {
+            if ($commaPos > $dotPos) {
+                // 40.500,75 => 40500.75
+                $value = str_replace('.', '', $value);
+                $value = str_replace(',', '.', $value);
+            } else {
+                // 40,500.75 => 40500.75
+                $value = str_replace(',', '', $value);
+            }
+        } elseif ($commaPos !== false) {
+            // 40,5 o 40,50 => decimal con coma; 40,500 => miles
+            $value = preg_match('/,\d{1,2}$/', $value)
+                ? str_replace(',', '.', $value)
+                : str_replace(',', '', $value);
+        } elseif ($dotPos !== false) {
+            // 40.5 o 40.50 => decimal con punto; 40.500 => miles
+            if (!preg_match('/\.\d{1,2}$/', $value)) {
+                $value = str_replace('.', '', $value);
+            }
+        }
 
         return (float) $value;
     }
@@ -40,18 +63,7 @@ if (! function_exists('minutesToHuman')) {
         $minutes = max(0, (int) $minutes);
         $hours = intdiv($minutes, 60);
         $remaining = $minutes % 60;
-
-        $parts = [];
-        if ($hours > 0) {
-            $parts[] = $hours . ' hs';
-        }
-        if ($remaining > 0) {
-            $parts[] = $remaining . ' min';
-        }
-
-        $human = $parts === [] ? '0 min' : implode(' ', $parts);
-
-        return $minutes . ' min (' . $human . ')';
+        return $hours . ':' . str_pad((string) $remaining, 2, '0', STR_PAD_LEFT);
     }
 }
 
