@@ -70,6 +70,7 @@ let closureLoadNoticeShown = false
 // let idCustomer
 let closureInfo = { closed: false, scope: 'none', label: '', fecha: '', closedAll: false, closedFields: [] }
 let currentOccupiedSlots = []
+let timeBookingsRequestId = 0
 
 function renderServiceTypeOptions() {
     if (!serviceTypeSelect || bookingServices.length === 0) return
@@ -308,15 +309,17 @@ document.addEventListener('change', async (e) => {
             divTimeH.style.width = '49%'
             selectCancha.classList.remove('d-none')
 
-            getTimeFromBookings()
-
-            if (horarioDesde.value) {
-                horarioHasta.value = minutesToTime(timeToMinutes(horarioDesde.value) + getCurrentBlockMinutes())
-                syncQuinchoSuggestion()
-            }
-
+            ensureHorarioHastaSelected(true)
+            syncQuinchoSuggestion()
             inputMonto.value = 0
             getAmount(selectCancha.value)
+            getTimeFromBookings()
+                .then(() => {
+                    ensureHorarioHastaSelected(true)
+                    syncQuinchoSuggestion()
+                    getAmount(selectCancha.value)
+                })
+                .catch(() => { })
 
         } else if (e.target.id == 'cancha') {
             if (!sessionUserLogued) {
@@ -729,9 +732,13 @@ async function setScriptMP(amount) {
         schedulePendingMpCleanup()
         return true
     } catch (error) {
+        const message = String(error?.message || '')
+        const isAvailabilityError = /horario|ocupad|quincho no est|tomado por otra reserva/i.test(message)
         await showStyledConfirm({
-            title: 'Horario no disponible',
-            message: `<p class="mb-1">${error.message || 'El horario ya fue tomado por otra reserva.'}</p><p class="mb-0"><b>Elegi otra cancha u horario para continuar.</b></p>`,
+            title: isAvailabilityError ? 'Horario no disponible' : 'No se pudo iniciar el pago',
+            message: isAvailabilityError
+                ? `<p class="mb-1">${message || 'El horario ya fue tomado por otra reserva.'}</p><p class="mb-0"><b>Elegi otra cancha u horario para continuar.</b></p>`
+                : `<p class="mb-1">${message || 'No se pudo iniciar el pago con Mercado Pago.'}</p><p class="mb-0"><b>Revisa la configuracion de Mercado Pago e intenta nuevamente.</b></p>`,
             acceptText: 'Aceptar',
             cancelText: 'Cerrar',
             tone: 'danger'
@@ -866,11 +873,65 @@ function updateTimeOptions() {
         : starts
     fillTimeSelect(horarioDesde, availableStarts)
     fillTimeSelect(horarioHasta, availableStarts.map(t => minutesToTime(timeToMinutes(t) + block)))
+    ensureHorarioHastaSelected()
     if (quinchoDesde && quinchoHasta) {
         const hourlyStarts = buildStartTimes(60)
         fillTimeSelect(quinchoDesde, hourlyStarts)
         fillTimeSelect(quinchoHasta, hourlyStarts.map(t => minutesToTime(timeToMinutes(t) + 60)))
     }
+}
+
+function ensureHorarioHastaSelected(forceDefaultFromDesde = false) {
+    if (!horarioHasta) return
+    const validUntilOptions = Array.from(horarioHasta.options || [])
+        .map(opt => normalizeTimeValue(opt.value))
+        .filter(Boolean)
+
+    if (validUntilOptions.length === 0) {
+        horarioHasta.value = ''
+        return
+    }
+
+    if (!horarioDesde?.value) {
+        const currentUntil = normalizeTimeValue(horarioHasta.value)
+        if (currentUntil && validUntilOptions.includes(currentUntil)) {
+            horarioHasta.value = currentUntil
+            return
+        }
+        horarioHasta.value = validUntilOptions[0]
+        return
+    }
+
+    const fromMinutes = timeToMinutes(horarioDesde.value)
+    const blockMinutes = getCurrentBlockMinutes()
+    const minUntilMinutes = fromMinutes + blockMinutes
+    const eligibleUntilOptions = validUntilOptions.filter(value => timeToMinutes(value) >= minUntilMinutes)
+    if (eligibleUntilOptions.length === 0) {
+        horarioHasta.value = ''
+        return
+    }
+
+    if (forceDefaultFromDesde) {
+        horarioHasta.value = eligibleUntilOptions[0]
+        return
+    }
+
+    const currentUntil = normalizeTimeValue(horarioHasta.value)
+    if (currentUntil && eligibleUntilOptions.includes(currentUntil)) {
+        const currentUntilMinutes = timeToMinutes(currentUntil)
+        if (currentUntilMinutes > fromMinutes && currentUntilMinutes >= minUntilMinutes) {
+            horarioHasta.value = currentUntil
+            return
+        }
+    }
+
+    const idealUntil = minutesToTime(fromMinutes + blockMinutes)
+    if (eligibleUntilOptions.includes(idealUntil)) {
+        horarioHasta.value = idealUntil
+        return
+    }
+
+    horarioHasta.value = eligibleUntilOptions[0]
 }
 
 function updateServiceOptions() {
@@ -1042,19 +1103,19 @@ async function setPreference(url, data) {
         try {
             responseData = raw ? JSON.parse(raw) : null;
         } catch (e) {
-            throw new Error('El horario seleccionado ya no esta disponible. Elegi otro e intenta nuevamente.');
+            throw new Error('No se pudo iniciar el pago: respuesta invalida del servidor.');
         }
 
         if (!responseData) {
-            throw new Error('El horario seleccionado ya no esta disponible. Elegi otro e intenta nuevamente.');
+            throw new Error('No se pudo iniciar el pago: servidor sin respuesta valida.');
         }
 
         if (responseData.error) {
-            throw new Error(responseData.message || 'El horario seleccionado ya no esta disponible. Elegi otro e intenta nuevamente.')
+            throw new Error(responseData.message || 'No se pudo iniciar el pago con Mercado Pago.')
         }
 
         if (!response.ok) {
-            throw new Error(responseData.message || 'El horario seleccionado ya no esta disponible. Elegi otro e intenta nuevamente.')
+            throw new Error(responseData.message || 'No se pudo iniciar el pago con Mercado Pago.')
         }
 
         return responseData.data
@@ -1637,12 +1698,14 @@ async function checkClosureStatus() {
 
 // Trae los horarios de las reservas hechas
 async function getTimeFromBookings() {
+    const requestId = ++timeBookingsRequestId
     const fecha = document.getElementById('fecha').value
 
 
     try {
         const response = await fetch(`${baseUrl}getBookings/${fecha}`);
         const responseData = await response.json();
+        if (requestId !== timeBookingsRequestId) return
 
         if (isEmptyData(responseData.data)) {
             getFieldForTimeBookings([])

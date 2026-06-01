@@ -43,6 +43,10 @@ class MercadoPagoLibrary
             $envBaseUrl = getenv('MP_BACK_URL_BASE');
             $appConfig = config('App');
             $baseUrl = rtrim($envBaseUrl ?: $appConfig->baseURL, '/') . '/';
+            $baseHost = parse_url($baseUrl, PHP_URL_HOST) ?: '';
+            if ($baseHost === 'localhost' || $baseHost === '127.0.0.1') {
+                throw new \Exception('Configuracion invalida de MP_BACK_URL_BASE: no puede apuntar a localhost para Mercado Pago.');
+            }
             $preference->back_urls = [
             "success" => $baseUrl . 'payment/success',
             "failure" => $baseUrl . 'payment/failure',
@@ -58,8 +62,7 @@ class MercadoPagoLibrary
             if (empty($preference->id)) {
                 
                 // Muestra el objeto completo en el log de PHP para ver la respuesta de error de la API
-                $logMessage = "FALLO SILENCIOSO MP: Preference ID es NULL. Objeto completo: " . print_r($preference, true);
-                error_log($logMessage);
+                log_message('error', 'FALLO MP: Preference ID NULL. base_url=' . $baseUrl . ' token_prefix=' . substr((string)$mpKeys['access_token'], 0, 10) . ' preference=' . print_r($preference, true));
 
                 // Lanza una excepción con un mensaje genérico, pero el detalle está en el log.
                 throw new \Exception("La API de Mercado Pago devolvió un error (revisa los logs de PHP para ver la respuesta de validación).");
@@ -68,7 +71,7 @@ class MercadoPagoLibrary
             $this->preferenceId = $preference->id;
             
         } catch (\Exception $e) {
-            // Captura cualquier error de la SDK, incluyendo la excepción que forzamos arriba.
+            log_message('error', 'MP setPreference exception: ' . $e->getMessage());
             throw new \Exception("Error al crear la preferencia de pago: " . $e->getMessage());
         }
     }
@@ -94,3 +97,4 @@ class MercadoPagoLibrary
         }
     }
 }
+

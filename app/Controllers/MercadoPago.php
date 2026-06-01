@@ -106,14 +106,19 @@ class MercadoPago extends BaseController
 
     private function hasBookingOverlap(BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, $date, $fieldId, $timeFrom, $timeUntil): bool
     {
-        return !(new AvailabilityService())->checkAvailability($fieldId, $date, $timeFrom, $timeUntil);
-
         $timeFrom = $bookingSlotsModel->normalizeTime($timeFrom);
         $timeUntil = $bookingSlotsModel->normalizeTime($timeUntil);
+        $pendingThreshold = date('Y-m-d H:i:s', strtotime('-5 minutes'));
 
         $bookings = $bookingsModel->where('date', $date)
             ->where('id_field', $fieldId)
             ->where('annulled', 0)
+            ->groupStart()
+                ->where('approved', 1)
+                ->orWhere('payment >', 0)
+                ->orWhere('total_payment', 1)
+                ->orWhere('booking_time >=', $pendingThreshold)
+            ->groupEnd()
             ->findAll();
 
         foreach ($bookings as $booking) {
@@ -447,6 +452,10 @@ class MercadoPago extends BaseController
 
     public function setPreference()
     {
+        $slotId = null;
+        $additionalSlotId = null;
+        $bookingId = null;
+        $createdBookingInThisAttempt = false;
         try {
             $rateModel = new RateModel();
             $rateRow = $rateModel->first();
@@ -581,6 +590,7 @@ class MercadoPago extends BaseController
                 ]);
 
                 $bookingId = $bookingsModel->getInsertID();
+                $createdBookingInThisAttempt = !empty($bookingId);
                 if ($bookingId) {
                     $bookingSlotsModel->update($slotId, ['booking_id' => $bookingId]);
                 }
@@ -635,8 +645,22 @@ class MercadoPago extends BaseController
 
             return $this->response->setJSON($this->setResponse(null, null, $preferences, 'Respuesta exitosa'));
         } catch (\Throwable $e) {
+            try {
+                if (!empty($additionalSlotId)) {
+                    $this->releaseBookingSlot($bookingSlotsModel ?? new BookingSlotsModel(), (int)$additionalSlotId);
+                }
+                if (!empty($slotId)) {
+                    $this->releaseBookingSlot($bookingSlotsModel ?? new BookingSlotsModel(), (int)$slotId);
+                }
+                if (!empty($bookingId) && $createdBookingInThisAttempt) {
+                    $bookingsModel = $bookingsModel ?? new BookingsModel();
+                    $bookingsModel->delete((int)$bookingId);
+                }
+            } catch (\Throwable $inner) {
+                log_message('error', 'Error limpiando slot/reserva fallida en setPreference: ' . $inner->getMessage());
+            }
             log_message('error', 'Error en setPreference: ' . $e->getMessage());
-            return $this->response->setJSON($this->setResponse(409, true, null, 'El horario ya fue tomado por otra reserva. Actualiza e intenta nuevamente.'));
+            return $this->response->setJSON($this->setResponse(409, true, null, 'No se pudo iniciar el pago con Mercado Pago. Revisar credenciales/configuracion de MP e intentar nuevamente.'));
         }
     }
     public function success()

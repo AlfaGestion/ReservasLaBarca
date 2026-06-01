@@ -27,6 +27,26 @@ class BookingSlotsModel extends Model
 
     protected $useTimestamps = false;
 
+    private function slotLockName($date, $fieldId): string
+    {
+        $safeDate = preg_replace('/[^0-9\-]/', '', (string)$date);
+        $safeField = preg_replace('/[^0-9]/', '', (string)$fieldId);
+        return 'booking_slot_' . $safeDate . '_' . $safeField;
+    }
+
+    private function acquireSlotLock($date, $fieldId, int $timeoutSeconds = 3): bool
+    {
+        $lock = $this->slotLockName($date, $fieldId);
+        $row = $this->db->query('SELECT GET_LOCK(?, ?) AS lck', [$lock, $timeoutSeconds])->getRowArray();
+        return isset($row['lck']) && (int)$row['lck'] === 1;
+    }
+
+    private function releaseSlotLock($date, $fieldId): void
+    {
+        $lock = $this->slotLockName($date, $fieldId);
+        $this->db->query('SELECT RELEASE_LOCK(?)', [$lock]);
+    }
+
     public function normalizeTime($time): string
     {
         $value = trim((string) $time);
@@ -105,10 +125,29 @@ class BookingSlotsModel extends Model
         $slotData['time_from'] = $this->normalizeTime($slotData['time_from'] ?? '');
         $slotData['time_until'] = $this->normalizeTime($slotData['time_until'] ?? '');
 
-        if ($this->hasActiveOverlap($slotData['date'] ?? null, $slotData['id_field'] ?? null, $slotData['time_from'], $slotData['time_until'], $ignoreBookingId)) {
+        $date = $slotData['date'] ?? null;
+        $fieldId = $slotData['id_field'] ?? null;
+        if (empty($date) || empty($fieldId)) {
             return false;
         }
 
-        return $this->insert($slotData, true);
+        if (!$this->acquireSlotLock($date, $fieldId)) {
+            return false;
+        }
+
+        try {
+            if ($this->hasActiveOverlap($date, $fieldId, $slotData['time_from'], $slotData['time_until'], $ignoreBookingId)) {
+                return false;
+            }
+
+            try {
+                return $this->insert($slotData, true);
+            } catch (\Throwable $e) {
+                // Conflictos de concurrencia o unique key: tratarlos como "slot ya tomado".
+                return false;
+            }
+        } finally {
+            $this->releaseSlotLock($date, $fieldId);
+        }
     }
 }

@@ -119,14 +119,19 @@ class Bookings extends BaseController
 
     private function hasBookingOverlap(BookingsModel $bookingsModel, BookingSlotsModel $bookingSlotsModel, $date, $fieldId, $timeFrom, $timeUntil, ?int $ignoreBookingId = null, bool $onlineOnly = true): bool
     {
-        return !(new AvailabilityService())->checkAvailability($fieldId, $date, $timeFrom, $timeUntil, $ignoreBookingId, $onlineOnly);
-
         $timeFrom = $bookingSlotsModel->normalizeTime($timeFrom);
         $timeUntil = $bookingSlotsModel->normalizeTime($timeUntil);
+        $pendingThreshold = date('Y-m-d H:i:s', strtotime('-5 minutes'));
 
         $builder = $bookingsModel->where('date', $date)
             ->where('id_field', $fieldId)
-            ->where('annulled', 0);
+            ->where('annulled', 0)
+            ->groupStart()
+                ->where('approved', 1)
+                ->orWhere('payment >', 0)
+                ->orWhere('total_payment', 1)
+                ->orWhere('booking_time >=', $pendingThreshold)
+            ->groupEnd();
 
         if ($ignoreBookingId !== null) {
             $builder->where('id !=', $ignoreBookingId);
