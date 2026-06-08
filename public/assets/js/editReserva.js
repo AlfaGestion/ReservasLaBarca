@@ -106,6 +106,19 @@ function setupLocalityAutocomplete(inputEl, datalistId) {
     })
 }
 
+function getTodayDateValue() {
+    const fechaSistema = new Date()
+    const anio = fechaSistema.getFullYear()
+    const mes = String(fechaSistema.getMonth() + 1).padStart(2, '0')
+    const dia = String(fechaSistema.getDate()).padStart(2, '0')
+    return `${anio}-${mes}-${dia}`
+}
+
+function isDateBeforeToday(dateValue) {
+    if (!dateValue) return false
+    return String(dateValue) < getTodayDateValue()
+}
+
 function normalizeTimeValue(value) {
     const raw = String(value || '').trim()
     if (!raw) return ''
@@ -149,7 +162,7 @@ let updateData
 
 document.addEventListener('DOMContentLoaded', (e) => {
     const { fecha } = getEditEls()
-    const fechaActual = new Date().toISOString().split('T')[0]
+    const fechaActual = getTodayDateValue()
     fecha.setAttribute('min', fechaActual)
     fecha.value = fechaActual;
 
@@ -219,6 +232,11 @@ document.addEventListener('click', async (e) => {
                 return;
             }
 
+            if (isDateBeforeToday(fecha.value)) {
+                alert('No se puede guardar una fecha anterior a hoy.')
+                return
+            }
+
             if (timeToMinutes(horarioDesde.value) >= timeToMinutes(horarioHasta.value) && timeToMinutes(horarioHasta.value) !== 0) {
                 alert('El horario de inicio no puede ser mayor o igual al horario de fin.')
                 return;
@@ -248,6 +266,11 @@ document.addEventListener('change', async (e) => {
 
 
         } else if (e.target.id == 'fecha') {
+            if (isDateBeforeToday(fecha.value)) {
+                alert('No se puede guardar una fecha anterior a hoy.')
+                fecha.value = getTodayDateValue()
+                return
+            }
             horarioDesde.selectedIndex = 0
             horarioHasta.selectedIndex = 0
             cancha.selectedIndex = 0

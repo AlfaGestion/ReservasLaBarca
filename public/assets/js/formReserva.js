@@ -216,19 +216,36 @@ function setupLocalityAutocomplete(inputEl, datalistId) {
     })
 }
 
+function getTodayDateValue() {
+    const fechaSistema = new Date()
+    const anio = fechaSistema.getFullYear()
+    const mes = String(fechaSistema.getMonth() + 1).padStart(2, '0')
+    const dia = String(fechaSistema.getDate()).padStart(2, '0')
+    return `${anio}-${mes}-${dia}`
+}
+
+function isDateBeforeToday(dateValue) {
+    if (!dateValue) return false
+    return String(dateValue) < getTodayDateValue()
+}
+
+function isReservationDateTimeInPast(dateValue, timeValue) {
+    if (!dateValue || !timeValue) return false
+    const normalizedTime = normalizeTimeValue(timeValue)
+    if (!normalizedTime) return false
+    const reservationDate = new Date(`${dateValue}T${normalizedTime}:00`)
+    if (Number.isNaN(reservationDate.getTime())) return false
+
+    return reservationDate <= new Date()
+}
+
 // Fecha actual por defecto
 document.addEventListener('DOMContentLoaded', async (e) => {
     if (esDomingo === '1') {
         checkSunday()
     }
 
-    const fechaSistema = new Date()
-    const anio = fechaSistema.getFullYear()
-    const mes = String(fechaSistema.getMonth() + 1).padStart(2, '0')
-    const dia = String(fechaSistema.getDate()).padStart(2, '0')
-    const fechaActual = `${anio}-${mes}-${dia}`
-
-    // const fechaActual = new Date().toISOString().split('T')[0]
+    const fechaActual = getTodayDateValue()
     fechaInput.setAttribute('min', fechaActual)
     fechaInput.value = fechaActual;
     if (addQuincho) {
@@ -291,6 +308,11 @@ document.addEventListener('change', async (e) => {
             updateServiceOptions()
             await getTimeFromBookings()
         } else if (e.target.id == 'fecha') {
+            if (isDateBeforeToday(fechaInput.value)) {
+                alert('No se puede reservar con una fecha anterior a hoy.')
+                fechaInput.value = getTodayDateValue()
+                return
+            }
             const day = new Date(fechaInput.value);
             const dayOfWeek = day.getDay();
 
@@ -410,6 +432,14 @@ document.addEventListener('click', async (e) => {
         if (e.target.id == 'confirmarReserva') {
             if (closureInfo && closureInfo.closedAll) {
                 alert('No se puede reservar en una fecha con cierre informado.')
+                return
+            }
+            if (isDateBeforeToday(fecha.value)) {
+                alert('No se puede reservar con una fecha anterior a hoy.')
+                return
+            }
+            if (isReservationDateTimeInPast(fecha.value, horarioDesde.value)) {
+                alert('No se puede reservar con una fecha u horario ya pasados.')
                 return
             }
             if (fecha.value == '' || cancha.value == '' || horarioDesde.value == '' || horarioHasta.value == '' || nombre.value == '' || telefono.value == '') {

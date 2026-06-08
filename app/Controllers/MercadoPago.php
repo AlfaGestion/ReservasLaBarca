@@ -510,6 +510,9 @@ class MercadoPago extends BaseController
                 if ($duration <= 0 || $duration !== max(1, $blockMinutes)) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'La duración seleccionada no es válida para el servicio.'));
                 }
+                if (AvailabilityService::isReservationInPast($item['fecha'], $item['horarioDesde'])) {
+                    return $this->response->setJSON($this->setResponse(409, true, null, 'No se puede reservar en una fecha u horario ya pasados.'));
+                }
                 if ($this->isClosedForDateField($item['fecha'], $item['cancha'])) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'No se puede reservar: hay un cierre informado para esa fecha.'));
                 }

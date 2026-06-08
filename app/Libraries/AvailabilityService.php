@@ -57,6 +57,32 @@ class AvailabilityService
         return $this->availabilityError($fieldId, $date, $from, $to, $ignoreBookingId, $onlineOnly) === null;
     }
 
+    public static function isReservationInPast($date, $from, ?\DateTimeInterface $now = null): bool
+    {
+        if (empty($date) || empty($from)) {
+            return false;
+        }
+
+        $timezoneName = config('App')->appTimezone ?? date_default_timezone_get();
+        $timezone = new \DateTimeZone($timezoneName);
+        $slotModel = new BookingSlotsModel();
+        $normalizedTime = $slotModel->normalizeTime($from);
+
+        $start = \DateTimeImmutable::createFromFormat('Y-m-d H:i', $date . ' ' . $normalizedTime, $timezone);
+        if (!$start) {
+            return false;
+        }
+
+        $errors = \DateTimeImmutable::getLastErrors();
+        if (($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0) {
+            return false;
+        }
+
+        $now = $now ? \DateTimeImmutable::createFromInterface($now)->setTimezone($timezone) : new \DateTimeImmutable('now', $timezone);
+
+        return $start <= $now;
+    }
+
     public function availabilityError($fieldId, $date, $from, $to, ?int $ignoreBookingId = null, bool $onlineOnly = true): ?string
     {
         $this->cleanupExpiredPending();

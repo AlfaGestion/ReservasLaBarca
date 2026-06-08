@@ -203,6 +203,9 @@ class Bookings extends BaseController
             if ($duration <= 0 || $duration !== max(1, $blockMinutes)) {
                 return 'La duración seleccionada no es válida para el servicio.';
             }
+            if (AvailabilityService::isReservationInPast($item['fecha'], $item['horarioDesde'])) {
+                return 'No se puede reservar en una fecha u horario ya pasados.';
+            }
             if ($this->isClosedForDateField($item['fecha'], $item['cancha'])) {
                 return 'No se puede reservar: hay un cierre informado para esa fecha.';
             }
