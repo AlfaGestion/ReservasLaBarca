@@ -38,7 +38,7 @@ function buildActions(customer) {
                 Acciones
             </button>
             <ul class="dropdown-menu">
-                <li><a type="button" href="${webBaseUrl}customers/editWindow/${customer.id}" class="btn btn-primary dropdown-item js-open-customer-edit" data-id="${customer.id}" data-edit-url="${webBaseUrl}customers/editWindow/${customer.id}">Editar cliente</a></li>
+                <li><button type="button" class="btn btn-primary dropdown-item js-open-customer-edit" data-id="${customer.id}" data-edit-url="${webBaseUrl}customers/editWindow/${customer.id}">Editar cliente</button></li>
                 <li><a type="button" href="${webBaseUrl}customers/deleteCustomer/${customer.id}" class="btn btn-primary dropdown-item" data-id="${customer.id}">Eliminar cliente</a></li>
             </ul>
         </div>
@@ -51,7 +51,7 @@ function openCustomerEditFrame(url) {
     const targetUrl = url.includes('?') ? `${url}&iframe=1` : `${url}?iframe=1`
 
     if (!customerEditFrame || !customerEditModal) {
-        window.location.href = targetUrl
+        console.warn('Customer edit modal is not available. Edit frame was not opened.', targetUrl)
         return false
     }
 
