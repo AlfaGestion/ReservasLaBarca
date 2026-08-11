@@ -141,8 +141,85 @@ class Customers extends BaseController
         return view('customers/register');
     }
 
+    public function registerWindow()
+    {
+        $embedded = filter_var($this->request->getGet('iframe'), FILTER_VALIDATE_BOOLEAN);
+
+        return view('customers/register_window', [
+            'embedded' => $embedded,
+        ]);
+    }
+
+    private function handleRegisterSubmission(bool $asJson = false)
+    {
+        $modelCustomers = new CustomersModel();
+
+        $areaCode = trim((string) $this->request->getVar('areaCode'));
+        $phoneInput = trim((string) $this->request->getVar('phone'));
+        $phone = $this->getCustomerOfferService()->normalizePhone($areaCode . $phoneInput);
+        $name = trim((string) $this->request->getVar('name'));
+        $lastName = trim((string) $this->request->getVar('last_name'));
+        $dni = trim((string) $this->request->getVar('dni'));
+        $city = trim((string) $this->request->getVar('city'));
+
+        $fail = static function (string $message, int $status = 422) use ($asJson) {
+            if ($asJson) {
+                return service('response')->setStatusCode($status)->setJSON([
+                    'error' => true,
+                    'code' => $status,
+                    'data' => null,
+                    'message' => $message,
+                ]);
+            }
+
+            return redirect()->to('customers/register')->with('msg', ['type' => 'danger', 'body' => $message]);
+        };
+
+        if ($phone === '' || $name === '' || $lastName === '' || $dni === '') {
+            return $fail('Debe completar todos los campos');
+        }
+
+        $this->ensureLocalityExists($city);
+
+        $existingPhone = $this->findCustomerByPhoneVariants($phone);
+        if ($existingPhone) {
+            return $fail('El telefono coincide con un usuario ya registrado');
+        }
+
+        $query = [
+            'name' => $name,
+            'last_name' => $lastName,
+            'dni' => $dni,
+            'phone' => $phone,
+            'offer' => 0,
+            'city' => $city,
+        ];
+
+        try {
+            $modelCustomers->insert($query);
+            $customerId = (int) $modelCustomers->getInsertID();
+        } catch (\Throwable $e) {
+            return $fail('Error al insertar datos: ' . $e->getMessage(), 500);
+        }
+
+        if ($asJson) {
+            return $this->response->setJSON([
+                'error' => false,
+                'code' => null,
+                'data' => [
+                    'customer_id' => $customerId,
+                ],
+                'message' => 'Cliente registrado exitosamente',
+            ]);
+        }
+
+        return redirect()->to(base_url())->with('msg', ['type' => 'success', 'body' => 'Usuario registrado correctamente']);
+    }
+
     public function dbRegister()
     {
+        return $this->handleRegisterSubmission(false);
+
         $modelCustomers = new CustomersModel();
 
         $phone = $this->request->getVar('areaCode') . $this->request->getVar('phone');
@@ -178,6 +255,11 @@ class Customers extends BaseController
         }
 
         return redirect()->to(base_url())->with('msg', ['type' => 'success', 'body' => 'Usuario registrado correctamente']);
+    }
+
+    public function registerAjax()
+    {
+        return $this->handleRegisterSubmission(true);
     }
 
     public function createOffer()

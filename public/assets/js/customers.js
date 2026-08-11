@@ -2,12 +2,14 @@ const checkCustomersWithOffer = document.getElementById('checkCustomersWithOffer
 const customersTabButton = document.getElementById('nav-customers-tab')
 const customerEditModalElement = document.getElementById('customerEditModal')
 const customerEditFrame = document.getElementById('customerEditFrame')
+const customerEditModalLabel = document.getElementById('customerEditModalLabel')
 const customerEditModal = customerEditModalElement && window.bootstrap?.Modal
     ? window.bootstrap.Modal.getOrCreateInstance(customerEditModalElement)
     : null
 
 let customersTabLoaded = false
 let customerEditModalMessageListenerAttached = false
+const customerModalSavedMessageTypes = new Set(['customer-edit-saved', 'customer-register-saved'])
 
 function escapeHtml(value) {
     return String(value ?? '')
@@ -45,19 +47,34 @@ function buildActions(customer) {
     `
 }
 
-function openCustomerEditFrame(url) {
+function setCustomerModalTitle(title) {
+    if (customerEditModalLabel && title) {
+        customerEditModalLabel.textContent = title
+    }
+}
+
+function openCustomerFrame(url, title) {
     if (!url) return false
 
     const targetUrl = url.includes('?') ? `${url}&iframe=1` : `${url}?iframe=1`
 
     if (!customerEditFrame || !customerEditModal) {
-        console.warn('Customer edit modal is not available. Edit frame was not opened.', targetUrl)
+        console.warn('Customer modal is not available. Frame was not opened.', targetUrl)
         return false
     }
 
+    setCustomerModalTitle(title)
     customerEditFrame.src = targetUrl
     customerEditModal.show()
     return true
+}
+
+function openCustomerEditFrame(url) {
+    return openCustomerFrame(url, 'Editar cliente')
+}
+
+function openCustomerRegisterFrame(url) {
+    return openCustomerFrame(url, 'Ingresar cliente')
 }
 
 function clearCustomerEditFrame() {
@@ -83,7 +100,7 @@ function attachCustomerEditModalListeners() {
             }
 
             const message = event.data || {}
-            if (message.type !== 'customer-edit-saved') {
+            if (!customerModalSavedMessageTypes.has(message.type)) {
                 return
             }
 
@@ -121,6 +138,13 @@ checkCustomersWithOffer?.addEventListener('change', async () => {
 
 document.addEventListener('click', async (e) => {
     if (e.target) {
+        const registerLink = e.target.closest?.('.js-open-customer-register')
+        if (registerLink) {
+            e.preventDefault()
+            openCustomerRegisterFrame(registerLink.dataset.registerUrl || registerLink.href)
+            return
+        }
+
         const editLink = e.target.closest?.('.js-open-customer-edit')
         if (editLink) {
             e.preventDefault()

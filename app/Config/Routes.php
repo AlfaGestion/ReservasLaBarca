@@ -121,12 +121,14 @@ $routes->group('', ['filter' => 'auth'], function ($routes) {
 
     $routes->group('customers', function ($routes) {
         $routes->get('deleteCustomer/(:any)', 'Customers::delete/$1');
+        $routes->get('registerWindow', 'Customers::registerWindow');
         $routes->post('editCustomer', 'Customers::edit');
         $routes->post('editCustomerAjax', 'Customers::editAjax');
         $routes->get('editWindow/(:any)', 'Customers::editWindow/$1');
         $routes->get('getCustomer/(:any)', 'Customers::getCustomer/$1');
         $routes->get('getCustomers', 'Customers::getCustomers');
         $routes->get('getCustomersWithOffer', 'Customers::getCustomersWithOffer');
+        $routes->post('registerAjax', 'Customers::registerAjax');
         $routes->post('setOfferTrue', 'Customers::setOfferTrue');
         $routes->post('setOfferFalse', 'Customers::setOfferFalse');
     });
