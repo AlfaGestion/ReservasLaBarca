@@ -10,8 +10,16 @@
     const previewText = document.getElementById('customerOfferPreviewText')
     const statusBadge = document.getElementById('customerOfferStatusBadge')
     const helperText = document.getElementById('customerOfferHelperText')
+    const summaryState = document.getElementById('customerOfferSummaryState')
+    const summaryValue = document.getElementById('customerOfferSummaryValue')
+    const summaryFields = document.getElementById('customerOfferSummaryFields')
+    const summaryServices = document.getElementById('customerOfferSummaryServices')
+    const summaryExpiration = document.getElementById('customerOfferSummaryExpiration')
+    const fieldScopeBox = document.querySelector('[data-scope="fields"]')
+    const serviceScopeBox = document.querySelector('[data-scope="services"]')
     const fieldCheckboxes = Array.from(document.querySelectorAll('.customer-offer-field'))
     const serviceCheckboxes = Array.from(document.querySelectorAll('.customer-offer-service'))
+    const choiceCards = Array.from(document.querySelectorAll('[data-offer-card]'))
     const valueInput = document.getElementById('customer_offer_value')
     const expirationInput = document.getElementById('customer_offer_expiration_date')
 
@@ -25,11 +33,30 @@
         return Number.isFinite(number) ? number : 0
     }
 
+    function formatPercent(value) {
+        const numeric = Number.isFinite(value) ? value : 0
+        const formatted = numeric.toFixed(2).replace(/\.?0+$/, '')
+        return formatted.replace('.', ',')
+    }
+
+    function formatDate(value) {
+        const parts = String(value ?? '').split('-')
+        if (parts.length !== 3) {
+            return value || 'Sin vencimiento'
+        }
+
+        return `${parts[2]}/${parts[1]}/${parts[0]}`
+    }
+
     function getSelectedValues(inputs) {
         return inputs
-            .filter(input => input.checked)
-            .map(input => input.value)
+            .filter((input) => input.checked)
+            .map((input) => input.value)
             .filter(Boolean)
+    }
+
+    function getPluralLabel(count, singular, plural) {
+        return `${count} ${count === 1 ? singular : plural}`
     }
 
     function buildPreviewText() {
@@ -38,21 +65,24 @@
         }
 
         const value = parseNumber(valueInput?.value || 0)
+        const fieldCount = getSelectedValues(fieldCheckboxes).length
+        const serviceCount = getSelectedValues(serviceCheckboxes).length
         const fieldLabel = applyAllFieldsSwitch?.checked
             ? 'Todas las canchas'
-            : `${getSelectedValues(fieldCheckboxes).length} cancha${getSelectedValues(fieldCheckboxes).length === 1 ? '' : 's'}`
+            : (fieldCount > 0 ? getPluralLabel(fieldCount, 'cancha', 'canchas') : 'Sin canchas')
         const serviceLabel = applyAllServicesSwitch?.checked
             ? 'Todos los servicios'
-            : `${getSelectedValues(serviceCheckboxes).length} servicio${getSelectedValues(serviceCheckboxes).length === 1 ? '' : 's'}`
-        const scope = [fieldLabel, serviceLabel].filter(Boolean).join(' | ')
-        const base = value > 0 ? `${value}% OFF` : 'Oferta sin porcentaje'
-        return `${base} | ${scope || 'Sin alcance'}`
+            : (serviceCount > 0 ? getPluralLabel(serviceCount, 'servicio', 'servicios') : 'Sin servicios')
+        const percentage = `${formatPercent(value)}% OFF`
+
+        return [percentage, fieldLabel, serviceLabel].filter(Boolean).join(' · ')
     }
 
     function syncHiddenSelection() {
         if (hiddenFields) {
-            hiddenFields.value = JSON.stringify(getSelectedValues(fieldCheckboxes).map(id => Number(id)).filter(Number.isFinite))
+            hiddenFields.value = JSON.stringify(getSelectedValues(fieldCheckboxes).map((id) => Number(id)).filter(Number.isFinite))
         }
+
         if (hiddenServices) {
             hiddenServices.value = JSON.stringify(getSelectedValues(serviceCheckboxes))
         }
@@ -71,6 +101,14 @@
             checkbox.disabled = !active || allServices
         })
 
+        if (fieldScopeBox) {
+            fieldScopeBox.classList.toggle('customer-offer-scope-muted', !active || allFields)
+        }
+
+        if (serviceScopeBox) {
+            serviceScopeBox.classList.toggle('customer-offer-scope-muted', !active || allServices)
+        }
+
         ;[valueInput, expirationInput].forEach((input) => {
             if (!input) return
             input.disabled = false
@@ -80,13 +118,56 @@
             helperText.classList.toggle('alert-secondary', !active)
             helperText.classList.toggle('alert-info', active)
             helperText.textContent = active
-                ? 'Si desactivas la oferta, la configuracion queda guardada pero no se aplicara a nuevas reservas.'
+                ? 'La oferta queda guardada por cliente y se aplicara en reservas y en Mercado Pago.'
                 : 'La oferta esta desactivada. La configuracion se conserva para reactivarla cuando quieras.'
         }
 
         if (statusBadge) {
-            statusBadge.className = `badge ${active ? 'bg-success' : 'bg-secondary'} fs-6 px-3 py-2`
+            statusBadge.classList.remove('customer-status-badge--success', 'customer-status-badge--secondary')
+            statusBadge.classList.add(active ? 'customer-status-badge--success' : 'customer-status-badge--secondary')
             statusBadge.textContent = active ? 'Descuento activo' : 'Sin descuento activo'
+        }
+    }
+
+    function syncChoiceCards() {
+        choiceCards.forEach((card) => {
+            const input = card.querySelector('input[type="checkbox"]')
+            if (!input) return
+
+            card.classList.toggle('is-selected', input.checked)
+            card.classList.toggle('is-disabled', input.disabled)
+        })
+    }
+
+    function syncSummary() {
+        const active = Boolean(activeSwitch?.checked)
+        const value = parseNumber(valueInput?.value || 0)
+        const fieldCount = getSelectedValues(fieldCheckboxes).length
+        const serviceCount = getSelectedValues(serviceCheckboxes).length
+        const expirationValue = expirationInput?.value ? formatDate(expirationInput.value) : 'Sin vencimiento'
+
+        if (summaryState) {
+            summaryState.textContent = active ? 'Activo' : 'Inactivo'
+        }
+
+        if (summaryValue) {
+            summaryValue.textContent = `${formatPercent(value)}%`
+        }
+
+        if (summaryFields) {
+            summaryFields.textContent = applyAllFieldsSwitch?.checked
+                ? 'Todas las canchas'
+                : (fieldCount > 0 ? getPluralLabel(fieldCount, 'cancha', 'canchas') : 'Sin canchas')
+        }
+
+        if (summaryServices) {
+            summaryServices.textContent = applyAllServicesSwitch?.checked
+                ? 'Todos los servicios'
+                : (serviceCount > 0 ? getPluralLabel(serviceCount, 'servicio', 'servicios') : 'Sin servicios')
+        }
+
+        if (summaryExpiration) {
+            summaryExpiration.textContent = expirationValue
         }
 
         if (previewText) {
@@ -97,6 +178,8 @@
     function syncState() {
         syncHiddenSelection()
         syncDisabledState()
+        syncChoiceCards()
+        syncSummary()
     }
 
     activeSwitch?.addEventListener('change', syncState)
