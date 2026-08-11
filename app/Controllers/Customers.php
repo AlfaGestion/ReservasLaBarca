@@ -138,7 +138,10 @@ class Customers extends BaseController
 
     public function register()
     {
-        return view('customers/register');
+        return view('customers/register_window', [
+            'embedded' => false,
+            'suppressPublicRegisterModal' => true,
+        ]);
     }
 
     public function registerWindow()
