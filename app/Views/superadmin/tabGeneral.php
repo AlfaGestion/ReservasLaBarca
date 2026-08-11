@@ -1,6 +1,6 @@
 <div id="generalButtons" class="mt-3">
     <?php if (session()->superadmin) : ?>
-        <a href="<?= base_url('auth/register') ?>" class="btn btn-success mt-2 mb-2 js-open-superadmin-user-management" id="openUserManagement" data-register-url="<?= base_url('auth/registerWindow') ?>" data-fallback-url="<?= base_url('auth/register') ?>" role="button">
+        <a href="<?= base_url('auth/registerWindow') ?>" class="btn btn-success mt-2 mb-2 js-open-superadmin-user-management" id="openUserManagement" data-register-url="<?= base_url('auth/registerWindow') ?>" data-fallback-url="<?= base_url('auth/registerWindow') ?>" role="button">
             <i class="fa-solid fa-user-plus me-1"></i>Crear usuario
         </a>
         <button type="button" class="btn btn-warning mt-2 mb-2" id="openRateModal" data-bs-toggle="modal" data-bs-target="#rateModal"><i class="fa-solid fa-percent me-1"></i>Editar porcentaje de reserva</button>
@@ -384,10 +384,10 @@
                         <td><?= $user['superadmin'] == 1 ? 'Si' : 'No' ?></td>
                         <td>
                             <a
-                                href="<?= base_url('auth/register?user_id=' . $user['id']) ?>"
+                                href="<?= base_url('auth/registerWindow?user_id=' . $user['id']) ?>"
                                 class="btn btn-primary me-2 js-open-superadmin-user-management"
                                 data-register-url="<?= base_url('auth/registerWindow') ?>"
-                                data-fallback-url="<?= base_url('auth/register') ?>"
+                                data-fallback-url="<?= base_url('auth/registerWindow') ?>"
                                 data-user-id="<?= $user['id'] ?>"
                                 role="button"
                             >Editar</a>

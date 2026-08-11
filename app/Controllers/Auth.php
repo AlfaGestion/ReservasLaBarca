@@ -11,8 +11,9 @@ class Auth extends BaseController
         $modelUsers = new UsersModel();
         $users = $modelUsers->findAll();
         $selectedUserId = (int) $this->request->getGet('user_id');
+        $view = $embedded ? 'auth/register_window' : 'auth/register';
 
-        return view('auth/register', [
+        return view($view, [
             'users' => $users,
             'embedded' => $embedded,
             'selectedUserId' => $selectedUserId > 0 ? $selectedUserId : null,

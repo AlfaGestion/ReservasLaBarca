@@ -9,6 +9,10 @@
     const buttonEdit = document.getElementById('buttonEdit');
     const feedbackBox = document.getElementById('userRegisterFeedback');
     const editFormContainer = document.getElementById('formselectUser');
+    const titleElement = document.getElementById('userFormTitle');
+    const previewElement = document.getElementById('userManagementPreviewText');
+    const statusBadgeElement = document.getElementById('userRegisterStatusBadge');
+    const cancelButton = document.getElementById('cancelUserManagement');
 
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, (character) => {
@@ -47,6 +51,24 @@
         }
     }
 
+    function setModeLabels(mode) {
+        const isEditMode = mode === 'edit';
+
+        if (titleElement) {
+            titleElement.textContent = isEditMode ? 'Editar usuario' : 'Crear usuario nuevo';
+        }
+
+        if (previewElement) {
+            previewElement.textContent = isEditMode ? 'Modo edicion' : 'Nuevo usuario';
+        }
+
+        if (statusBadgeElement) {
+            statusBadgeElement.textContent = isEditMode ? 'Editando usuario' : 'Nuevo usuario';
+            statusBadgeElement.classList.toggle('customer-status-badge--success', isEditMode);
+            statusBadgeElement.classList.toggle('customer-status-badge--secondary', !isEditMode);
+        }
+    }
+
     function syncCsrfTokens(payload) {
         const csrf = payload?.csrf;
         if (!csrf?.name || !csrf?.hash) {
@@ -81,6 +103,8 @@
         if (editFormContainer) {
             editFormContainer.innerHTML = '';
         }
+
+        setModeLabels('create');
     }
 
     function showEditMode() {
@@ -91,6 +115,8 @@
         if (formButtons) {
             formButtons.classList.remove('d-none');
         }
+
+        setModeLabels('edit');
     }
 
     async function getUser(id) {
@@ -289,6 +315,19 @@
         }
     });
 
+    if (cancelButton) {
+        cancelButton.addEventListener('click', () => {
+            clearFeedback();
+
+            if (selectUser) {
+                selectUser.value = '';
+                selectUser.dispatchEvent(new Event('change', { bubbles: true }));
+            } else {
+                showCreateMode();
+            }
+        });
+    }
+
     document.addEventListener('click', (event) => {
         if (!buttonEdit || event.target !== buttonEdit) {
             return;
@@ -304,5 +343,7 @@
     if (initialUserId && selectUser) {
         selectUser.value = String(initialUserId);
         selectUser.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+        showCreateMode();
     }
 })();
