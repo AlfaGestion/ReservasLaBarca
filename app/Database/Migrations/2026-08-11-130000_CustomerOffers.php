@@ -139,7 +139,6 @@ class CustomerOffers extends Migration
             $this->forge->addKey('id', true);
             $this->forge->addUniqueKey(['customer_offer_id', 'service_code'], 'uq_customer_offer_services_offer_service');
             $this->forge->addForeignKey('customer_offer_id', 'customer_offers', 'id', 'CASCADE', 'CASCADE');
-            $this->forge->addForeignKey('service_code', 'services', 'code', 'CASCADE', 'CASCADE');
             $this->forge->createTable('customer_offer_services');
         }
 

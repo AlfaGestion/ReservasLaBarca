@@ -248,8 +248,7 @@ CREATE TABLE IF NOT EXISTS `customer_offer_services` (
   `updated_at` DATETIME NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_customer_offer_services_offer_service` (`customer_offer_id`, `service_code`),
-  CONSTRAINT `fk_customer_offer_services_offer` FOREIGN KEY (`customer_offer_id`) REFERENCES `customer_offers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_customer_offer_services_service` FOREIGN KEY (`service_code`) REFERENCES `services` (`code`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `fk_customer_offer_services_offer` FOREIGN KEY (`customer_offer_id`) REFERENCES `customer_offers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 
 ALTER TABLE `bookings`
