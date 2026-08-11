@@ -45,6 +45,7 @@ $customerOfferEditorPath = FCPATH . 'assets/js/customerOfferEditor.js';
 $customerOfferEditorVersion = is_file($customerOfferEditorPath) ? filemtime($customerOfferEditorPath) : time();
 $customerOfferCssPath = FCPATH . 'assets/css/customer-editor.css';
 $customerOfferCssVersion = is_file($customerOfferCssPath) ? filemtime($customerOfferCssPath) : time();
+$embedded = ! empty($embedded);
 ?>
 <?php echo $this->extend('templates/dashboard_panel') ?>
 
@@ -53,7 +54,7 @@ $customerOfferCssVersion = is_file($customerOfferCssPath) ? filemtime($customerO
 <?php echo $this->endSection() ?>
 
 <?php echo $this->section('bodyClass') ?>
-customer-editor-page
+customer-editor-page<?= $embedded ? ' customer-editor-frame' : '' ?>
 <?php echo $this->endSection() ?>
 
 <?php echo $this->section('styles') ?>
@@ -87,7 +88,7 @@ customer-editor-page
         </header>
 
         <main class="customer-editor-body">
-            <form action="<?= base_url('customers/editCustomer') ?>" method="POST" id="customerOfferForm">
+            <form action="<?= base_url($embedded ? 'customers/editCustomerAjax' : 'customers/editCustomer') ?>" method="POST" id="customerOfferForm">
                 <?php if (session('msg')) : ?>
                     <div class="alert alert-<?= session('msg.type') ?> alert-dismissible fade show" role="alert">
                         <small><?= esc(session('msg.body')) ?></small>
@@ -95,6 +96,7 @@ customer-editor-page
                     </div>
                 <?php endif; ?>
 
+                <div id="customerOfferFeedback" class="mb-3"></div>
                 <input type="hidden" value="<?= esc((string) ($customer['id'] ?? '')) ?>" name="idCustomer">
                 <input type="hidden" id="customer_offer_fields_json" name="customer_offer_fields_json" value="<?= esc(json_encode($selectedFieldIds, JSON_UNESCAPED_UNICODE)) ?>">
                 <input type="hidden" id="customer_offer_services_json" name="customer_offer_services_json" value="<?= esc(json_encode($selectedServiceCodes, JSON_UNESCAPED_UNICODE)) ?>">
@@ -263,12 +265,13 @@ customer-editor-page
 <?php echo $this->endSection() ?>
 
 <?php echo $this->section('scripts') ?>
-<script>
-    window.customerOfferEditorState = {
-        active: <?= $offerActive ? 'true' : 'false' ?>,
-        applyAllFields: <?= $applyAllFields ? 'true' : 'false' ?>,
-        applyAllServices: <?= $applyAllServices ? 'true' : 'false' ?>
-    };
-</script>
+    <script>
+        window.customerOfferEditorState = {
+            active: <?= $offerActive ? 'true' : 'false' ?>,
+            applyAllFields: <?= $applyAllFields ? 'true' : 'false' ?>,
+            applyAllServices: <?= $applyAllServices ? 'true' : 'false' ?>,
+            frameMode: <?= $embedded ? 'true' : 'false' ?>
+        };
+    </script>
 <script src="<?= base_url(PUBLIC_FOLDER . 'assets/js/customerOfferEditor.js?v=' . $customerOfferEditorVersion) ?>"></script>
 <?php echo $this->endSection() ?>

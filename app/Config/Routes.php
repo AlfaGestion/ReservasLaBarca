@@ -122,6 +122,7 @@ $routes->group('', ['filter' => 'auth'], function ($routes) {
     $routes->group('customers', function ($routes) {
         $routes->get('deleteCustomer/(:any)', 'Customers::delete/$1');
         $routes->post('editCustomer', 'Customers::edit');
+        $routes->post('editCustomerAjax', 'Customers::editAjax');
         $routes->get('editWindow/(:any)', 'Customers::editWindow/$1');
         $routes->get('getCustomer/(:any)', 'Customers::getCustomer/$1');
         $routes->get('getCustomers', 'Customers::getCustomers');

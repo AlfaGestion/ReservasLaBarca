@@ -1,7 +1,13 @@
 const checkCustomersWithOffer = document.getElementById('checkCustomersWithOffer')
 const customersTabButton = document.getElementById('nav-customers-tab')
+const customerEditModalElement = document.getElementById('customerEditModal')
+const customerEditFrame = document.getElementById('customerEditFrame')
+const customerEditModal = customerEditModalElement && window.bootstrap?.Modal
+    ? window.bootstrap.Modal.getOrCreateInstance(customerEditModalElement)
+    : null
 
 let customersTabLoaded = false
+let customerEditModalMessageListenerAttached = false
 
 function escapeHtml(value) {
     return String(value ?? '')
@@ -32,12 +38,66 @@ function buildActions(customer) {
                 Acciones
             </button>
             <ul class="dropdown-menu">
-                <li><a type="button" href="${webBaseUrl}customers/editWindow/${customer.id}" class="btn btn-primary dropdown-item" data-id="${customer.id}">Editar cliente</a></li>
+                <li><a type="button" href="${webBaseUrl}customers/editWindow/${customer.id}" class="btn btn-primary dropdown-item js-open-customer-edit" data-id="${customer.id}" data-edit-url="${webBaseUrl}customers/editWindow/${customer.id}">Editar cliente</a></li>
                 <li><a type="button" href="${webBaseUrl}customers/deleteCustomer/${customer.id}" class="btn btn-primary dropdown-item" data-id="${customer.id}">Eliminar cliente</a></li>
             </ul>
         </div>
     `
 }
+
+function openCustomerEditFrame(url) {
+    if (!url) return false
+
+    const targetUrl = url.includes('?') ? `${url}&iframe=1` : `${url}?iframe=1`
+
+    if (!customerEditFrame || !customerEditModal) {
+        window.location.href = targetUrl
+        return false
+    }
+
+    customerEditFrame.src = targetUrl
+    customerEditModal.show()
+    return true
+}
+
+function clearCustomerEditFrame() {
+    if (customerEditFrame) {
+        customerEditFrame.src = 'about:blank'
+    }
+}
+
+function attachCustomerEditModalListeners() {
+    if (customerEditModalElement && !customerEditModalElement.dataset.customerEditModalInit) {
+        customerEditModalElement.dataset.customerEditModalInit = '1'
+
+        customerEditModalElement.addEventListener('hidden.bs.modal', () => {
+            clearCustomerEditFrame()
+        })
+    }
+
+    if (!customerEditModalMessageListenerAttached) {
+        customerEditModalMessageListenerAttached = true
+        window.addEventListener('message', async (event) => {
+            if (event.origin !== window.location.origin) {
+                return
+            }
+
+            const message = event.data || {}
+            if (message.type !== 'customer-edit-saved') {
+                return
+            }
+
+            if (customerEditModal) {
+                customerEditModal.hide()
+            }
+
+            clearCustomerEditFrame()
+            await refreshCustomersList()
+        })
+    }
+}
+
+attachCustomerEditModalListeners()
 
 async function loadInitialCustomers() {
     await searchCustomer(`${baseUrl}customers/getCustomers?limit=50`)
@@ -61,6 +121,13 @@ checkCustomersWithOffer?.addEventListener('change', async () => {
 
 document.addEventListener('click', async (e) => {
     if (e.target) {
+        const editLink = e.target.closest?.('.js-open-customer-edit')
+        if (editLink) {
+            e.preventDefault()
+            openCustomerEditFrame(editLink.dataset.editUrl || editLink.href)
+            return
+        }
+
         if (e.target.id == 'searchCustomerButton') {
             if (checkCustomersWithOffer) {
                 checkCustomersWithOffer.checked = false

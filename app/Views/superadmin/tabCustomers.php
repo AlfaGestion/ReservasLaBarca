@@ -39,3 +39,78 @@
         </tbody>
     </table>
 </div>
+
+<style>
+    .customer-edit-modal .modal-dialog {
+        width: min(96vw, 1120px);
+        max-width: none;
+    }
+
+    .customer-edit-modal .modal-content {
+        overflow: hidden;
+        border: 1px solid #d8e6f4;
+        border-radius: 16px;
+        box-shadow: 0 24px 60px rgba(15, 54, 97, 0.22);
+        background: #f8fbff;
+    }
+
+    .customer-edit-modal .modal-header {
+        background: linear-gradient(135deg, #f4f8fd 0%, #eaf2fb 100%);
+        border-bottom: 1px solid #d6e2ef;
+        padding: 1rem 1.25rem;
+    }
+
+    .customer-edit-modal .modal-title {
+        font-weight: 700;
+        color: #17324d;
+        letter-spacing: 0.01em;
+    }
+
+    .customer-edit-modal .modal-body {
+        background: #f8fbff;
+    }
+
+    .customer-edit-frame {
+        display: block;
+        width: 100%;
+        height: min(82vh, 920px);
+        border: 0;
+        background: #ffffff;
+    }
+
+    body.theme-dark .customer-edit-modal .modal-content {
+        background: #182d42;
+        border-color: #33506e;
+    }
+
+    body.theme-dark .customer-edit-modal .modal-header {
+        background: linear-gradient(135deg, #1d344a 0%, #16283b 100%);
+        border-bottom-color: #33506e;
+    }
+
+    body.theme-dark .customer-edit-modal .modal-title {
+        color: #e7f1fb;
+    }
+
+    body.theme-dark .customer-edit-modal .modal-body {
+        background: #182d42;
+    }
+
+    body.theme-dark .customer-edit-frame {
+        background: #182d42;
+    }
+</style>
+
+<div class="modal fade customer-edit-modal" id="customerEditModal" tabindex="-1" aria-labelledby="customerEditModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="customerEditModalLabel">Editar cliente</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-0">
+                <iframe id="customerEditFrame" class="customer-edit-frame" title="Editar cliente"></iframe>
+            </div>
+        </div>
+    </div>
+</div>

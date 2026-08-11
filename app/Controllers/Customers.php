@@ -202,6 +202,7 @@ class Customers extends BaseController
         $customersModel = new CustomersModel();
         $customer = $customersModel->find($id);
         $customer = $customer ? $this->enrichCustomerWithOffer($customer, $this->getCustomerOfferService()) : null;
+        $embedded = filter_var($this->request->getGet('iframe'), FILTER_VALIDATE_BOOLEAN);
 
         $fieldsModel = new FieldsModel();
         $servicesModel = new ServicesModel();
@@ -212,6 +213,7 @@ class Customers extends BaseController
             'fields' => $fieldsModel->getFields(),
             'services' => $servicesModel->getServices(),
             'customerOffer' => $customer['customer_offer'] ?? null,
+            'embedded' => $embedded,
         ]);
     }
 
@@ -375,6 +377,183 @@ class Customers extends BaseController
                 $db->transRollback();
             }
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'El cliente no se pudo editar: ' . $e->getMessage()]);
+        }
+    }
+
+    public function editAjax()
+    {
+        $customersModel = new CustomersModel();
+        $customerOffersModel = new CustomerOffersModel();
+        $customerOfferFieldsModel = new CustomerOfferFieldsModel();
+        $customerOfferServicesModel = new CustomerOfferServicesModel();
+        $fieldsModel = new FieldsModel();
+        $servicesModel = new ServicesModel();
+        $servicesModel->ensureDefaultServices();
+        $db = \Config\Database::connect();
+
+        $id = (int) $this->request->getVar('idCustomer');
+        $phone = trim((string) $this->request->getVar('phone'));
+        $name = trim((string) $this->request->getVar('name'));
+        $lastName = trim((string) $this->request->getVar('last_name'));
+        $dni = trim((string) $this->request->getVar('dni'));
+        $city = trim((string) $this->request->getVar('city'));
+        $activeSwitch = $this->request->getVar('customer_offer_active') ? 1 : 0;
+        $value = (float) parse_price_ar($this->request->getVar('customer_offer_value'));
+        $description = trim((string) $this->request->getVar('customer_offer_description'));
+        $expirationDate = trim((string) $this->request->getVar('customer_offer_expiration_date'));
+        $applyAllFields = $this->request->getVar('customer_offer_apply_all_fields') ? 1 : 0;
+        $applyAllServices = $this->request->getVar('customer_offer_apply_all_services') ? 1 : 0;
+        $fieldIds = $this->decodeSelectionList($this->request->getVar('customer_offer_fields_json') ?? $this->request->getVar('customer_offer_fields'));
+        $serviceCodes = $this->decodeSelectionList($this->request->getVar('customer_offer_services_json') ?? $this->request->getVar('customer_offer_services'));
+
+        $fail = static function (string $message, int $status = 422) {
+            return service('response')->setStatusCode($status)->setJSON([
+                'error' => true,
+                'code' => $status,
+                'data' => null,
+                'message' => $message,
+            ]);
+        };
+
+        if ($id <= 0 || $phone === '' || $name === '' || $lastName === '' || $dni === '') {
+            return $fail('Debe completar todos los campos obligatorios');
+        }
+
+        if ($value < 0 || $value > 100) {
+            return $fail('El porcentaje de descuento debe estar entre 0 y 100');
+        }
+
+        if (! $this->isValidDate($expirationDate)) {
+            return $fail('La fecha de vencimiento no es valida');
+        }
+
+        $existingCustomer = $customersModel->find($id);
+        if (! $existingCustomer) {
+            return $fail('El cliente no existe');
+        }
+
+        $phoneConflict = $this->findCustomerByPhoneVariants($phone, $id);
+        if ($phoneConflict) {
+            return $fail('El teléfono ya pertenece a otro cliente');
+        }
+
+        $fieldIds = array_values(array_unique(array_filter(array_map('intval', $fieldIds), static fn ($fieldId) => $fieldId > 0)));
+        $serviceCodes = array_values(array_unique(array_filter(array_map(static fn ($code) => strtolower(trim((string) $code)), $serviceCodes), static fn ($code) => $code !== '')));
+
+        $validatedFieldIds = [];
+        foreach ($fieldIds as $fieldId) {
+            if (! $fieldsModel->getField($fieldId)) {
+                return $fail('Una de las canchas seleccionadas no existe');
+            }
+            $validatedFieldIds[] = $fieldId;
+        }
+
+        $validatedServiceCodes = [];
+        foreach ($serviceCodes as $serviceCode) {
+            if (! $servicesModel->getByCode($serviceCode)) {
+                return $fail('Uno de los servicios seleccionados no existe');
+            }
+            $validatedServiceCodes[] = $serviceCode;
+        }
+
+        $customerOfferActive = ($activeSwitch === 1 && $value > 0) ? 1 : 0;
+        $hasOfferConfig = $customerOfferActive === 1
+            || $value > 0
+            || $description !== ''
+            || $expirationDate !== ''
+            || $applyAllFields === 1
+            || $applyAllServices === 1
+            || $validatedFieldIds !== []
+            || $validatedServiceCodes !== [];
+
+        if ($customerOfferActive === 1
+            && $applyAllFields !== 1
+            && $applyAllServices !== 1
+            && $validatedFieldIds === []
+            && $validatedServiceCodes === []
+        ) {
+            return $fail('Debes seleccionar al menos una cancha o un servicio, o marcar todas las canchas/servicios');
+        }
+
+        $customerPayload = [
+            'name' => $name,
+            'last_name' => $lastName,
+            'dni' => $dni,
+            'phone' => $phone,
+            'offer' => $customerOfferActive,
+            'city' => $city,
+        ];
+
+        try {
+            $db->transBegin();
+
+            $customersModel->update($id, $customerPayload);
+
+            $existingOffer = $customerOffersModel->where('customer_id', $id)->first();
+            $offerPayload = [
+                'customer_id' => $id,
+                'value' => $value,
+                'description' => $description !== '' ? $description : null,
+                'expiration_date' => $expirationDate !== '' ? $expirationDate : null,
+                'active' => $customerOfferActive,
+                'apply_all_fields' => $applyAllFields,
+                'apply_all_services' => $applyAllServices,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ];
+
+            if ($existingOffer) {
+                $customerOffersModel->update($existingOffer['id'], $offerPayload);
+                $offerId = (int) $existingOffer['id'];
+            } else {
+                $offerPayload['created_at'] = date('Y-m-d H:i:s');
+                $customerOffersModel->insert($offerPayload);
+                $offerId = (int) $customerOffersModel->getInsertID();
+            }
+
+            if ($offerId > 0 && $hasOfferConfig) {
+                $customerOfferFieldsModel->where('customer_offer_id', $offerId)->delete();
+                $customerOfferServicesModel->where('customer_offer_id', $offerId)->delete();
+
+                $timestamp = date('Y-m-d H:i:s');
+                foreach ($validatedFieldIds as $fieldId) {
+                    $customerOfferFieldsModel->insert([
+                        'customer_offer_id' => $offerId,
+                        'field_id' => $fieldId,
+                        'created_at' => $timestamp,
+                        'updated_at' => $timestamp,
+                    ]);
+                }
+
+                foreach ($validatedServiceCodes as $serviceCode) {
+                    $customerOfferServicesModel->insert([
+                        'customer_offer_id' => $offerId,
+                        'service_code' => $serviceCode,
+                        'created_at' => $timestamp,
+                        'updated_at' => $timestamp,
+                    ]);
+                }
+            }
+
+            if ($db->transStatus() === false) {
+                $db->transRollback();
+                return $fail('No se pudo guardar la oferta personalizada', 500);
+            }
+
+            $db->transCommit();
+
+            return $this->response->setJSON([
+                'error' => false,
+                'code' => null,
+                'data' => [
+                    'customer_id' => $id,
+                ],
+                'message' => 'Cliente editado exitosamente',
+            ]);
+        } catch (\Throwable $e) {
+            if ($db->transStatus() === false) {
+                $db->transRollback();
+            }
+            return $fail('El cliente no se pudo editar: ' . $e->getMessage(), 500);
         }
     }
 

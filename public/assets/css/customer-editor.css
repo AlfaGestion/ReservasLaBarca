@@ -17,6 +17,17 @@ body.customer-editor-page .customer-editor-wrap {
     padding: 24px 14px 32px;
 }
 
+body.customer-editor-page.customer-editor-frame .site-navbar,
+body.customer-editor-page.customer-editor-frame .site-footer,
+body.customer-editor-page.customer-editor-frame footer {
+    display: none !important;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-editor-wrap {
+    width: 100%;
+    padding: 12px 10px 16px;
+}
+
 body.customer-editor-page .customer-editor-shell {
     overflow: hidden;
     border: 1px solid rgba(18, 57, 95, 0.12);

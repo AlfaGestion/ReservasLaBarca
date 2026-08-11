@@ -2,11 +2,15 @@
     const form = document.getElementById('customerOfferForm')
     if (!form) return
 
+    const editorState = window.customerOfferEditorState || {}
+    const frameMode = Boolean(editorState.frameMode || window.top !== window.self)
+
     const activeSwitch = document.getElementById('customer_offer_active')
     const applyAllFieldsSwitch = document.getElementById('customer_offer_apply_all_fields')
     const applyAllServicesSwitch = document.getElementById('customer_offer_apply_all_services')
     const hiddenFields = document.getElementById('customer_offer_fields_json')
     const hiddenServices = document.getElementById('customer_offer_services_json')
+    const feedbackBox = document.getElementById('customerOfferFeedback')
     const previewText = document.getElementById('customerOfferPreviewText')
     const statusBadge = document.getElementById('customerOfferStatusBadge')
     const helperText = document.getElementById('customerOfferHelperText')
@@ -22,6 +26,30 @@
     const choiceCards = Array.from(document.querySelectorAll('[data-offer-card]'))
     const valueInput = document.getElementById('customer_offer_value')
     const expirationInput = document.getElementById('customer_offer_expiration_date')
+    const submitButton = form.querySelector('button[type="submit"]')
+
+    function showFeedback(type, message) {
+        if (!feedbackBox) return
+
+        feedbackBox.innerHTML = ''
+
+        const alert = document.createElement('div')
+        alert.className = `alert alert-${type} alert-dismissible fade show`
+        alert.setAttribute('role', 'alert')
+
+        const small = document.createElement('small')
+        small.textContent = message
+
+        const closeButton = document.createElement('button')
+        closeButton.type = 'button'
+        closeButton.className = 'btn-close'
+        closeButton.setAttribute('data-bs-dismiss', 'alert')
+        closeButton.setAttribute('aria-label', 'Cerrar')
+
+        alert.appendChild(small)
+        alert.appendChild(closeButton)
+        feedbackBox.appendChild(alert)
+    }
 
     function parseNumber(value) {
         const normalized = String(value ?? '')
@@ -73,9 +101,8 @@
         const serviceLabel = applyAllServicesSwitch?.checked
             ? 'Todos los servicios'
             : (serviceCount > 0 ? getPluralLabel(serviceCount, 'servicio', 'servicios') : 'Sin servicios')
-        const percentage = `${formatPercent(value)}% OFF`
 
-        return [percentage, fieldLabel, serviceLabel].filter(Boolean).join(' · ')
+        return [`${formatPercent(value)}% OFF`, fieldLabel, serviceLabel].filter(Boolean).join(' · ')
     }
 
     function syncHiddenSelection() {
@@ -182,6 +209,57 @@
         syncSummary()
     }
 
+    async function handleSubmit(event) {
+        syncState()
+
+        if (!frameMode) {
+            return
+        }
+
+        event.preventDefault()
+        showFeedback('info', 'Guardando cambios...')
+        if (submitButton) {
+            submitButton.disabled = true
+        }
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    Accept: 'application/json',
+                },
+                body: new FormData(form),
+            })
+
+            const payload = await response.json().catch(() => null)
+
+            if (!response.ok || !payload || payload.error) {
+                showFeedback('danger', (payload && payload.message) ? payload.message : 'No se pudo guardar la oferta personalizada')
+                return
+            }
+
+            showFeedback('success', payload.message || 'Cliente editado exitosamente')
+
+            window.setTimeout(() => {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'customer-edit-saved',
+                        customerId: payload?.data?.customer_id ?? null,
+                        message: payload.message || 'Cliente editado exitosamente',
+                    }, window.location.origin)
+                }
+            }, 250)
+        } catch (error) {
+            console.error('Error saving customer offer:', error)
+            showFeedback('danger', 'No se pudo guardar la oferta personalizada')
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false
+            }
+        }
+    }
+
     activeSwitch?.addEventListener('change', syncState)
     applyAllFieldsSwitch?.addEventListener('change', syncState)
     applyAllServicesSwitch?.addEventListener('change', syncState)
@@ -189,7 +267,7 @@
     serviceCheckboxes.forEach((checkbox) => checkbox.addEventListener('change', syncState))
     valueInput?.addEventListener('input', syncState)
     expirationInput?.addEventListener('change', syncState)
-    form.addEventListener('submit', syncState)
+    form.addEventListener('submit', handleSubmit)
 
     syncState()
 })()
