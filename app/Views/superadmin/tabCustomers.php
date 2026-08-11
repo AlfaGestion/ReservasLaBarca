@@ -79,25 +79,31 @@
     }
 
     body.theme-dark .customer-edit-modal .modal-content {
-        background: #182d42;
-        border-color: #33506e;
+        background: linear-gradient(180deg, rgba(16, 33, 52, 0.98) 0%, rgba(13, 25, 38, 0.98) 100%);
+        border-color: rgba(177, 212, 240, 0.16);
+        box-shadow: 0 28px 70px rgba(0, 0, 0, 0.50);
     }
 
     body.theme-dark .customer-edit-modal .modal-header {
-        background: linear-gradient(135deg, #1d344a 0%, #16283b 100%);
-        border-bottom-color: #33506e;
+        background: linear-gradient(135deg, rgba(14, 28, 44, 0.98) 0%, rgba(20, 38, 58, 0.96) 100%);
+        border-bottom-color: rgba(177, 212, 240, 0.10);
     }
 
     body.theme-dark .customer-edit-modal .modal-title {
-        color: #e7f1fb;
+        color: #eff7ff;
     }
 
     body.theme-dark .customer-edit-modal .modal-body {
-        background: #182d42;
+        background: #0f1d2c;
     }
 
     body.theme-dark .customer-edit-frame {
-        background: #182d42;
+        background: #0f1d2c;
+    }
+
+    body.theme-dark .customer-edit-modal .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
+        opacity: 0.92;
     }
 </style>
 
