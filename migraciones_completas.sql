@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS `bookings` (
 -- 2023-08-18-205358_Payments
 CREATE TABLE IF NOT EXISTS `payments` (
   `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `id_user` INT(11) UNSIGNED NOT NULL,
+  `id_user` INT(11) UNSIGNED NULL,
   `id_booking` INT(11) UNSIGNED NOT NULL,
   `id_customer` INT(11) UNSIGNED NULL,
   `id_mercado_pago` INT(11) UNSIGNED NULL,

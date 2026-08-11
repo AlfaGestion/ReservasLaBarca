@@ -111,7 +111,7 @@ class Home extends BaseController
         $paymentsModel = new \App\Models\PaymentsModel();
         $bookingSlotsModel = new BookingSlotsModel();
 
-        $nueva_hora = date("Y-m-d H:i:s", strtotime("-5 minutes"));
+        $nueva_hora = date("Y-m-d H:i:s", strtotime("-15 minutes"));
 
         try {
             // Expira slots pendientes vencidos
@@ -151,14 +151,19 @@ class Home extends BaseController
                     'booking_id' => $idsToDelete,
                 ]);
 
-                // 1. Borrar de la tabla 'payments' (la que dio el error ahora)
+                // 1. Borrar de la tabla 'payments' (solo registros sin pago aprobado)
                 $paymentsModel->whereIn('id_booking', $idsToDelete)->delete();
 
-                // 2. Borrar de la tabla 'mercado_pago'
+                // 2. Borrar de la tabla 'mercado_pago' (solo registros sin pago aprobado)
                 $mercadoPagoModel->whereIn('id_booking', $idsToDelete)->delete();
 
-                // 3. Finalmente borrar la reserva 'bookings'
-                $bookingsModel->delete($idsToDelete);
+                // 3. Mantener la reserva para que un pago tardio aprobado pueda recuperarla,
+                //    pero liberarla para la disponibilidad.
+                $bookingsModel->whereIn('id', $idsToDelete)->set([
+                    'annulled' => 1,
+                    'approved' => 0,
+                    'mp' => 0,
+                ])->update();
             }
 
             return $this->response->setJSON($this->setResponse(null, null, null, 'Limpieza exitosa de todas las tablas'));

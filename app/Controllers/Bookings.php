@@ -121,7 +121,7 @@ class Bookings extends BaseController
     {
         $timeFrom = $bookingSlotsModel->normalizeTime($timeFrom);
         $timeUntil = $bookingSlotsModel->normalizeTime($timeUntil);
-        $pendingThreshold = date('Y-m-d H:i:s', strtotime('-5 minutes'));
+        $pendingThreshold = date('Y-m-d H:i:s', strtotime('-15 minutes'));
 
         $builder = $bookingsModel->where('date', $date)
             ->where('id_field', $fieldId)
@@ -228,7 +228,7 @@ class Bookings extends BaseController
             'time_until' => $this->normalizeTime($item['horarioHasta']),
             'status' => $status,
             'active' => 1,
-            'expires_at' => $status === 'pending' ? date('Y-m-d H:i:s', strtotime('+5 minutes')) : null,
+            'expires_at' => $status === 'pending' ? date('Y-m-d H:i:s', strtotime('+15 minutes')) : null,
             'created_at' => date('Y-m-d H:i:s'),
         ];
 
@@ -1171,10 +1171,14 @@ class Bookings extends BaseController
             if ($monto <= 0 && $metodo === 'mercado_pago') {
                 $monto = ($payment['booking_total_payment'] ?? 0) ? ($payment['booking_total'] ?? 0) : ($payment['booking_payment'] ?? 0);
             }
+            $userName = null;
+            if (!empty($payment['id_user'])) {
+                $userName = $usersModel->getUserName($payment['id_user']);
+            }
             $pago = [
                 'fecha' => date("d/m/Y", strtotime($payment['date'])),
                 'pago' => $monto,
-                'usuario' => $usersModel->getUserName($payment['id_user']) || 'No informado',
+                'usuario' => $userName ?: 'No informado',
                 'idUsuario' => $payment['id_user'],
                 'cliente' => $customersModel->getCustomerName($payment['id_customer']),
                 'telefonoCliente' => $customersModel->getCustomerPhone($payment['id_customer']),

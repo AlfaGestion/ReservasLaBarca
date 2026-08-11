@@ -51,10 +51,18 @@ class UsersModel extends Model
         return $user;
     }
 
-    public function getUserName($id){
-        $user = $this->find($id);
-        $userName = $user['name'];
+    public function getUserName($id): ?string{
+        $userId = (int) $id;
+        if ($userId <= 0) {
+            return null;
+        }
 
-        return $userName;
+        $user = $this->find($userId);
+        if (!is_array($user) || !isset($user['name'])) {
+            return null;
+        }
+
+        $userName = trim((string) $user['name']);
+        return $userName !== '' ? $userName : null;
     }
 }

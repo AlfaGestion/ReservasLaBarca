@@ -202,7 +202,7 @@ class Superadmin extends BaseController
         $paymentsModel = new PaymentsModel();
 
         $now = date('Y-m-d H:i:s');
-        $threshold = date('Y-m-d H:i:s', strtotime('-5 minutes'));
+        $threshold = date('Y-m-d H:i:s', strtotime('-15 minutes'));
 
         // 1) Tomar los slots pending vencidos para identificar reservas candidatas.
         $expiredPendingSlots = $bookingSlotsModel
@@ -290,14 +290,19 @@ class Superadmin extends BaseController
             return;
         }
 
-        // 4) Limpiar registros relacionados y luego la reserva.
+        // 4) Limpiar registros relacionados y luego dejar la reserva anulada para que
+        //    un pago aprobado que llegue tarde pueda recuperarla.
         $this->expireActiveBookingSlots($bookingSlotsModel, [], [
             'booking_id' => $idsToDelete,
         ]);
 
         $paymentsModel->whereIn('id_booking', $idsToDelete)->delete();
         $mercadoPagoModel->whereIn('id_booking', $idsToDelete)->delete();
-        $bookingsModel->delete($idsToDelete);
+        $bookingsModel->whereIn('id', $idsToDelete)->set([
+            'annulled' => 1,
+            'approved' => 0,
+            'mp' => 0,
+        ])->update();
     }
 
     public function index()

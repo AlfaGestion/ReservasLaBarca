@@ -291,7 +291,8 @@ document.addEventListener('DOMContentLoaded', async (e) => {
                 skipCancelOnHide = false
                 return
             }
-            await cancelPendingMpReservation()
+            // No anulamos automaticamente al ocultarse el modal.
+            // La expiracion y liberacion final quedan a cargo del backend.
         })
     }
 })
@@ -1043,10 +1044,11 @@ function schedulePendingMpCleanup() {
         clearTimeout(pendingMpCleanupTimer)
     }
 
-    // Si el cliente no avanza al checkout en un tiempo razonable, liberamos el slot.
+    // El backend controla la expiracion real de la reserva.
+    // Solo liberamos el estado local para evitar que el frontend intente cancelar por timeout.
     pendingMpCleanupTimer = setTimeout(async () => {
-        await cancelPendingMpReservation()
-    }, 3 * 60 * 1000)
+        pendingMpCleanupTimer = null
+    }, 15 * 60 * 1000)
 }
 
 function resetMercadoPagoButtons() {

@@ -42,6 +42,7 @@ $routes->post('cancelPendingMpReservation', 'MercadoPago::cancelPendingMpReserva
 $routes->post('savePreferenceIds', 'MercadoPago::savePreferenceIds');
 $routes->get('payment/success', 'MercadoPago::success');
 $routes->get('payment/failure', 'MercadoPago::failure');
+$routes->post('payment/webhook', 'MercadoPago::webhook');
 
 $routes->group('auth', function ($routes) {
     $routes->post('register', 'Auth::dbRegister');
