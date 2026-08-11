@@ -70,6 +70,7 @@ $routes->get('getNocturnalTime', 'Time::getNocturnalTime');
 $routes->get('customers/register', 'Customers::register');
 $routes->post('customers/register', 'Customers::dbRegister');
 $routes->get('getCustomer/(:any)', 'Customers::getCustomer/$1');
+$routes->post('customers/getApplicableOffer', 'Customers::getApplicableOffer');
 
 $routes->get('getUser/(:any)', 'Users::getUser/$1');
 $routes->post('editUser', 'Users::editUser');

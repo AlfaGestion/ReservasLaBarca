@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Controllers\BaseController;
 use App\Libraries\AvailabilityService;
+use App\Libraries\CustomerOfferService;
 use App\Libraries\MercadoPagoLibrary;
 use App\Models\BookingSlotsModel;
 use App\Models\BookingsModel;
@@ -1206,18 +1207,37 @@ class MercadoPago extends BaseController
                 }
             }
 
-            $montoTotal = $this->calculateBookingTotal($items);
+            $bookingArr = json_decode(json_encode($booking), true);
+            $bookingPhone = trim((string) ($bookingArr['telefono'] ?? $bookingArr['phone'] ?? ''));
+            $customerOfferService = new CustomerOfferService();
+            $bookingQuote = $customerOfferService->calculateBookingQuote(
+                $items,
+                $bookingPhone !== '' ? $bookingPhone : null,
+                is_string($bookingDate) ? $bookingDate : null
+            );
+
+            if (!empty($bookingQuote['error'])) {
+                return $this->response->setJSON($this->setResponse(409, true, null, $bookingQuote['message'] ?? 'No se pudo calcular el monto de la reserva.'));
+            }
+
+            $montoTotal = (float) ($bookingQuote['final_total'] ?? 0);
             if ($montoTotal <= 0) {
                 return $this->response->setJSON($this->setResponse(409, true, null, 'No se pudo calcular el monto de la reserva.'));
             }
 
-            $rate = $rateRow['value'];
-            $montoParcial = (floatval($montoTotal) * floatval($rate)) / 100;
-            $bookingArr = json_decode(json_encode($booking), true);
+            $rate = (float) $rateRow['value'];
+            $montoParcial = (float) (($montoTotal * $rate) / 100);
             $bookingArr['total'] = $montoTotal;
             $bookingArr['parcial'] = $montoParcial;
             $bookingArr['diferencia'] = $montoTotal;
             $bookingArr['reservacion'] = 0;
+            $bookingArr['original_total'] = (float) ($bookingQuote['original_total'] ?? $montoTotal);
+            $bookingArr['discount_amount'] = (float) ($bookingQuote['discount_total'] ?? 0);
+            $bookingArr['discount_percentage'] = $bookingArr['original_total'] > 0
+                ? round(($bookingArr['discount_amount'] * 100) / $bookingArr['original_total'], 2)
+                : 0;
+            $bookingArr['customer_offer_id'] = !empty($bookingQuote['customer_offer_id']) ? (int) $bookingQuote['customer_offer_id'] : null;
+            $bookingArr['use_offer'] = $bookingArr['customer_offer_id'] ? 1 : 0;
 
             // Crear la reserva provisional antes de generar las preferencias MP.
             $slotId = $bookingSlotsModel->createSlot($this->buildSlotData($items[0], 'pending'));
@@ -1233,6 +1253,11 @@ class MercadoPago extends BaseController
                 'name' => $bookingArr['nombre'] ?? null,
                 'phone' => $bookingArr['telefono'] ?? null,
                 'locality' => $bookingArr['localidad'] ?? null,
+                'id_customer' => !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null,
+                'customer_offer_id' => $bookingArr['customer_offer_id'],
+                'original_total' => $bookingArr['original_total'],
+                'discount_percentage' => $bookingArr['discount_percentage'],
+                'discount_amount' => $bookingArr['discount_amount'],
                 'payment' => 0,
                 'approved' => 0,
                 'total' => $bookingArr['total'] ?? 0,
@@ -1243,7 +1268,7 @@ class MercadoPago extends BaseController
                 'payment_method' => 'Mercado Pago',
                 'id_preference_parcial' => '',
                 'id_preference_total' => '',
-                'use_offer' => $bookingArr['oferta'] ?? 0,
+                'use_offer' => $bookingArr['use_offer'] ?? 0,
                 'booking_time' => date('Y-m-d H:i:s'),
                 'mp' => 0,
                 'annulled' => 0,
@@ -1265,6 +1290,7 @@ class MercadoPago extends BaseController
 
             if (count($items) > 1) {
                 $additional = $items[1];
+                $additionalQuote = $bookingQuote['items'][1] ?? null;
                 $additionalSlotId = $bookingSlotsModel->createSlot($this->buildSlotData($additional, 'pending'));
                 if (!$additionalSlotId) {
                     $this->releaseBookingSlot($bookingSlotsModel, (int) $slotId);
@@ -1272,6 +1298,7 @@ class MercadoPago extends BaseController
                     return $this->response->setJSON($this->setResponse(409, true, null, 'El quincho no está disponible en el horario seleccionado.'));
                 }
 
+                $additionalOffer = $additionalQuote['offer'] ?? [];
                 $bookingsModel->insert([
                     'date' => $additional['fecha'],
                     'id_field' => $additional['cancha'],
@@ -1280,9 +1307,14 @@ class MercadoPago extends BaseController
                     'name' => $bookingArr['nombre'] ?? null,
                     'phone' => $bookingArr['telefono'] ?? null,
                     'locality' => $bookingArr['localidad'] ?? null,
+                    'id_customer' => !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null,
+                    'customer_offer_id' => !empty($additionalOffer['customer_offer_id']) ? (int) $additionalOffer['customer_offer_id'] : $bookingArr['customer_offer_id'],
+                    'original_total' => (float) ($additionalQuote['original_amount'] ?? 0),
+                    'discount_percentage' => !empty($additionalOffer['applicable']) ? (float) ($additionalOffer['value'] ?? 0) : 0,
+                    'discount_amount' => (float) ($additionalQuote['discount_amount'] ?? 0),
                     'payment' => 0,
                     'approved' => 0,
-                    'total' => 0,
+                    'total' => (float) ($additionalQuote['final_amount'] ?? 0),
                     'parcial' => 0,
                     'diference' => 0,
                     'reservation' => 0,
@@ -1290,7 +1322,7 @@ class MercadoPago extends BaseController
                     'payment_method' => 'Mercado Pago',
                     'id_preference_parcial' => '',
                     'id_preference_total' => '',
-                    'use_offer' => $bookingArr['oferta'] ?? 0,
+                    'use_offer' => !empty($additionalOffer['applicable']) ? 1 : 0,
                     'description' => 'Quincho adicional de la reserva #' . $bookingId,
                     'booking_time' => date('Y-m-d H:i:s'),
                     'mp' => 0,

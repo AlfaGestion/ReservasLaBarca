@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Controllers\BaseController;
 use App\Libraries\AvailabilityService;
+use App\Libraries\CustomerOfferService;
 use App\Libraries\PrintBookings;
 use App\Models\BookingSlotsModel;
 use App\Models\BookingsModel;
@@ -405,6 +406,27 @@ class Bookings extends BaseController
             return $this->response->setJSON($this->setResponse(409, true, null, $availabilityError));
         }
 
+        $bookingPhone = trim((string) ($data->telefono ?? ''));
+        $offerService = new CustomerOfferService();
+        $bookingQuote = $offerService->calculateBookingQuote(
+            $items,
+            $bookingPhone !== '' ? $bookingPhone : null,
+            is_string($data->fecha ?? null) ? $data->fecha : null
+        );
+        if (!empty($bookingQuote['error'])) {
+            return $this->response->setJSON($this->setResponse(409, true, null, $bookingQuote['message'] ?? 'No se pudo calcular la oferta del cliente.'));
+        }
+
+        $finalTotal = (float) ($bookingQuote['final_total'] ?? 0);
+        $originalTotal = (float) ($bookingQuote['original_total'] ?? $finalTotal);
+        $discountTotal = (float) ($bookingQuote['discount_total'] ?? 0);
+        $discountPercentage = $originalTotal > 0 ? round(($discountTotal * 100) / $originalTotal, 2) : 0;
+        $paymentAmount = round((float) ($data->monto ?? 0), 2);
+        $partialAmount = round((float) ($data->parcial ?? 0), 2);
+        $reservationAmount = round((float) ($data->reservacion ?? 0), 2);
+        $customerId = !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null;
+        $customerOfferId = !empty($bookingQuote['customer_offer_id']) ? (int) $bookingQuote['customer_offer_id'] : null;
+
         $queryBooking = [
             'date'                  => $data->fecha,
             'id_field'              => $data->cancha,
@@ -413,17 +435,22 @@ class Bookings extends BaseController
             'name'                  => $data->nombre,
             'phone'                 => $data->telefono,
             'locality'              => $data->localidad ?? null,
-            'payment'               => $data->monto,
+            'id_customer'           => $customerId,
+            'customer_offer_id'     => $customerOfferId,
+            'original_total'        => $originalTotal,
+            'discount_percentage'   => $discountPercentage,
+            'discount_amount'       => $discountTotal,
+            'payment'               => $paymentAmount,
             'approved'              => 0,
-            'total'                 => $data->total,
-            'parcial'               => $data->parcial,
-            'diference'             => $data->diferencia,
-            'reservation'           => $data->reservacion,
+            'total'                 => $finalTotal,
+            'parcial'               => $partialAmount,
+            'diference'             => max(0, $finalTotal - $paymentAmount),
+            'reservation'           => $reservationAmount,
             'total_payment'         => $data->pagoTotal,
             'payment_method'        => $data->metodoDePago,
             'id_preference_parcial' => $data->preferenceIdParcial,
             'id_preference_total'   => $data->preferenceIdTotal,
-            'use_offer'             => $data->oferta,
+            'use_offer'             => $customerOfferId ? 1 : 0,
             'booking_time'          => date("Y-m-d H:i:s"),
             'mp'                    => 0,
             'annulled'              => 0, // Aseguramos que este nuevo registro no esté anulado
@@ -484,16 +511,24 @@ class Bookings extends BaseController
 
                 if (count($items) > 1) {
                     $additional = $items[1];
+                    $additionalQuote = $bookingQuote['items'][1] ?? null;
+                    $additionalOffer = $additionalQuote['offer'] ?? [];
                     $additionalQuery = $queryBooking;
                     $additionalQuery['date'] = $additional['fecha'];
                     $additionalQuery['id_field'] = $additional['cancha'];
                     $additionalQuery['time_from'] = $this->normalizeTime($additional['horarioDesde']);
                     $additionalQuery['time_until'] = $this->normalizeTime($additional['horarioHasta']);
-                    $additionalQuery['total'] = 0;
+                    $additionalQuery['id_customer'] = $customerId;
+                    $additionalQuery['customer_offer_id'] = !empty($additionalOffer['customer_offer_id']) ? (int) $additionalOffer['customer_offer_id'] : $customerOfferId;
+                    $additionalQuery['original_total'] = (float) ($additionalQuote['original_amount'] ?? 0);
+                    $additionalQuery['discount_percentage'] = !empty($additionalOffer['applicable']) ? (float) ($additionalOffer['value'] ?? 0) : 0;
+                    $additionalQuery['discount_amount'] = (float) ($additionalQuote['discount_amount'] ?? 0);
+                    $additionalQuery['total'] = (float) ($additionalQuote['final_amount'] ?? 0);
                     $additionalQuery['parcial'] = 0;
                     $additionalQuery['diference'] = 0;
                     $additionalQuery['reservation'] = 0;
                     $additionalQuery['payment'] = 0;
+                    $additionalQuery['use_offer'] = !empty($additionalOffer['applicable']) ? 1 : 0;
                     $additionalQuery['description'] = trim(($additionalQuery['description'] ?? '') . ' Quincho adicional de la reserva #' . $bookingId);
 
                     $additionalSlotId = $bookingSlotsModel->createSlot($this->buildSlotData($additional, 'pending'));
@@ -994,12 +1029,31 @@ class Bookings extends BaseController
         $data = $this->request->getJSON();
         $db = \Config\Database::connect();
         $this->ensureLocalityExists($data->localidad ?? null);
-        $pagoTotal = $data->monto == $data->total ? 1 : 0;
         $items = $this->extractBookingItems($data);
         $availabilityError = $this->validateItemsAvailability($items, $bookingsModel, $bookingSlotsModel, null, false);
         if ($availabilityError !== null) {
             return $this->response->setJSON($this->setResponse(409, true, null, $availabilityError));
         }
+
+        $bookingPhone = trim((string) ($data->telefono ?? ''));
+        $offerService = new CustomerOfferService();
+        $bookingQuote = $offerService->calculateBookingQuote(
+            $items,
+            $bookingPhone !== '' ? $bookingPhone : null,
+            is_string($data->fecha ?? null) ? $data->fecha : null
+        );
+        if (!empty($bookingQuote['error'])) {
+            return $this->response->setJSON($this->setResponse(409, true, null, $bookingQuote['message'] ?? 'No se pudo calcular la oferta del cliente.'));
+        }
+
+        $finalTotal = (float) ($bookingQuote['final_total'] ?? 0);
+        $originalTotal = (float) ($bookingQuote['original_total'] ?? $finalTotal);
+        $discountTotal = (float) ($bookingQuote['discount_total'] ?? 0);
+        $discountPercentage = $originalTotal > 0 ? round(($discountTotal * 100) / $originalTotal, 2) : 0;
+        $paymentAmount = round((float) ($data->monto ?? 0), 2);
+        $pagoTotal = abs($paymentAmount - $finalTotal) < 0.01 ? 1 : 0;
+        $customerId = !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null;
+        $customerOfferId = !empty($bookingQuote['customer_offer_id']) ? (int) $bookingQuote['customer_offer_id'] : null;
 
         $queryBooking = [
             'date'            => $data->fecha,
@@ -1009,10 +1063,15 @@ class Bookings extends BaseController
             'name'            => $data->nombre,
             'phone'           => $data->telefono,
             'locality'        => $data->localidad ?? null,
-            'payment'         => $data->monto,
-            'total'           => $data->total,
+            'id_customer'     => $customerId,
+            'customer_offer_id' => $customerOfferId,
+            'original_total'  => $originalTotal,
+            'discount_percentage' => $discountPercentage,
+            'discount_amount' => $discountTotal,
+            'payment'         => $paymentAmount,
+            'total'           => $finalTotal,
             'description'     => $data->descripcion,
-            'diference'       => $data->total - $data->monto,
+            'diference'       => max(0, $finalTotal - $paymentAmount),
             'total_payment'   => $pagoTotal,
             'payment_method'  => $data->metodoDePago,
             'approved'        => 1,
@@ -1043,15 +1102,23 @@ class Bookings extends BaseController
 
             if (count($items) > 1) {
                 $additional = $items[1];
+                $additionalQuote = $bookingQuote['items'][1] ?? null;
+                $additionalOffer = $additionalQuote['offer'] ?? [];
                 $additionalQuery = $queryBooking;
                 $additionalQuery['date'] = $additional['fecha'];
                 $additionalQuery['id_field'] = $additional['cancha'];
                 $additionalQuery['time_from'] = $this->normalizeTime($additional['horarioDesde']);
                 $additionalQuery['time_until'] = $this->normalizeTime($additional['horarioHasta']);
-                $additionalQuery['total'] = 0;
+                $additionalQuery['id_customer'] = $customerId;
+                $additionalQuery['customer_offer_id'] = !empty($additionalOffer['customer_offer_id']) ? (int) $additionalOffer['customer_offer_id'] : $customerOfferId;
+                $additionalQuery['original_total'] = (float) ($additionalQuote['original_amount'] ?? 0);
+                $additionalQuery['discount_percentage'] = !empty($additionalOffer['applicable']) ? (float) ($additionalOffer['value'] ?? 0) : 0;
+                $additionalQuery['discount_amount'] = (float) ($additionalQuote['discount_amount'] ?? 0);
+                $additionalQuery['total'] = (float) ($additionalQuote['final_amount'] ?? 0);
                 $additionalQuery['payment'] = 0;
                 $additionalQuery['diference'] = 0;
                 $additionalQuery['description'] = trim(($additionalQuery['description'] ?? '') . ' Quincho adicional de la reserva #' . $bookingId);
+                $additionalQuery['use_offer'] = !empty($additionalOffer['applicable']) ? 1 : 0;
 
                 $additionalSlotId = $bookingSlotsModel->createSlot($this->buildSlotData($additional, 'confirmed'));
                 if (!$additionalSlotId) {

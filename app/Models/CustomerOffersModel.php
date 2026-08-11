@@ -4,31 +4,38 @@ namespace App\Models;
 
 use CodeIgniter\Model;
 
-class BookingsModel extends Model
+class CustomerOffersModel extends Model
 {
     protected $DBGroup          = 'default';
-    protected $table            = 'bookings';
+    protected $table            = 'customer_offers';
     protected $primaryKey       = 'id';
     protected $useAutoIncrement = true;
     protected $returnType       = 'array';
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
-    protected $allowedFields    = ['id_field', 'date', 'time_from', 'time_until', 'name', 'phone', 'locality', 'total_payment', 'total', 'parcial', 'diference', 'description', 'reservation', 'payment', 'payment_method', 'id_customer', 'customer_offer_id', 'original_total', 'discount_percentage', 'discount_amount', 'id_preference_parcial', 'id_preference_total', 'approved', 'use_offer', 'annulled', 'booking_time', 'mp', 'created_by_type', 'created_by_user_id', 'created_by_name', 'edited_by_user_id', 'edited_by_name', 'edited_at'];
+    protected $allowedFields    = [
+        'customer_id',
+        'value',
+        'description',
+        'expiration_date',
+        'active',
+        'apply_all_fields',
+        'apply_all_services',
+        'created_at',
+        'updated_at',
+    ];
 
-    // Dates
     protected $useTimestamps = false;
     protected $dateFormat    = 'datetime';
     protected $createdField  = 'created_at';
     protected $updatedField  = 'updated_at';
     protected $deletedField  = 'deleted_at';
 
-    // Validation
     protected $validationRules      = [];
     protected $validationMessages   = [];
     protected $skipValidation       = false;
     protected $cleanValidationRules = true;
 
-    // Callbacks
     protected $allowCallbacks = true;
     protected $beforeInsert   = [];
     protected $afterInsert    = [];
@@ -38,17 +45,4 @@ class BookingsModel extends Model
     protected $afterFind      = [];
     protected $beforeDelete   = [];
     protected $afterDelete    = [];
-
-
-    public function getBookings(){
-        $bookings = $this->findAll();
-
-        return $bookings;
-    }
-
-    public function getBooking($id){
-        $booking = $this->find($id);
-
-        return $booking;
-    }
 }

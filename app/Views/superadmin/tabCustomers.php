@@ -1,7 +1,7 @@
 <div id="generalButtons" class="mt-3">
     <a type="button" href="<?= base_url('customers/register') ?>" class="btn btn-success mt-2 mb-2" id=""><i class="fa-solid fa-user-plus me-1"></i>Ingresar cliente</a>
-    <button type="button" id="setOfferTrue" class="btn btn-warning mt-2 mb-2" id=""><i class="fa-solid fa-tags me-1"></i>Ofrecer oferta a todos los clientes</button>
-    <button type="button" id="setOfferFalse" class="btn btn-danger mt-2 mb-2" id=""><i class="fa-solid fa-tag me-1"></i>Quitar oferta a todos los clientes</button>
+    <button type="button" id="setOfferTrue" class="btn btn-warning mt-2 mb-2" id=""><i class="fa-solid fa-tags me-1"></i>Oferta global legacy</button>
+    <button type="button" id="setOfferFalse" class="btn btn-danger mt-2 mb-2" id=""><i class="fa-solid fa-tag me-1"></i>Quitar legacy</button>
 
 
     <div class="form-check form-switch mt-3">
@@ -29,6 +29,7 @@
                 <th scope="col">Teléfono</th>
                 <th scope="col">Localidad</th>
                 <th scope="col">Oferta</th>
+                <th scope="col">Alcance</th>
                 <th scope="col">Reservas</th>
                 <th scope="col">Acciones</th>
             </tr>

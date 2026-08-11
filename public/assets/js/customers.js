@@ -3,6 +3,42 @@ const customersTabButton = document.getElementById('nav-customers-tab')
 
 let customersTabLoaded = false
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+}
+
+function buildOfferCell(customer) {
+    const badge = customer.offer_badge || (Number(customer.offer) === 1 ? 'Oferta activa' : 'Sin descuento')
+    const badgeClass = Number(customer.customer_offer_active) === 1 || /OFF|Legacy/.test(badge)
+        ? 'bg-warning text-dark'
+        : 'bg-secondary'
+
+    return `
+        <div class="d-flex flex-column gap-1">
+            <span class="badge ${badgeClass} align-self-start">${escapeHtml(badge)}</span>
+        </div>
+    `
+}
+
+function buildActions(customer) {
+    return `
+        <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
+            <button type="button" class="btn btn-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                Acciones
+            </button>
+            <ul class="dropdown-menu">
+                <li><a type="button" href="${webBaseUrl}customers/editWindow/${customer.id}" class="btn btn-primary dropdown-item" data-id="${customer.id}">Editar cliente</a></li>
+                <li><a type="button" href="${webBaseUrl}customers/deleteCustomer/${customer.id}" class="btn btn-primary dropdown-item" data-id="${customer.id}">Eliminar cliente</a></li>
+            </ul>
+        </div>
+    `
+}
+
 async function loadInitialCustomers() {
     await searchCustomer(`${baseUrl}customers/getCustomers?limit=50`)
 }
@@ -15,7 +51,7 @@ if (customersTabButton) {
     })
 }
 
-checkCustomersWithOffer.addEventListener('change', async () => {
+checkCustomersWithOffer?.addEventListener('change', async () => {
     if (checkCustomersWithOffer.checked) {
         await getCustomersWithOffer()
     } else {
@@ -26,7 +62,9 @@ checkCustomersWithOffer.addEventListener('change', async () => {
 document.addEventListener('click', async (e) => {
     if (e.target) {
         if (e.target.id == 'searchCustomerButton') {
-            checkCustomersWithOffer.checked = false
+            if (checkCustomersWithOffer) {
+                checkCustomersWithOffer.checked = false
+            }
             const customerPhone = document.getElementById('searchCustomerInput')
 
             if (customerPhone.value == '') {
@@ -70,7 +108,7 @@ async function setOfferTrue(data) {
         })
 
         if (response.ok) {
-            alert('Oferta asignada correctamente.')
+            alert('Oferta legacy asignada correctamente.')
             await refreshCustomersList()
         } else {
             alert('No se pudo completar la operación. Intenta nuevamente.')
@@ -92,7 +130,7 @@ async function setOfferFalse(data) {
         })
 
         if (response.ok) {
-            alert('Oferta quitada correctamente.')
+            alert('Oferta legacy quitada correctamente.')
             await refreshCustomersList()
         } else {
             alert('No se pudo completar la operación. Intenta nuevamente.')
@@ -134,66 +172,37 @@ async function searchCustomer(url) {
 async function fillCustomersTable(data) {
     const customersDiv = document.getElementById('customersDiv')
     let tr = ''
-    let actions = ''
 
     if (Array.isArray(data)) {
         data.forEach(customer => {
-            let offer = ''
-            customer.offer == 1 ? offer = 'Si' : offer = 'No'
-
-            actions = `
-            <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
-                <button type="button" class="btn btn-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                    Acciones
-                </button>
-                <ul class="dropdown-menu">
-                    <li><a type="button" href="${webBaseUrl}customers/editWindow/${customer.id}) ?>" class="btn btn-primary dropdown-item" id="" data-id="${customer.id}">Editar cliente</a></li>
-                    <li><a type="button" href="${webBaseUrl}customers/deleteCustomer/${customer.id}}) ?>" class="btn btn-primary dropdown-item" id="" data-id="${customer.id}">Eliminar cliente</a></li>
-                </ul>
-            </div>
-            `
-
             tr += `
             <tr>
-                <td>${customer.name}</td>
-                <td>${customer.last_name}</td>
-                <td>${customer.dni}</td>
-                <td>${customer.phone}</td>
-                <td>${customer.city}</td>
-                <td>${offer}</td>
-                <td>${customer.quantity}</td>
-                <td>${actions}</td>
+                <td>${escapeHtml(customer.name)}</td>
+                <td>${escapeHtml(customer.last_name)}</td>
+                <td>${escapeHtml(customer.dni)}</td>
+                <td>${escapeHtml(customer.phone)}</td>
+                <td>${escapeHtml(customer.city)}</td>
+                <td>${buildOfferCell(customer)}</td>
+                <td>${escapeHtml(customer.offer_scope || customer.offer_summary || 'Sin alcance')}</td>
+                <td>${escapeHtml(customer.quantity ?? 0)}</td>
+                <td>${buildActions(customer)}</td>
             </tr>
             `
         })
-    } else if (typeof data === 'object') {
-        let offer = ''
-        data.offer == 1 ? offer = 'Si' : offer = 'No'
-
-        actions = `
-            <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
-                <button type="button" class="btn btn-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                    Acciones
-                </button>
-                <ul class="dropdown-menu">
-                    <li><a type="button" href="${webBaseUrl}customers/editWindow/${data.id}) ?>" class="btn btn-primary dropdown-item" id="" data-id="${data.id}">Editar cliente</a></li>
-                    <li><a type="button" href="${webBaseUrl}customers/deleteCustomer/${data.id}}) ?>" class="btn btn-primary dropdown-item" id="" data-id="${data.id}">Eliminar cliente</a></li>
-                </ul>
-            </div>
-            `
-
+    } else if (typeof data === 'object' && data !== null) {
         tr += `
             <tr>
-                <td>${data.name}</td>
-                <td>${data.last_name}</td>
-                <td>${data.dni}</td>
-                <td>${data.phone}</td>
-                <td>${data.city}</td>
-                <td>${offer}</td>
-                <td>${data.quantity}</td>
-                <td>${actions}</td>
+                <td>${escapeHtml(data.name)}</td>
+                <td>${escapeHtml(data.last_name)}</td>
+                <td>${escapeHtml(data.dni)}</td>
+                <td>${escapeHtml(data.phone)}</td>
+                <td>${escapeHtml(data.city)}</td>
+                <td>${buildOfferCell(data)}</td>
+                <td>${escapeHtml(data.offer_scope || data.offer_summary || 'Sin alcance')}</td>
+                <td>${escapeHtml(data.quantity ?? 0)}</td>
+                <td>${buildActions(data)}</td>
             </tr>
-            `
+        `
     } else {
         console.error('El parametro data no es un formato valido.')
         return

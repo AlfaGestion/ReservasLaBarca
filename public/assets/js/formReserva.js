@@ -63,6 +63,9 @@ const bookingServices = Array.isArray(window.bookingServices) ? window.bookingSe
 let data = {}
 let preferencesIds = {}
 let useOffer = false
+let currentCustomer = null
+let currentBookingQuote = null
+let lastOfferModalKey = ''
 let pendingMpCleanupTimer = null
 let skipCancelOnHide = false
 let pendingMpContext = null
@@ -130,6 +133,15 @@ function parsePriceAR(value) {
         .replace(/\./g, '')
         .replace(',', '.')
     return Number(normalized) || 0
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
 }
 
 function minutesToHuman(minutes) {
@@ -308,6 +320,7 @@ document.addEventListener('change', async (e) => {
             inputMonto.value = 0
             updateServiceOptions()
             await getTimeFromBookings()
+            await getAmount(selectCancha.value)
         } else if (e.target.id == 'fecha') {
             if (isDateBeforeToday(fechaInput.value)) {
                 alert('No se puede reservar con una fecha anterior a hoy.')
@@ -326,6 +339,7 @@ document.addEventListener('change', async (e) => {
             horarioHasta.selectedIndex = 0
 
             await checkClosureStatus()
+            await getAmount(selectCancha.value)
 
         } else if (e.target.id == 'horarioDesde') {
             divTime.classList.remove('d-none')
@@ -379,6 +393,8 @@ document.addEventListener('change', async (e) => {
             const btnMpParcial = document.getElementById('checkout-btn-parcial')
             const btnMpTotal = document.getElementById('checkout-btn-total')
 
+            await syncPagoReservaInput(getCurrentTotalAmount())
+
             if (pagoTotal.checked) {
                 btnMpParcial.style.display = 'none'
                 btnMpTotal.style.display = 'block'
@@ -393,8 +409,9 @@ document.addEventListener('change', async (e) => {
 
 document.addEventListener('click', async (e) => {
     if (e.target) {
-        const rate = await getRate()
         const normalizedPhone = normalizePhone(telefono.value)
+        const rate = await getRate()
+        const totalAmount = getCurrentTotalAmount()
 
         if (sessionUserLogued) {
             data = {
@@ -408,10 +425,9 @@ document.addEventListener('click', async (e) => {
                 additionalQuincho: buildAdditionalQuinchoPayload(),
             }
         } else {
-            const totalAmount = parsePriceAR(inputMonto.value)
             data = {
                 fecha: fecha.value,
-                cancha: cancha.value,
+                cancha: selectCancha.value,
                 horarioDesde: horarioDesde.value,
                 horarioHasta: horarioHasta.value,
                 nombre: nombre.value,
@@ -443,7 +459,7 @@ document.addEventListener('click', async (e) => {
                 alert('No se puede reservar con una fecha u horario ya pasados.')
                 return
             }
-            if (fecha.value == '' || cancha.value == '' || horarioDesde.value == '' || horarioHasta.value == '' || nombre.value == '' || telefono.value == '') {
+            if (fecha.value == '' || selectCancha.value == '' || horarioDesde.value == '' || horarioHasta.value == '' || nombre.value == '' || telefono.value == '') {
                 alert('Debe completar todos los campos obligatorios.')
                 return;
             }
@@ -493,9 +509,10 @@ document.addEventListener('click', async (e) => {
             if (sessionUserLogued) {
                 const totalReserva = document.getElementById('adminBookingTotalAmount')
                 const amount = document.getElementById('adminBookingAmount')
+                const currentTotal = getCurrentTotalAmount()
 
-                if (totalReserva) totalReserva.value = inputMonto.value
-                if (amount) amount.value = inputMonto.value
+                if (totalReserva) totalReserva.value = formatPriceAR(currentTotal)
+                if (amount) amount.value = formatPriceAR(currentTotal)
 
                 modalIngresarPago.show()
             } else {
@@ -518,7 +535,8 @@ document.addEventListener('click', async (e) => {
                 }
 
                 const rate = await getRate()
-                const totalAmount = parsePriceAR(inputMonto.value)
+                const refreshedQuote = await refreshCustomerOfferPreview({ showModal: false })
+                const totalAmount = refreshedQuote?.final_total ?? getCurrentTotalAmount()
                 const mpReady = await setScriptMP(totalAmount)
                 if (!mpReady) {
                     return
@@ -532,11 +550,12 @@ document.addEventListener('click', async (e) => {
             const paymentMethod = document.getElementById('adminPaymentMethod')
             const description = document.getElementById('adminBookingDescription')
             const totalReserva = document.getElementById('adminBookingTotalAmount')
+            const totalAmount = getCurrentTotalAmount()
 
             data.monto = parsePriceAR(amount.value)
             data.metodoDePago = paymentMethod.value
             data.descripcion = description.value
-            data.total = parsePriceAR(totalReserva.value)
+            data.total = totalAmount
             data.additionalQuincho = buildAdditionalQuinchoPayload()
 
             saveAdminBooking(data)
@@ -586,59 +605,22 @@ function checkSunday() {
 
 
 telefono.addEventListener('input', async () => {
-
-    let content
-
     const phone = normalizePhone(telefono.value)
-
     if (phone.length >= 10 && phone.length <= 11) {
         modalSpinner.show()
         try {
-            const offer = await getOffer()
-            const customer = await getCustomer(phone)
-            const amount = Number(inputMonto.value || 0)
-
-            if (customer) {
-                if (customer.offer == '1') {
-                    content = `
-                        <h1 class="offerTitle">${offer.value}%</h1>
-                        <h6 class="offerDescription">${offer.description}</h6>
-                        <button type="button" class="btn mb-2" data-bs-dismiss="modal" style="background-color: #f09424">Continuar</button>
-                        `
-
-                    if (offer.value != 0) {
-                        const ofertaModalContent = document.getElementById('ofertaModalContent')
-
-                        ofertaModalContent.innerHTML = content
-                        ofertaModal.show()
-                    }
-
-                    const discount = amount * offer.value / 100
-                    const discountAmount = amount - discount
-
-                    useOffer = true
-                    // idCustomer = customer.id
-                    inputMonto.value = discountAmount
-                    nombre.value = customer.name
-                    if (localidad) {
-                        localidad.value = customer.city || ''
-                    }
-                } else {
-                    // idCustomer = customer.id
-                    nombre.value = customer.name
-                    if (localidad) {
-                        localidad.value = customer.city || ''
-                    }
-                }
-            } else {
-                await getAmount(selectCancha.value)
-            }
+            await refreshCustomerOfferPreview({ showModal: true })
         } catch (error) {
             console.error('Error al validar telefono:', error)
-            await getAmount(selectCancha.value)
+            await refreshCustomerOfferPreview({ showModal: false })
         } finally {
             setTimeout(() => { modalSpinner.hide() }, 300);
         }
+    } else {
+        currentCustomer = null
+        currentBookingQuote = null
+        useOffer = false
+        await refreshCustomerOfferPreview({ showModal: false })
     }
 })
 
@@ -709,12 +691,15 @@ async function setScriptMP(amount) {
 
     modalSpinner.show()
 
-    preference = {
-        amount: amount,
-    }
-
     try {
-        const preferences = await setPreference(`${baseUrl}setPreference`, { amount: amount, booking: data })
+        const refreshedQuote = await refreshCustomerOfferPreview({ showModal: false })
+        const finalAmount = refreshedQuote?.final_total ?? amount ?? getCurrentTotalAmount()
+        data.total = finalAmount
+        preference = {
+            amount: finalAmount,
+        }
+
+        const preferences = await setPreference(`${baseUrl}setPreference`, { amount: finalAmount, booking: data })
         const mp = new MercadoPago(publicKeyMp, {
             locale: "es-AR"
         })
@@ -1280,22 +1265,20 @@ async function getAmount(field = "1") {
     try {
         if (!field || !horarioDesde.value || !horarioHasta.value) {
             inputMonto.value = 0
+            currentBookingQuote = {
+                applicable: false,
+                customer: null,
+                items: [],
+                original_total: 0,
+                discount_total: 0,
+                final_total: 0
+            }
+            useOffer = false
+            await syncPagoReservaInput(0)
             return
         }
-        const selectedField = await getSelectedFieldDetails(field)
 
-        if (!selectedField) {
-            alert('No se pudo obtener la información. Intenta nuevamente.')
-            return
-        }
-
-        const nocturnalTime = await getNocturnalTime()
-        if (isNocturnalBooking(nocturnalTime)) {
-            const nightPrice = Number(selectedField.ilumination_value || 0) > 0 ? selectedField.ilumination_value : selectedField.value
-            inputMonto.value = formatPriceAR(calculateAmount(horarioDesde.value, horarioHasta.value, nightPrice))
-        } else {
-            inputMonto.value = formatPriceAR(calculateAmount(horarioDesde.value, horarioHasta.value, selectedField.value))
-        }
+        await refreshCustomerOfferPreview({ showModal: false })
     } catch (error) {
         console.error('Error:', error);
         inputMonto.value = 0
@@ -1324,26 +1307,270 @@ async function getRate() {
     }
 }
 
-async function getOffer() {
+async function getApplicableOffer(phone, fieldId, amount) {
     try {
-        const response = await fetch(`${baseUrl}getOffersRate`);
-        const responseData = await response.json();
+        const response = await fetch(`${baseUrl}customers/getApplicableOffer`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                phone,
+                field_id: fieldId,
+                amount,
+                date: fechaInput?.value || null
+            })
+        })
 
-        if (isEmptyData(responseData.data)) {
-            console.warn('No se pudo obtener la oferta.')
-            return null
+        const responseData = await response.json()
+        if (!response.ok || responseData.error) {
+            if (responseData?.message) {
+                console.warn(responseData.message)
+            }
+            return {
+                applicable: false,
+                original_amount: Number(amount || 0),
+                discount_amount: 0,
+                final_amount: Number(amount || 0),
+            }
         }
 
-        if (responseData.data != '') {
-
-            return responseData.data
-        } else {
-            alert('No se pudo obtener la información. Intenta nuevamente.');
+        return responseData.data || {
+            applicable: false,
+            original_amount: Number(amount || 0),
+            discount_amount: 0,
+            final_amount: Number(amount || 0),
         }
     } catch (error) {
-        console.error('Error:', error);
-        throw error;
+        console.error('Error:', error)
+        return {
+            applicable: false,
+            original_amount: Number(amount || 0),
+            discount_amount: 0,
+            final_amount: Number(amount || 0),
+        }
     }
+}
+
+function getCurrentTotalAmount() {
+    if (currentBookingQuote && Number.isFinite(Number(currentBookingQuote.final_total))) {
+        return Number(currentBookingQuote.final_total)
+    }
+
+    return parsePriceAR(inputMonto.value || 0)
+}
+
+async function syncPagoReservaInput(totalAmount) {
+    if (!pagoReserva) return
+    const rate = await getRate()
+
+    if (pagoTotal?.checked) {
+        pagoReserva.value = formatPriceAR(totalAmount)
+    } else {
+        pagoReserva.value = formatPriceAR(totalAmount * rate / 100)
+    }
+}
+
+function renderOfferModal(quote) {
+    const ofertaModalContent = document.getElementById('ofertaModalContent')
+    if (!ofertaModalContent || !quote || !Array.isArray(quote.items)) {
+        return
+    }
+
+    const applicableItems = quote.items.filter(item => item.offer && item.offer.applicable)
+    if (applicableItems.length === 0) {
+        return
+    }
+
+    const firstOffer = applicableItems[0].offer || {}
+    const offerValue = Number(firstOffer.value || 0)
+    const description = firstOffer.description || 'Beneficio disponible'
+    const scopeLabel = applicableItems.map(item => escapeHtml(item.label || 'Item')).join(', ')
+    const rows = quote.items.map((item) => {
+        const label = escapeHtml(item.label || 'Item')
+        const original = formatPriceAR(item.original_amount || item.baseAmount || 0)
+        const discount = Number(item.discount_amount || 0)
+        const finalAmount = formatPriceAR(item.final_amount || item.original_amount || item.baseAmount || 0)
+        const discountHtml = discount > 0
+            ? `<span class="text-success fw-semibold">- ${formatPriceAR(discount)}</span>`
+            : '<span class="text-muted">Sin descuento</span>'
+
+        return `
+            <li class="list-group-item d-flex flex-column align-items-start gap-1">
+                <div class="d-flex justify-content-between w-100 gap-3">
+                    <span class="fw-semibold">${label}</span>
+                    <span class="text-nowrap">${original}</span>
+                </div>
+                <div class="d-flex justify-content-between w-100 gap-3">
+                    <span>${discountHtml}</span>
+                    <span class="text-nowrap fw-semibold">${finalAmount}</span>
+                </div>
+            </li>
+        `
+    }).join('')
+
+    const key = JSON.stringify({
+        phone: quote.phone || '',
+        original: quote.original_total || 0,
+        discount: quote.discount_total || 0,
+        final: quote.final_total || 0,
+        items: quote.items.map(item => [
+            item.fieldId || '',
+            item.original_amount || 0,
+            item.discount_amount || 0,
+            item.final_amount || 0
+        ])
+    })
+
+    if (key === lastOfferModalKey) {
+        return
+    }
+    lastOfferModalKey = key
+
+    ofertaModalContent.innerHTML = `
+        <div class="modal-body p-4 w-100">
+            <div class="text-center mb-3">
+                <h1 class="offerTitle mb-1">${offerValue}%</h1>
+                <h6 class="offerDescription mb-2">${escapeHtml(description)}</h6>
+                <div class="small text-muted">${escapeHtml(scopeLabel)}</div>
+            </div>
+            <div class="list-group mb-3">
+                ${rows}
+            </div>
+            <div class="d-flex justify-content-between fw-bold fs-5 border-top pt-3">
+                <span>Total con descuento</span>
+                <span>${formatPriceAR(quote.final_total || 0)}</span>
+            </div>
+        </div>
+        <div class="modal-footer justify-content-center">
+            <button type="button" class="btn mb-2" data-bs-dismiss="modal" style="background-color: #f09424">Continuar</button>
+        </div>
+    `
+
+    ofertaModal.show()
+}
+
+async function refreshCustomerOfferPreview({ showModal = false } = {}) {
+    const phone = normalizePhone(telefono?.value || '')
+    const baseItems = await buildBookingBaseItems()
+
+    if (baseItems.length === 0) {
+        currentCustomer = null
+        currentBookingQuote = {
+            applicable: false,
+            customer: null,
+            phone,
+            items: [],
+            original_total: 0,
+            discount_total: 0,
+            final_total: 0
+        }
+        useOffer = false
+        inputMonto.value = 0
+        await syncPagoReservaInput(0)
+        lastOfferModalKey = ''
+        return currentBookingQuote
+    }
+
+    const baseTotal = baseItems.reduce((sum, item) => sum + Number(item.baseAmount || 0), 0)
+    const fallbackQuote = {
+        applicable: false,
+        customer: null,
+        phone,
+        items: baseItems.map(item => ({
+            ...item,
+            offer: {
+                applicable: false,
+                original_amount: Number(item.baseAmount || 0),
+                discount_amount: 0,
+                final_amount: Number(item.baseAmount || 0),
+            },
+            original_amount: Number(item.baseAmount || 0),
+            discount_amount: 0,
+            final_amount: Number(item.baseAmount || 0),
+        })),
+        original_total: baseTotal,
+        discount_total: 0,
+        final_total: baseTotal,
+    }
+
+    if (phone.length < 10 || phone.length > 11) {
+        currentCustomer = null
+        currentBookingQuote = fallbackQuote
+        useOffer = false
+        inputMonto.value = formatPriceAR(baseTotal)
+        await syncPagoReservaInput(baseTotal)
+        lastOfferModalKey = ''
+        return currentBookingQuote
+    }
+
+    let customer = currentCustomer
+    if (!customer || normalizePhone(customer.phone || '') !== phone) {
+        customer = await getCustomer(phone)
+        currentCustomer = customer
+    }
+
+    if (customer) {
+        nombre.value = customer.name || ''
+        if (localidad) {
+            localidad.value = customer.city || ''
+        }
+    } else {
+        currentCustomer = null
+        currentBookingQuote = fallbackQuote
+        useOffer = false
+        inputMonto.value = formatPriceAR(baseTotal)
+        await syncPagoReservaInput(baseTotal)
+        lastOfferModalKey = ''
+        return currentBookingQuote
+    }
+
+    const offerResults = await Promise.all(
+        baseItems.map(async (item) => getApplicableOffer(phone, item.fieldId, item.baseAmount))
+    )
+
+    const quoteItems = baseItems.map((item, index) => {
+        const offer = offerResults[index] || {
+            applicable: false,
+            original_amount: Number(item.baseAmount || 0),
+            discount_amount: 0,
+            final_amount: Number(item.baseAmount || 0),
+        }
+
+        return {
+            ...item,
+            offer,
+            original_amount: Number(offer.original_amount ?? item.baseAmount ?? 0),
+            discount_amount: Number(offer.discount_amount ?? 0),
+            final_amount: Number(offer.final_amount ?? item.baseAmount ?? 0),
+        }
+    })
+
+    const discountTotal = quoteItems.reduce((sum, item) => sum + Number(item.discount_amount || 0), 0)
+    const finalTotal = quoteItems.reduce((sum, item) => sum + Number(item.final_amount || item.original_amount || 0), 0)
+
+    currentBookingQuote = {
+        applicable: discountTotal > 0,
+        customer,
+        phone,
+        items: quoteItems,
+        original_total: baseTotal,
+        discount_total: discountTotal,
+        final_total: finalTotal,
+    }
+    useOffer = discountTotal > 0
+    inputMonto.value = formatPriceAR(finalTotal)
+    await syncPagoReservaInput(finalTotal)
+
+    if (showModal && discountTotal > 0) {
+        renderOfferModal(currentBookingQuote)
+    }
+
+    if (!currentBookingQuote.applicable) {
+        lastOfferModalKey = ''
+    }
+
+    return currentBookingQuote
 }
 
 
@@ -1885,6 +2112,66 @@ function calculateAmount(from, until, amount) {
     }
 
     return Math.round(total)
+}
+
+function calculateSingleItemAmount(from, until, amount, blockMinutes) {
+    let fromMinutes = timeToMinutes(from)
+    let untilMinutes = timeToMinutes(until)
+    if (untilMinutes <= fromMinutes) untilMinutes += 1440
+    const minutes = Math.max(0, untilMinutes - fromMinutes)
+    const multiplier = minutes / Math.max(1, Number(blockMinutes || 60))
+
+    return Math.round(multiplier * Number(amount || 0))
+}
+
+async function buildBookingBaseItems() {
+    const items = []
+
+    if (selectCancha?.value && horarioDesde.value && horarioHasta.value) {
+        const baseField = await buildSingleItemBaseQuote(selectCancha.value, horarioDesde.value, horarioHasta.value, false)
+        if (baseField) {
+            items.push(baseField)
+        }
+    }
+
+    if (addQuincho?.checked) {
+        const quincho = getQuinchoField()
+        if (quincho && quinchoDesde.value && quinchoHasta.value) {
+            const additionalField = await buildSingleItemBaseQuote(quincho.id, quinchoDesde.value, quinchoHasta.value, true)
+            if (additionalField) {
+                items.push(additionalField)
+            }
+        }
+    }
+
+    return items
+}
+
+async function buildSingleItemBaseQuote(fieldId, from, until, isAdditional = false) {
+    const selectedField = await getSelectedFieldDetails(fieldId)
+    if (!selectedField) {
+        return null
+    }
+
+    const nocturnalTime = await getNocturnalTime()
+    const isNight = isNocturnalBooking(nocturnalTime)
+    const perBlockAmount = isNight
+        ? (Number(selectedField.ilumination_value || 0) > 0 ? Number(selectedField.ilumination_value || 0) : Number(selectedField.value || 0))
+        : Number(selectedField.value || 0)
+    const blockMinutes = Number(selectedField.duration_minutes || selectedField.block_minutes || selectedField.slot_interval_minutes || selectedField.booking_interval_minutes || 60)
+    const baseAmount = calculateSingleItemAmount(from, until, perBlockAmount, blockMinutes)
+
+    return {
+        fieldId: String(fieldId),
+        field: selectedField,
+        from,
+        until,
+        label: selectedField.name || 'Cancha',
+        serviceType: selectedField.service_type || 'football',
+        baseAmount,
+        isAdditional: Boolean(isAdditional),
+        isNight,
+    }
 }
 
 

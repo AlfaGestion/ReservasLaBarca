@@ -211,4 +211,63 @@ VALUES
   )
 ON DUPLICATE KEY UPDATE `valor` = VALUES(`valor`);
 
+-- 2026-08-11_CustomerOffers
+CREATE TABLE IF NOT EXISTS `customer_offers` (
+  `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `customer_id` INT(11) UNSIGNED NOT NULL,
+  `value` DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  `description` VARCHAR(255) NULL,
+  `expiration_date` DATE NULL,
+  `active` TINYINT(1) NOT NULL DEFAULT 1,
+  `apply_all_fields` TINYINT(1) NOT NULL DEFAULT 0,
+  `apply_all_services` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` DATETIME NULL,
+  `updated_at` DATETIME NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_customer_offers_customer` (`customer_id`),
+  CONSTRAINT `fk_customer_offers_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
+CREATE TABLE IF NOT EXISTS `customer_offer_fields` (
+  `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `customer_offer_id` INT(11) UNSIGNED NOT NULL,
+  `field_id` INT(11) UNSIGNED NOT NULL,
+  `created_at` DATETIME NULL,
+  `updated_at` DATETIME NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_customer_offer_fields_offer_field` (`customer_offer_id`, `field_id`),
+  CONSTRAINT `fk_customer_offer_fields_offer` FOREIGN KEY (`customer_offer_id`) REFERENCES `customer_offers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_customer_offer_fields_field` FOREIGN KEY (`field_id`) REFERENCES `fields` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
+CREATE TABLE IF NOT EXISTS `customer_offer_services` (
+  `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `customer_offer_id` INT(11) UNSIGNED NOT NULL,
+  `service_code` VARCHAR(40) NOT NULL,
+  `created_at` DATETIME NULL,
+  `updated_at` DATETIME NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_customer_offer_services_offer_service` (`customer_offer_id`, `service_code`),
+  CONSTRAINT `fk_customer_offer_services_offer` FOREIGN KEY (`customer_offer_id`) REFERENCES `customer_offers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_customer_offer_services_service` FOREIGN KEY (`service_code`) REFERENCES `services` (`code`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
+ALTER TABLE `bookings`
+  ADD COLUMN IF NOT EXISTS `customer_offer_id` INT(11) UNSIGNED NULL AFTER `id_customer`,
+  ADD COLUMN IF NOT EXISTS `original_total` DECIMAL(12,2) NULL AFTER `customer_offer_id`,
+  ADD COLUMN IF NOT EXISTS `discount_percentage` DECIMAL(5,2) NULL AFTER `original_total`,
+  ADD COLUMN IF NOT EXISTS `discount_amount` DECIMAL(12,2) NULL AFTER `discount_percentage`;
+
+UPDATE `bookings`
+SET `original_total` = `total`
+WHERE `original_total` IS NULL;
+
+UPDATE `bookings`
+SET `discount_percentage` = 0
+WHERE `discount_percentage` IS NULL;
+
+UPDATE `bookings`
+SET `discount_amount` = 0
+WHERE `discount_amount` IS NULL;
+
 SET FOREIGN_KEY_CHECKS = 1;
