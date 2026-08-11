@@ -27,11 +27,12 @@
     <!-- <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js" integrity="sha384-cuYeSxntonz0PPNlHhBs68uyIAVpIIOZZ5JqeqvYYIcEL727kskC66kF92t6Xl2V" crossorigin="anonymous"></script> -->
     <link rel="stylesheet" href="<?= base_url(PUBLIC_FOLDER . "assets/css/theme.css?v=" . time()) ?>">
     <link rel="stylesheet" href="<?= base_url(PUBLIC_FOLDER . "assets/css/styles.css") ?>">
+    <?php echo $this->renderSection('styles') ?>
     <script src="https://kit.fontawesome.com/9bae38f407.js" crossorigin="anonymous"></script>
 
 </head>
 
-<body class="site-body">
+<body class="site-body <?php echo trim((string) $this->renderSection('bodyClass')) ?>">
     <?php echo $this->renderSection('navbar') ?>
     <nav class="navbar navbar-expand-lg site-navbar" style="background-color: #ffffff;">
         <div class="container-fluid d-flex justify-content-center align-items-center flex-row">
