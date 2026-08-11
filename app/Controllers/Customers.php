@@ -147,6 +147,7 @@ class Customers extends BaseController
 
         return view('customers/register_window', [
             'embedded' => $embedded,
+            'suppressPublicRegisterModal' => true,
         ]);
     }
 
@@ -219,42 +220,6 @@ class Customers extends BaseController
     public function dbRegister()
     {
         return $this->handleRegisterSubmission(false);
-
-        $modelCustomers = new CustomersModel();
-
-        $phone = $this->request->getVar('areaCode') . $this->request->getVar('phone');
-        $name = $this->request->getVar('name');
-        $lastName = $this->request->getVar('last_name');
-        $dni = $this->request->getVar('dni');
-        $city = $this->request->getVar('city');
-        $this->ensureLocalityExists($city);
-
-        $existingPhone = $this->findCustomerByPhoneVariants($phone);
-
-        if ($phone === '' || $name === '' || $lastName === '' || $dni === '') {
-            return redirect()->to('customers/register')->with('msg', ['type' => 'danger', 'body' => 'Debe completar todos los campos']);
-        }
-
-        if ($existingPhone) {
-            return redirect()->to('customers/register')->with('msg', ['type' => 'danger', 'body' => 'El telÃ©fono coincide con un usuario ya registrado']);
-        }
-
-        $query = [
-            'name' => $name,
-            'last_name' => $lastName,
-            'dni' => $dni,
-            'phone' => $phone,
-            'offer' => 0,
-            'city' => $city,
-        ];
-
-        try {
-            $modelCustomers->insert($query);
-        } catch (\Exception $e) {
-            return 'Error al insertar datos: ' . $e->getMessage();
-        }
-
-        return redirect()->to(base_url())->with('msg', ['type' => 'success', 'body' => 'Usuario registrado correctamente']);
     }
 
     public function registerAjax()
@@ -296,6 +261,7 @@ class Customers extends BaseController
             'services' => $servicesModel->getServices(),
             'customerOffer' => $customer['customer_offer'] ?? null,
             'embedded' => $embedded,
+            'suppressPublicRegisterModal' => true,
         ]);
     }
 

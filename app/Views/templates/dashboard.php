@@ -112,7 +112,7 @@ $userBackground = $modelUploads->first();
                             <ul class="nav justify-content-center border-bottom pb-3 mb-3">
                                 <li class="nav-item"><a href="<?= base_url('auth/login') ?>" class="nav-link px-2 text-muted">Ingreso Admin</a></li>
                                 <li class="nav-item"><a class="nav-link px-2 text-muted">-</a></li>
-                                <li class="nav-item"><a href="<?= base_url('customers/register') ?>" class="nav-link px-2 text-muted">Registro Clientes</a></li>
+                                <li class="nav-item"><a href="<?= base_url('customers/register') ?>" class="nav-link px-2 text-muted js-open-public-customer-register" data-register-url="<?= base_url('customers/registerWindow') ?>">Registro Clientes</a></li>
                             </ul>
                         <?php endif; ?>
 
@@ -122,7 +122,28 @@ $userBackground = $modelUploads->first();
                     </footer>
                 </div>
 
+                <?php if (empty($suppressPublicRegisterModal)) : ?>
+                    <?php $publicRegisterScriptPath = FCPATH . 'assets/js/customerRegisterPublic.js'; ?>
+                    <div class="modal fade public-customer-register-modal" id="publicCustomerRegisterModal" tabindex="-1" aria-labelledby="publicCustomerRegisterModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+                        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="publicCustomerRegisterModalLabel">Registro de clientes</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                </div>
+                                <div class="modal-body p-0">
+                                    <iframe id="publicCustomerRegisterFrame" class="public-customer-register-frame" title="Registro de clientes"></iframe>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
                 <?php echo $this->renderSection('scripts') ?>
+
+                <?php if (empty($suppressPublicRegisterModal)) : ?>
+                    <script src="<?= base_url(PUBLIC_FOLDER . 'assets/js/customerRegisterPublic.js?v=' . (is_file($publicRegisterScriptPath) ? filemtime($publicRegisterScriptPath) : time())) ?>"></script>
+                <?php endif; ?>
 
                 <script src="<?= base_url(PUBLIC_FOLDER . "assets/js/config.js?v=" . time()) ?>"></script>
                 <script src="<?= base_url(PUBLIC_FOLDER . "assets/js/theme.js?v=" . time()) ?>"></script>
