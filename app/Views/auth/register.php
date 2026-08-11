@@ -1,3 +1,9 @@
+<?php
+$embedded = !empty($embedded);
+$selectedUserId = isset($selectedUserId) ? (int) $selectedUserId : null;
+$usersScriptPath = FCPATH . 'assets/js/users.js';
+$usersScriptVersion = is_file($usersScriptPath) ? filemtime($usersScriptPath) : time();
+?>
 <!DOCTYPE html>
 <html lang="es">
 
@@ -180,6 +186,25 @@
             min-width: 150px;
         }
 
+        body.register-screen.register-embedded .register-shell {
+            min-height: auto;
+            padding: 18px 12px;
+        }
+
+        body.register-screen.register-embedded .register-card {
+            width: 100%;
+            border-radius: 22px;
+        }
+
+        body.register-screen.register-embedded .register-hero {
+            min-height: auto;
+            padding: 28px 26px;
+        }
+
+        body.register-screen.register-embedded .register-form-pane {
+            padding: 28px 24px 24px;
+        }
+
         body.theme-dark.register-screen {
             background:
                 radial-gradient(900px 420px at -5% -10%, rgba(22, 94, 204, .24), transparent 60%),
@@ -224,7 +249,7 @@
     </style>
 </head>
 
-<body class="register-screen">
+<body class="register-screen<?= $embedded ? ' register-embedded' : '' ?>">
     <script>
         (function () {
             try {
@@ -277,16 +302,18 @@
                     <div class="register-select">
                         <label class="form-label" for="selectUser">Usuario existente</label>
                         <select class="form-select" name="users" id="selectUser" aria-label="Seleccionar usuario">
-                            <option>Seleccionar usuario</option>
+                            <option value="">Seleccionar usuario</option>
                             <?php if (isset($users)) : ?>
                                 <?php foreach ($users as $user) : ?>
-                                    <option value="<?= $user['id'] ?>"><?= $user['name'] ?></option>
+                                    <option value="<?= $user['id'] ?>" <?= $selectedUserId && (int) $selectedUserId === (int) $user['id'] ? 'selected' : '' ?>><?= $user['name'] ?></option>
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </select>
                     </div>
 
-                    <form action="" method="POST" id="formUsers">
+                    <div id="userRegisterFeedback" class="mb-3"></div>
+
+                    <form action="<?= base_url('auth/register') ?>" method="POST" id="formUsers">
                         <?php if (session('msg')) : ?>
                             <div class="alert alert-<?= session('msg.type') ?> alert-dismissible fade show" role="alert">
                                 <small><?= session('msg.body') ?></small>
@@ -339,7 +366,13 @@
     </div>
 
     <script src="<?= base_url(PUBLIC_FOLDER . "assets/js/config.js") ?>"></script>
-    <script src="<?= base_url(PUBLIC_FOLDER . "assets/js/users.js") ?>"></script>
+    <script>
+        window.userRegisterState = {
+            embedded: <?= $embedded ? 'true' : 'false' ?>,
+            selectedUserId: <?= json_encode($selectedUserId) ?>,
+        };
+    </script>
+    <script src="<?= base_url(PUBLIC_FOLDER . 'assets/js/users.js?v=' . $usersScriptVersion) ?>"></script>
 </body>
 
 </html>

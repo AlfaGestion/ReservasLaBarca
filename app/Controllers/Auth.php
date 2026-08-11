@@ -6,6 +6,19 @@ use App\Models\UsersModel;
 
 class Auth extends BaseController
 {
+    private function renderRegisterWindow(bool $embedded = false)
+    {
+        $modelUsers = new UsersModel();
+        $users = $modelUsers->findAll();
+        $selectedUserId = (int) $this->request->getGet('user_id');
+
+        return view('auth/register', [
+            'users' => $users,
+            'embedded' => $embedded,
+            'selectedUserId' => $selectedUserId > 0 ? $selectedUserId : null,
+        ]);
+    }
+
     public function index()
     {
         return view('auth/login');
@@ -60,10 +73,12 @@ class Auth extends BaseController
 
     public function register()
     {
-        $modelUsers = new UsersModel();
-        $users = $modelUsers->findAll();
+        return $this->renderRegisterWindow(false);
+    }
 
-        return view('auth/register', ['users' => $users]);
+    public function registerWindow()
+    {
+        return $this->renderRegisterWindow(true);
     }
 
     public function dbRegister()

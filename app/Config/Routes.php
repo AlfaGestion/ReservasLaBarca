@@ -46,6 +46,7 @@ $routes->post('payment/webhook', 'MercadoPago::webhook');
 
 $routes->group('auth', function ($routes) {
     $routes->post('register', 'Auth::dbRegister');
+    $routes->get('registerWindow', 'Auth::registerWindow');
     $routes->get('logOut', 'Auth::log_out');
     $routes->get('login', 'Auth::index');
     $routes->post('login', 'Auth::login');

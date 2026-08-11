@@ -1,6 +1,8 @@
 <div id="generalButtons" class="mt-3">
     <?php if (session()->superadmin) : ?>
-        <button type="button" class="btn btn-success mt-2 mb-2" id="openUserManagement" onclick="(function(){var p=document.getElementById('userManagementPanel'); if(!p)return; p.classList.toggle('d-none'); if(!p.classList.contains('d-none')){ p.scrollIntoView({behavior:'smooth', block:'start'}); } })()"><i class="fa-solid fa-user-plus me-1"></i>Crear usuario</button>
+        <a href="<?= base_url('auth/register') ?>" class="btn btn-success mt-2 mb-2 js-open-superadmin-user-management" id="openUserManagement" data-register-url="<?= base_url('auth/registerWindow') ?>" data-fallback-url="<?= base_url('auth/register') ?>" role="button">
+            <i class="fa-solid fa-user-plus me-1"></i>Crear usuario
+        </a>
         <button type="button" class="btn btn-warning mt-2 mb-2" id="openRateModal" data-bs-toggle="modal" data-bs-target="#rateModal"><i class="fa-solid fa-percent me-1"></i>Editar porcentaje de reserva</button>
         <button type="button" class="btn btn-primary mt-2 mb-2" id="openOfferRateModal" data-bs-toggle="modal" data-bs-target="#offerRateModal"><i class="fa-solid fa-percent me-1"></i>Editar porcentaje de oferta</button>
         <button type="button" class="btn btn-outline-dark mt-2 mb-2" id="toggleConfigPanel"><i class="fa-solid fa-gear me-1"></i>Configuracion</button>
@@ -381,6 +383,14 @@
                         <td><?= $user['name'] ?></td>
                         <td><?= $user['superadmin'] == 1 ? 'Si' : 'No' ?></td>
                         <td>
+                            <a
+                                href="<?= base_url('auth/register?user_id=' . $user['id']) ?>"
+                                class="btn btn-primary me-2 js-open-superadmin-user-management"
+                                data-register-url="<?= base_url('auth/registerWindow') ?>"
+                                data-fallback-url="<?= base_url('auth/register') ?>"
+                                data-user-id="<?= $user['id'] ?>"
+                                role="button"
+                            >Editar</a>
                             <form action="<?= base_url('deleteUser/' . $user['id']) ?>" method="POST" style="display:inline;" data-confirm-message="Eliminar usuario seleccionado?"><?= csrf_field() ?> <button type="button" class="btn btn-danger" onclick="if(window.inlineDeleteUser){window.inlineDeleteUser(this.form);}">Eliminar</button>
                             </form>
                         </td>
@@ -460,6 +470,24 @@
         } catch (error) {
             if (window.alert) window.alert('No se pudo eliminar el usuario.');
             console.error(error);
-        }
-    };
+            }
+        };
 </script>
+
+<?php if (session()->superadmin) : ?>
+    <?php $userManagementScriptPath = FCPATH . 'assets/js/userManagementModal.js'; ?>
+    <div class="modal fade superadmin-user-modal" id="superadminUserManagementModal" tabindex="-1" aria-labelledby="superadminUserManagementModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="superadminUserManagementModalLabel">Usuarios del panel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <iframe id="superadminUserManagementFrame" class="superadmin-user-frame" title="Usuarios del panel"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="<?= base_url(PUBLIC_FOLDER . 'assets/js/userManagementModal.js?v=' . (is_file($userManagementScriptPath) ? filemtime($userManagementScriptPath) : time())) ?>"></script>
+<?php endif; ?>
