@@ -112,6 +112,7 @@ $routes->group('', ['filter' => 'auth'], function ($routes) {
     $routes->post('completePayment/(:any)', 'Bookings::completePayment/$1');
     $routes->post('getReports', 'Bookings::getReports');
     $routes->post('getMpPayments', 'Bookings::getMpPayments');
+    $routes->get('getBookingAudit/(:any)', 'Bookings::getBookingAudit/$1');
     $routes->post('cancelBooking', 'Bookings::cancelBooking');
     $routes->post('editBooking', 'Bookings::editBooking');
     $routes->post('saveAdminBooking', 'Bookings::saveAdminBooking');
@@ -119,6 +120,7 @@ $routes->group('', ['filter' => 'auth'], function ($routes) {
     $routes->get('generatePaymentsReportPdf/(:any)/(:any)', 'Bookings::generatePaymentsReportPdf/$1/$2');
 
     $routes->post('saveRate', 'Rate::saveRate');
+    $routes->get('getRateHistory', 'Rate::getRateHistory');
 
     $routes->post('saveOfferRate', 'Offers::saveOfferRate');
 

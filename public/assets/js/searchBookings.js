@@ -10,6 +10,10 @@ const bookingHistoryModalElement = document.getElementById('bookingHistoryModal'
 const bookingHistoryModal = bookingHistoryModalElement ? new bootstrap.Modal(bookingHistoryModalElement) : null
 const bookingHistoryList = document.getElementById('bookingHistoryList')
 const bookingHistoryInfo = document.getElementById('bookingHistoryInfo')
+const bookingAuditModalElement = document.getElementById('bookingAuditModal')
+const bookingAuditModal = bookingAuditModalElement ? new bootstrap.Modal(bookingAuditModalElement) : null
+const bookingAuditContent = document.getElementById('bookingAuditContent')
+const bookingAuditSubtitle = document.getElementById('bookingAuditSubtitle')
 const toggleBookingAlertsButton = document.getElementById('toggleBookingAlerts')
 const bookingAlertsStatus = document.getElementById('bookingAlertsStatus')
 
@@ -34,6 +38,15 @@ function formatDateTime(dateTime) {
 function normalizeHexColor(color) {
     const value = String(color || '').trim().toUpperCase()
     return /^#[0-9A-F]{6}$/.test(value) ? value : '#F39323'
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
 }
 
 function renderServiceBadge(serviceName, serviceColor) {
@@ -65,6 +78,30 @@ document.addEventListener('DOMContentLoaded', async (e) => {
 
 document.addEventListener('click', async (e) => {
     if (e.target) {
+        const auditButton = e.target.closest('.view-booking-audit')
+        if (auditButton) {
+            const id = auditButton.dataset.id
+            if (!id) return
+            if (bookingAuditModal && bookingAuditContent) {
+                bookingAuditSubtitle.textContent = `Reserva #${id} · cargando detalle...`
+                bookingAuditContent.innerHTML = '<div class="text-muted small">Cargando auditoría...</div>'
+                bookingAuditModal.show()
+            }
+            try {
+                const audit = await fetchBookingAudit(id)
+                if (bookingAuditSubtitle) {
+                    bookingAuditSubtitle.textContent = `Reserva #${audit.booking_id || id}`
+                }
+                if (bookingAuditContent) {
+                    bookingAuditContent.innerHTML = renderBookingAuditModal(audit)
+                }
+            } catch (error) {
+                if (bookingAuditContent) {
+                    bookingAuditContent.innerHTML = '<div class="alert alert-danger mb-0">No se pudo cargar el detalle de la reserva.</div>'
+                }
+            }
+            return
+        }
         if (e.target.id == 'searchBooking') {
             bookingData = {
                 fechaDesde: inputDesdeBooking.value,
@@ -181,6 +218,296 @@ async function fetchBookingHistory(bookingId, limit = 50) {
     const json = await response.json()
     if (!response.ok || json.error) throw new Error(json.message || 'No se pudo obtener historial')
     return Array.isArray(json.data) ? json.data : []
+}
+
+async function fetchBookingAudit(bookingId) {
+    const response = await fetch(`${baseUrl}getBookingAudit/${bookingId}`)
+    const json = await response.json()
+    if (!response.ok || json.error) throw new Error(json.message || 'No se pudo obtener el detalle de la reserva')
+    return json.data || {}
+}
+
+function formatAuditMoney(value) {
+    if (value === null || value === undefined || value === '') return 'No registrado'
+    return formatPriceAR(value)
+}
+
+function formatAuditDateTime(value) {
+    if (!value) return 'No registrado'
+    const text = String(value)
+    if (text.includes('T')) {
+        return new Date(text).toLocaleString('es-AR', { hour12: false })
+    }
+    if (text.includes(' ')) {
+        const [datePart, timePart] = text.split(' ')
+        const [y, m, d] = datePart.split('-')
+        if (y && m && d) {
+            return `${d}/${m}/${y} ${timePart || ''}`.trim()
+        }
+    }
+    if (text.includes('-')) {
+        const [y, m, d] = text.split('-')
+        if (y && m && d) return `${d}/${m}/${y}`
+    }
+    return text
+}
+
+function renderAuditBadge(label, type = 'secondary') {
+    return `<span class="badge bg-${type}">${escapeHtml(label)}</span>`
+}
+
+function renderBookingAuditSection(title, body) {
+    return `
+        <section class="mb-4">
+            <h6 class="mb-2">${escapeHtml(title)}</h6>
+            <div class="border rounded-3 p-3 bg-light-subtle">
+                ${body}
+            </div>
+        </section>
+    `
+}
+
+function renderBookingAuditTable(rows, emptyMessage) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return `<div class="text-muted small">${escapeHtml(emptyMessage)}</div>`
+    }
+
+    return `
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Método</th>
+                        <th>Importe</th>
+                        <th>Usuario</th>
+                        <th>MP ID</th>
+                        <th>Interno</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows.map((row) => `
+                        <tr>
+                            <td>${escapeHtml(formatAuditDateTime(row.created_at || row.date))}</td>
+                            <td>${escapeHtml(row.payment_method || 'N/D')}</td>
+                            <td>${escapeHtml(formatAuditMoney(row.amount))}</td>
+                            <td>${escapeHtml(row.user_name || 'N/D')}</td>
+                            <td>${escapeHtml(row.mercado_pago_id || 'N/D')}</td>
+                            <td>${escapeHtml(String(row.id || 'N/D'))}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `
+}
+
+function renderBookingAuditModal(data) {
+    const booking = data.booking || {}
+    const customer = data.customer || {}
+    const creator = data.creator || {}
+    const field = data.field || {}
+    const service = data.service || {}
+    const payments = Array.isArray(data.payments) ? data.payments : []
+    const mp = data.mercado_pago || {}
+    const mpLive = data.mercado_pago_live || {}
+    const firstMpPayment = data.first_mp_payment || null
+    const warnings = Array.isArray(data.warnings) ? data.warnings : []
+
+    const reservationRate = data.reservation_rate === null || data.reservation_rate === undefined
+        ? 'No registrado'
+        : `${Number(data.reservation_rate).toFixed(2).replace(/\.00$/, '')}%`
+    const expectedPartial = data.expected_partial === null || data.expected_partial === undefined
+        ? 'No registrado'
+        : formatPriceAR(data.expected_partial)
+    const storedPartial = data.stored_partial === null || data.stored_partial === undefined
+        ? 'No registrado'
+        : formatPriceAR(data.stored_partial)
+    const total = formatPriceAR(booking.total || 0)
+    const totalPaid = Number(data.payments_total_unique ?? data.payments_total ?? 0)
+    const totalPaidRaw = Number(data.payments_total_raw ?? data.payments_total ?? 0)
+    const totalValue = Number(booking.total || 0)
+    const paid = formatPriceAR(totalPaid)
+    const saldo = formatPriceAR(data.saldo || 0)
+    const paymentMethod = booking.payment_method || data.payment_method || 'N/D'
+    const isMismatch = warnings.length > 0
+    const paymentStatus = (totalPaid >= totalValue && totalValue > 0) ? 'Sí' : 'No'
+
+    const summaryCards = `
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="border rounded-3 p-3 h-100 bg-white">
+                    <div class="small text-muted">Total reserva</div>
+                    <div class="fs-5 fw-bold">${escapeHtml(total)}</div>
+                    <div class="small text-muted">Pagado: ${escapeHtml(paid)}</div>
+                    <div class="small text-muted">Saldo: ${escapeHtml(saldo)}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded-3 p-3 h-100 bg-white">
+                    <div class="small text-muted">Porcentaje de seña</div>
+                    <div class="fs-5 fw-bold">${escapeHtml(reservationRate)}</div>
+                    <div class="small text-muted">Seña esperada: ${escapeHtml(expectedPartial)}</div>
+                    <div class="small text-muted">Parcial guardado: ${escapeHtml(storedPartial)}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded-3 p-3 h-100 bg-white">
+                    <div class="small text-muted">Estado auditivo</div>
+                    <div class="fs-5 fw-bold">${paymentStatus === 'Sí' ? 'Pagó total' : 'No pagó total'}</div>
+                    <div class="small text-muted">Método: ${escapeHtml(paymentMethod)}</div>
+                    <div class="small text-muted">Pagos registrados: ${escapeHtml(formatPriceAR(totalPaid))}</div>
+                    <div class="small text-muted">Suma cruda: ${escapeHtml(formatPriceAR(totalPaidRaw))}</div>
+                </div>
+            </div>
+        </div>
+    `
+
+    const warningHtml = warnings.length > 0
+        ? `
+            <div class="alert alert-warning">
+                <div class="fw-bold mb-1">Advertencias detectadas</div>
+                <div class="mb-2">
+                    ${warnings.some((warning) => warning.includes('parcial almacenado') || warning.includes('Mercado Pago registró un importe diferente'))
+                        ? renderAuditBadge('Importe distinto a la seña calculada', 'warning text-dark')
+                        : ''}
+                </div>
+                <ul class="mb-0">
+                    ${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join('')}
+                </ul>
+            </div>
+        `
+        : '<div class="alert alert-success">No se detectaron diferencias visibles entre el snapshot y los pagos guardados.</div>'
+
+    const mpLiveRows = []
+    if (mp.payment_id || mpLive.payment_id) {
+        mpLiveRows.push(['Payment ID', mp.payment_id || mpLive.payment_id])
+        mpLiveRows.push(['Preference parcial', booking.id_preference_parcial || 'N/D'])
+        mpLiveRows.push(['Preference total', booking.id_preference_total || 'N/D'])
+        mpLiveRows.push(['Estado MP', mp.status || mpLive.status || 'N/D'])
+        mpLiveRows.push(['Status confirmed', (mp.status || mpLive.status || '') === 'approved' ? 'Sí' : 'No'])
+        mpLiveRows.push(['MP transaction_amount', mpLive.transaction_amount ?? 'No registrado'])
+        mpLiveRows.push(['Merchant order ID', mpLive.merchant_order_id || mp.merchant_order_id || 'N/D'])
+        mpLiveRows.push(['Fecha MP', mpLive.date_approved || mpLive.date_created || 'N/D'])
+    }
+    if (firstMpPayment) {
+        mpLiveRows.push(['Primer pago MP', formatPriceAR(firstMpPayment.amount || 0)])
+        mpLiveRows.push(['Primer pago MP fecha', formatAuditDateTime(firstMpPayment.created_at || firstMpPayment.date)])
+        mpLiveRows.push(['Primer pago MP usuario', firstMpPayment.user_name || 'N/D'])
+    }
+
+    const mpHtml = mpLiveRows.length > 0
+        ? `<dl class="row mb-0">${mpLiveRows.map(([label, value]) => `
+            <dt class="col-sm-4">${escapeHtml(label)}</dt>
+            <dd class="col-sm-8">${escapeHtml(String(value))}</dd>
+        `).join('')}</dl>`
+        : '<div class="text-muted small">No hay información de Mercado Pago asociada.</div>'
+
+    const creatorHtml = `
+        <dl class="row mb-0">
+            <dt class="col-sm-4">Creado por tipo</dt>
+            <dd class="col-sm-8">${escapeHtml(creator.type || 'N/D')}</dd>
+            <dt class="col-sm-4">Creado por nombre</dt>
+            <dd class="col-sm-8">${escapeHtml(creator.name || 'N/D')}</dd>
+            <dt class="col-sm-4">Usuario ID</dt>
+            <dd class="col-sm-8">${escapeHtml(creator.user_id || 'N/D')}</dd>
+            <dt class="col-sm-4">Editado por</dt>
+            <dd class="col-sm-8">${escapeHtml(booking.edited_by_name || 'N/D')}</dd>
+            <dt class="col-sm-4">Editado el</dt>
+            <dd class="col-sm-8">${escapeHtml(formatAuditDateTime(booking.edited_at))}</dd>
+        </dl>
+    `
+
+    const bookingHtml = `
+        <dl class="row mb-0">
+            <dt class="col-sm-4">ID de reserva</dt>
+            <dd class="col-sm-8">${escapeHtml(booking.id || data.booking_id || 'N/D')}</dd>
+            <dt class="col-sm-4">Estado</dt>
+            <dd class="col-sm-8">${escapeHtml(booking.annulled == 1 ? 'Anulada' : (booking.approved == 1 ? 'Activa / aprobada' : 'Pendiente'))}</dd>
+            <dt class="col-sm-4">Fecha de creación</dt>
+            <dd class="col-sm-8">${escapeHtml(formatAuditDateTime(booking.booking_time || booking.created_at))}</dd>
+            <dt class="col-sm-4">Fecha reservada</dt>
+            <dd class="col-sm-8">${escapeHtml(booking.date || 'N/D')}</dd>
+            <dt class="col-sm-4">Horario</dt>
+            <dd class="col-sm-8">${escapeHtml((booking.time_from || 'N/D') + ' a ' + (booking.time_until || 'N/D'))}</dd>
+            <dt class="col-sm-4">Cancha / servicio</dt>
+            <dd class="col-sm-8">${escapeHtml(field.name || 'N/D')} ${service.color ? `<span class="badge ms-2" style="background:${escapeHtml(normalizeHexColor(service.color))};color:#fff;">${escapeHtml(service.name || field.service_type || '')}</span>` : ''}</dd>
+            <dt class="col-sm-4">Descripción</dt>
+            <dd class="col-sm-8">${escapeHtml(booking.description || 'N/D')}</dd>
+        </dl>
+    `
+
+    const customerHtml = `
+        <dl class="row mb-0">
+            <dt class="col-sm-4">Nombre</dt>
+            <dd class="col-sm-8">${escapeHtml(customer.name || booking.name || 'N/D')}</dd>
+            <dt class="col-sm-4">Teléfono</dt>
+            <dd class="col-sm-8">${escapeHtml(customer.phone || booking.phone || 'N/D')}</dd>
+            <dt class="col-sm-4">Localidad</dt>
+            <dd class="col-sm-8">${escapeHtml(customer.city || booking.locality || 'N/D')}</dd>
+            <dt class="col-sm-4">Customer ID</dt>
+            <dd class="col-sm-8">${escapeHtml(booking.id_customer || 'N/D')}</dd>
+        </dl>
+    `
+
+    const econHtml = `
+        <dl class="row mb-0">
+            <dt class="col-sm-4">Precio original</dt>
+            <dd class="col-sm-8">${escapeHtml(formatAuditMoney(booking.original_total))}</dd>
+            <dt class="col-sm-4">Descuento aplicado</dt>
+            <dd class="col-sm-8">${escapeHtml(formatAuditMoney(booking.discount_amount))} (${escapeHtml(booking.discount_percentage ?? '0')}%)</dd>
+            <dt class="col-sm-4">Total final</dt>
+            <dd class="col-sm-8">${escapeHtml(total)}</dd>
+            <dt class="col-sm-4">Booking.payment</dt>
+            <dd class="col-sm-8">${escapeHtml(formatAuditMoney(booking.payment ?? data.booking_payment_snapshot ?? 0))}</dd>
+            <dt class="col-sm-4">Booking.reservation</dt>
+            <dd class="col-sm-8">${escapeHtml(booking.reservation === null || booking.reservation === undefined ? 'No registrado' : formatAuditMoney(booking.reservation))}</dd>
+            <dt class="col-sm-4">Seña calculada</dt>
+            <dd class="col-sm-8">${escapeHtml(expectedPartial)}</dd>
+            <dt class="col-sm-4">Seña guardada</dt>
+            <dd class="col-sm-8">${escapeHtml(storedPartial)}</dd>
+            <dt class="col-sm-4">Suma pagos única</dt>
+            <dd class="col-sm-8">${escapeHtml(formatAuditMoney(totalPaid))}</dd>
+            <dt class="col-sm-4">Suma pagos cruda</dt>
+            <dd class="col-sm-8">${escapeHtml(formatAuditMoney(totalPaidRaw))}</dd>
+            <dt class="col-sm-4">Total pagado</dt>
+            <dd class="col-sm-8">${escapeHtml(formatAuditMoney(totalPaid))}</dd>
+            <dt class="col-sm-4">Saldo</dt>
+            <dd class="col-sm-8">${escapeHtml(saldo)}</dd>
+            <dt class="col-sm-4">Pagó total</dt>
+            <dd class="col-sm-8">${renderAuditBadge(paymentStatus === 'Sí' ? 'Sí' : 'No', paymentStatus === 'Sí' ? 'success' : 'warning')}</dd>
+            <dt class="col-sm-4">Método de pago</dt>
+            <dd class="col-sm-8">${escapeHtml(paymentMethod)}</dd>
+        </dl>
+    `
+
+    const paymentsHtml = renderBookingAuditTable(payments, 'No hay pagos registrados para esta reserva.')
+    const duplicatePaymentsHtml = Array.isArray(data.duplicate_payments) && data.duplicate_payments.length > 0
+        ? `
+            <div class="alert alert-warning">
+                <div class="fw-bold mb-2">Pagos duplicados detectados</div>
+                <div class="small text-muted mb-2">Estos registros comparten el mismo identificador de Mercado Pago o una misma referencia interna.</div>
+                <ul class="mb-0">
+                    ${data.duplicate_payments.map((payment) => `
+                        <li>${escapeHtml(`${formatAuditDateTime(payment.created_at || payment.date)} | ${payment.payment_method || 'N/D'} | ${formatAuditMoney(payment.amount || 0)} | MP ID: ${payment.mercado_pago_id || 'N/D'} | ID interno: ${payment.id || 'N/D'}`)}</li>
+                    `).join('')}
+                </ul>
+            </div>
+        `
+        : ''
+
+    return `
+        ${summaryCards}
+        ${warningHtml}
+        ${renderBookingAuditSection('Reserva', bookingHtml)}
+        ${renderBookingAuditSection('Cliente', customerHtml)}
+        ${renderBookingAuditSection('Creación', creatorHtml)}
+        ${renderBookingAuditSection('Detalle económico', econHtml)}
+        ${renderBookingAuditSection('Historial de pagos', paymentsHtml)}
+        ${duplicatePaymentsHtml}
+        ${renderBookingAuditSection('Mercado Pago', mpHtml)}
+        ${isMismatch ? '' : ''}
+    `
 }
 
 function showReservationToast(message) {
@@ -346,6 +673,7 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
 
     const pendientes = []
     const finalizadas = []
+    const viewAction = (reservaId) => `<li><button type="button" class="btn btn-primary dropdown-item view-booking-audit" data-id="${reservaId}">Ver</button></li>`
 
     data.forEach(reserva => {
         if (reserva.anulada == 0 && reserva.pago_total === 'Si') {
@@ -358,6 +686,10 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
     const ordered = pendientes.concat(finalizadas)
 
     ordered.forEach(reserva => {
+        actions = ''
+        edit = ''
+        anular = ''
+        state = ''
 
         if (reserva.mp == 0) {
             if (existPending == false) {
@@ -384,10 +716,14 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
             if (sessionUserSuperadmin == 1) {
                 if (reserva.anulada == 1) {
                     actions = `
-                    <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-success" disabled>
-                            Sin acciones
+                    <div class="btn-group dropstart" role="group">
+                        <button type="button" class="btn btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            Acciones
                         </button>
+                        <ul class="dropdown-menu">
+                            <input type="text" id="userId" data-id="${sessionUserId}" hidden>
+                            ${viewAction(reserva.id)}
+                        </ul>
                     </div>
                 `
                 } else {
@@ -398,6 +734,7 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
                         </button>
                         <ul class="dropdown-menu">
                             <input type="text" id="userId" data-id="${sessionUserId}" hidden>                        
+                            ${viewAction(reserva.id)}
                             ${anular}
     
                             ${edit}
@@ -409,10 +746,14 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
 
             } else {
                 actions = `
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-success" disabled>
-                        Sin acciones
+                <div class="btn-group dropstart" role="group">
+                    <button type="button" class="btn btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        Acciones
                     </button>
+                    <ul class="dropdown-menu">
+                        <input type="text" id="userId" data-id="${sessionUserId}" hidden>
+                        ${viewAction(reserva.id)}
+                    </ul>
                 </div>
             `
             }
@@ -420,10 +761,14 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
         } else {
             if (reserva.anulada == 1) {
                 actions = `
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-success" disabled>
-                        Sin acciones
+                <div class="btn-group dropstart" role="group">
+                    <button type="button" class="btn btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        Acciones
                     </button>
+                    <ul class="dropdown-menu">
+                        <input type="text" id="userId" data-id="${sessionUserId}" hidden>
+                        ${viewAction(reserva.id)}
+                    </ul>
                 </div>
             `
             } else {
@@ -434,6 +779,7 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
                 </button>
                 <ul class="dropdown-menu">
                     <input type="text" id="userId" data-id="${sessionUserId}" hidden>
+                    ${viewAction(reserva.id)}
                     <li><button type="button" class="btn btn-primary dropdown-item" id="modalCambiarEstado" data-id="${reserva.id}">Cambiar estado de pago</button></li>
                     <li><button type="button" class="btn btn-primary dropdown-item" id="modalCompletarPago" data-id="${reserva.id}">Completar pago</button></li>
 

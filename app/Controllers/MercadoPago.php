@@ -933,9 +933,15 @@ class MercadoPago extends BaseController
 
             try {
                 $existingPayment = $paymentsModel
-                    ->where('id_booking', $primaryBookingId)
                     ->where('id_mercado_pago', $paymentId)
                     ->first();
+
+                if (!$existingPayment) {
+                    $existingPayment = $paymentsModel
+                        ->where('id_booking', $primaryBookingId)
+                        ->where('id_mercado_pago', $paymentId)
+                        ->first();
+                }
 
                 if (!$existingPayment) {
                     $paymentsModel->insert([
@@ -1229,6 +1235,7 @@ class MercadoPago extends BaseController
             $montoParcial = (float) (($montoTotal * $rate) / 100);
             $bookingArr['total'] = $montoTotal;
             $bookingArr['parcial'] = $montoParcial;
+            $bookingArr['reservation_rate'] = $rate;
             $bookingArr['diferencia'] = $montoTotal;
             $bookingArr['reservacion'] = 0;
             $bookingArr['original_total'] = (float) ($bookingQuote['original_total'] ?? $montoTotal);
@@ -1262,6 +1269,7 @@ class MercadoPago extends BaseController
                 'approved' => 0,
                 'total' => $bookingArr['total'] ?? 0,
                 'parcial' => $bookingArr['parcial'] ?? 0,
+                'reservation_rate' => $bookingArr['reservation_rate'] ?? null,
                 'diference' => $bookingArr['total'] ?? 0,
                 'reservation' => 0,
                 'total_payment' => 0,
@@ -1316,6 +1324,7 @@ class MercadoPago extends BaseController
                     'approved' => 0,
                     'total' => (float) ($additionalQuote['final_amount'] ?? 0),
                     'parcial' => 0,
+                    'reservation_rate' => $rate,
                     'diference' => 0,
                     'reservation' => 0,
                     'total_payment' => 0,

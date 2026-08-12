@@ -14,10 +14,12 @@ use App\Models\ConfigModel;
 use App\Models\CustomersModel;
 use App\Models\FieldsModel;
 use App\Models\MercadoPagoModel;
+use App\Models\MercadoPagoKeysModel;
 use App\Models\PaymentsModel;
 use App\Models\ServicesModel;
 use App\Models\TimeModel;
 use App\Models\UsersModel;
+use App\Models\RateModel;
 use CodeIgniter\I18n\Time;
 
 class Bookings extends BaseController
@@ -26,6 +28,317 @@ class Bookings extends BaseController
     {
         $value = strtoupper(trim((string)$color));
         return preg_match('/^#[0-9A-F]{6}$/', $value) ? $value : '#F39323';
+    }
+
+    private function normalizePercentageValue($value): ?float
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $value = str_replace(',', '.', trim($value));
+        }
+
+        if ($value === '' || ! is_numeric($value)) {
+            return null;
+        }
+
+        return round((float) $value, 2);
+    }
+
+    private function getCurrentReservationRate(): ?float
+    {
+        $rateRow = (new RateModel())->first();
+        return $this->normalizePercentageValue($rateRow['value'] ?? null);
+    }
+
+    private function calculateExpectedPartial(float $total, ?float $rate): ?float
+    {
+        if ($rate === null) {
+            return null;
+        }
+
+        return round(($total * $rate) / 100, 2);
+    }
+
+    private function applyReservationRateSnapshot(array $booking, ?float $rate, bool $forcePartial = true): array
+    {
+        $booking['reservation_rate'] = $rate;
+        if ($forcePartial && array_key_exists('total', $booking) && $rate !== null) {
+            $booking['parcial'] = $this->calculateExpectedPartial((float) ($booking['total'] ?? 0), $rate);
+        }
+
+        return $booking;
+    }
+
+    private function getCurrentUserContext(): array
+    {
+        $userId = session()->get('id_user') ?? session()->get('id') ?? null;
+        $userId = is_numeric($userId) ? (int) $userId : null;
+        $userName = trim((string) (session()->get('name') ?? session()->get('user') ?? session()->get('email') ?? ''));
+
+        if ($userId) {
+            $user = (new UsersModel())->find($userId);
+            if ($user) {
+                $userName = trim((string) ($user['name'] ?? $user['user'] ?? $userName));
+            }
+        }
+
+        return [$userId, $userName !== '' ? $userName : null];
+    }
+
+    private function formatBookingCreator(array $booking): array
+    {
+        $type = trim((string) ($booking['created_by_type'] ?? ''));
+        $name = trim((string) ($booking['created_by_name'] ?? ''));
+        $userId = isset($booking['created_by_user_id']) && $booking['created_by_user_id'] !== '' ? (int) $booking['created_by_user_id'] : null;
+
+        if ($type === '') {
+            $type = $name !== '' ? 'ADMINISTRADOR' : 'CLIENTE';
+        }
+
+        $typeUpper = strtoupper($type);
+        if (str_contains($typeUpper, 'CLIENT')) {
+            $type = 'CLIENTE';
+        } elseif (str_contains($typeUpper, 'ADMIN')) {
+            $type = 'ADMINISTRADOR';
+        }
+
+        if ($type === 'CLIENTE') {
+            return [
+                'type' => 'CLIENTE',
+                'name' => 'CLIENTE',
+                'user_id' => $userId,
+                'label' => 'CLIENTE',
+            ];
+        }
+
+        $displayName = $name !== '' ? $name : ($userId ? ('Usuario #' . $userId) : 'N/D');
+
+        return [
+            'type' => $type,
+            'name' => $displayName,
+            'user_id' => $userId,
+            'label' => trim($type . ' - ' . $displayName),
+        ];
+    }
+
+    private function resolveBookingPayments(int $bookingId): array
+    {
+        $paymentsModel = new PaymentsModel();
+        $usersModel = new UsersModel();
+
+        $payments = $paymentsModel->where('id_booking', $bookingId)
+            ->orderBy('created_at', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->findAll();
+
+        $result = [];
+        foreach ($payments as $payment) {
+            $userName = null;
+            $userId = isset($payment['id_user']) ? (int) $payment['id_user'] : null;
+            if ($userId) {
+                $userName = $usersModel->getUserName($userId);
+                if ($userName === null) {
+                    $user = $usersModel->find($userId);
+                    $userName = $user['name'] ?? $user['user'] ?? null;
+                }
+            }
+
+            $result[] = [
+                'id' => (int) ($payment['id'] ?? 0),
+                'created_at' => $payment['created_at'] ?? null,
+                'date' => $payment['date'] ?? null,
+                'amount' => (float) ($payment['amount'] ?? 0),
+                'payment_method' => $payment['payment_method'] ?? null,
+                'user_id' => $userId,
+                'user_name' => $userName ?: ($userId ? ('Usuario #' . $userId) : 'Sistema'),
+                'mercado_pago_id' => $payment['id_mercado_pago'] ?? null,
+            ];
+        }
+
+        return $result;
+    }
+
+    private function summarizeBookingPayments(array $payments): array
+    {
+        $rawTotal = 0.0;
+        $uniqueTotal = 0.0;
+        $uniqueKeys = [];
+        $duplicates = [];
+
+        foreach ($payments as $payment) {
+            $amount = (float) ($payment['amount'] ?? 0);
+            $rawTotal += $amount;
+
+            $idMercadoPago = trim((string) ($payment['mercado_pago_id'] ?? ''));
+            $key = $idMercadoPago !== ''
+                ? 'mp:' . $idMercadoPago
+                : 'row:' . (int) ($payment['id'] ?? 0);
+
+            if (isset($uniqueKeys[$key])) {
+                $duplicates[] = $payment;
+                continue;
+            }
+
+            $uniqueKeys[$key] = true;
+            $uniqueTotal += $amount;
+        }
+
+        return [
+            'raw_total' => round($rawTotal, 2),
+            'unique_total' => round($uniqueTotal, 2),
+            'duplicates' => $duplicates,
+        ];
+    }
+
+    private function fetchMercadoPagoPaymentDataForAudit(?string $paymentId): ?array
+    {
+        $paymentId = trim((string) $paymentId);
+        if ($paymentId === '') {
+            return null;
+        }
+
+        $tokenRow = (new MercadoPagoKeysModel())->first();
+        $token = trim((string) ($tokenRow['access_token'] ?? ''));
+        if ($token === '') {
+            return null;
+        }
+
+        $url = 'https://api.mercadopago.com/v1/payments/' . urlencode($paymentId);
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json',
+        ]);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+
+        $verifySsl = getenv('MP_VERIFY_SSL');
+        if ($verifySsl === '0' || strtolower((string) $verifySsl) === 'false') {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        }
+
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response === false) {
+            log_message('error', 'No se pudo consultar MP en auditoria: ' . $curlError);
+            return null;
+        }
+
+        $payload = json_decode($response, true);
+        if (!is_array($payload) || $statusCode < 200 || $statusCode >= 300) {
+            log_message('error', 'MP auditoria respondio error payment_id=' . $paymentId . ' http_status=' . $statusCode);
+            return null;
+        }
+
+        return [
+            'payment_id' => isset($payload['id']) ? (string) $payload['id'] : $paymentId,
+            'status' => isset($payload['status']) ? (string) $payload['status'] : null,
+            'collection_status' => isset($payload['collection_status']) ? (string) $payload['collection_status'] : null,
+            'transaction_amount' => isset($payload['transaction_amount']) ? (float) $payload['transaction_amount'] : null,
+            'merchant_order_id' => isset($payload['merchant_order_id']) ? (string) $payload['merchant_order_id'] : null,
+            'date_approved' => isset($payload['date_approved']) ? (string) $payload['date_approved'] : null,
+            'date_created' => isset($payload['date_created']) ? (string) $payload['date_created'] : null,
+            'payment_type_id' => isset($payload['payment_type_id']) ? (string) $payload['payment_type_id'] : null,
+        ];
+    }
+
+    private function buildBookingAuditPayload(array $booking): array
+    {
+        $bookingId = (int) ($booking['id'] ?? 0);
+        $field = (new FieldsModel())->getField($booking['id_field'] ?? null) ?? [];
+        $serviceType = (string) ($field['service_type'] ?? 'football');
+        $service = (new ServicesModel())->getByCode($serviceType) ?? [];
+        $customer = null;
+        if (!empty($booking['id_customer'])) {
+            $customer = (new CustomersModel())->find((int) $booking['id_customer']);
+        }
+
+        $reservationRate = $this->normalizePercentageValue($booking['reservation_rate'] ?? null);
+        $total = (float) ($booking['total'] ?? 0);
+        $expectedPartial = $this->calculateExpectedPartial($total, $reservationRate);
+        $storedPartial = isset($booking['parcial']) ? (float) $booking['parcial'] : null;
+
+        $payments = $this->resolveBookingPayments($bookingId);
+        $paymentSummary = $this->summarizeBookingPayments($payments);
+        $paymentSum = (float) ($paymentSummary['unique_total'] ?? 0);
+        $rawPaymentSum = (float) ($paymentSummary['raw_total'] ?? 0);
+
+        $mercadoPagoModel = new MercadoPagoModel();
+        $mpRow = $mercadoPagoModel->where('id_booking', $bookingId)
+            ->orderBy('id', 'DESC')
+            ->first();
+        $mpLive = null;
+        if (!empty($mpRow['payment_id'])) {
+            $mpLive = $this->fetchMercadoPagoPaymentDataForAudit((string) $mpRow['payment_id']);
+        }
+
+        $creator = $this->formatBookingCreator($booking);
+        $warnings = [];
+        if ($reservationRate === null) {
+            $warnings[] = 'Porcentaje de reserva no registrado para esta operación.';
+        }
+        if ($expectedPartial !== null && $storedPartial !== null && abs($expectedPartial - $storedPartial) > 0.01) {
+            $warnings[] = 'Advertencia: parcial almacenado no coincide con el porcentaje de reserva.';
+        }
+        $storedPayment = (float) ($booking['payment'] ?? 0);
+        if ($paymentSum > 0 && abs($paymentSum - $storedPayment) > 0.01) {
+            $warnings[] = 'Advertencia: el total de pagos registrados no coincide con el pago almacenado.';
+        }
+        if (!empty($paymentSummary['duplicates'])) {
+            $warnings[] = 'Advertencia: se detectaron registros duplicados de pago con el mismo identificador de Mercado Pago.';
+        }
+        if ($expectedPartial !== null) {
+            $firstMpPayment = null;
+            foreach ($payments as $payment) {
+                if (strtolower((string) ($payment['payment_method'] ?? '')) === 'mercado_pago') {
+                    $firstMpPayment = $payment;
+                    break;
+                }
+            }
+            if ($firstMpPayment && abs(((float) $firstMpPayment['amount']) - $expectedPartial) > 0.01) {
+                $warnings[] = 'Advertencia: el primer pago de Mercado Pago no coincide con la seña esperada.';
+            }
+            if ($mpLive && isset($mpLive['transaction_amount']) && abs(((float) $mpLive['transaction_amount']) - $expectedPartial) > 0.01) {
+                $warnings[] = 'Advertencia: Mercado Pago registró un importe diferente a la seña esperada.';
+            }
+        }
+
+        $paymentMethod = trim((string) ($booking['payment_method'] ?? ''));
+        $paymentTotal = (float) ($booking['payment'] ?? 0);
+        $saldo = (float) ($booking['diference'] ?? max(0, $total - $paymentTotal));
+
+        return [
+            'booking' => $booking,
+            'field' => $field,
+            'service' => $service,
+            'customer' => $customer,
+            'creator' => $creator,
+            'reservation_rate' => $reservationRate,
+            'expected_partial' => $expectedPartial,
+            'stored_partial' => $storedPartial,
+            'booking_payment_snapshot' => (float) ($booking['payment'] ?? 0),
+            'booking_reservation_snapshot' => array_key_exists('reservation', $booking) && $booking['reservation'] !== null
+                ? (float) $booking['reservation']
+                : null,
+            'payments_total' => $paymentSum,
+            'payments_total_raw' => $rawPaymentSum,
+            'payments_total_unique' => $paymentSum,
+            'payment_method' => $paymentMethod,
+            'saldo' => $saldo,
+            'payments' => $payments,
+            'duplicate_payments' => $paymentSummary['duplicates'],
+            'mercado_pago' => $mpRow,
+            'mercado_pago_live' => $mpLive,
+            'warnings' => $warnings,
+        ];
     }
 
     private function bookingEmailHtml(array $booking, string $fieldName, string $serviceColor, string $fecha, string $horario, string $duracion, string $localidad): string
@@ -422,7 +735,10 @@ class Bookings extends BaseController
         $discountTotal = (float) ($bookingQuote['discount_total'] ?? 0);
         $discountPercentage = $originalTotal > 0 ? round(($discountTotal * 100) / $originalTotal, 2) : 0;
         $paymentAmount = round((float) ($data->monto ?? 0), 2);
-        $partialAmount = round((float) ($data->parcial ?? 0), 2);
+        $reservationRate = $this->getCurrentReservationRate();
+        $partialAmount = $reservationRate !== null
+            ? $this->calculateExpectedPartial($finalTotal, $reservationRate)
+            : round((float) ($data->parcial ?? 0), 2);
         $reservationAmount = round((float) ($data->reservacion ?? 0), 2);
         $customerId = !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null;
         $customerOfferId = !empty($bookingQuote['customer_offer_id']) ? (int) $bookingQuote['customer_offer_id'] : null;
@@ -444,6 +760,7 @@ class Bookings extends BaseController
             'approved'              => 0,
             'total'                 => $finalTotal,
             'parcial'               => $partialAmount,
+            'reservation_rate'      => $reservationRate,
             'diference'             => max(0, $finalTotal - $paymentAmount),
             'reservation'           => $reservationAmount,
             'total_payment'         => $data->pagoTotal,
@@ -525,6 +842,7 @@ class Bookings extends BaseController
                     $additionalQuery['discount_amount'] = (float) ($additionalQuote['discount_amount'] ?? 0);
                     $additionalQuery['total'] = (float) ($additionalQuote['final_amount'] ?? 0);
                     $additionalQuery['parcial'] = 0;
+                    $additionalQuery['reservation_rate'] = $reservationRate;
                     $additionalQuery['diference'] = 0;
                     $additionalQuery['reservation'] = 0;
                     $additionalQuery['payment'] = 0;
@@ -685,6 +1003,36 @@ class Bookings extends BaseController
         }
     }
 
+    public function getBookingAudit($id)
+    {
+        $bookingsModel = new BookingsModel();
+        $booking = $bookingsModel->getBooking($id);
+
+        if (!$booking) {
+            return $this->response->setJSON($this->setResponse(404, true, null, 'Reserva no encontrada.'));
+        }
+
+        try {
+            $audit = $this->buildBookingAuditPayload($booking);
+            $audit['booking_id'] = (int) ($booking['id'] ?? 0);
+            $audit['creator_label'] = $audit['creator']['label'] ?? 'N/D';
+            $audit['expected_partial_label'] = $audit['expected_partial'] === null ? 'No registrado' : $audit['expected_partial'];
+            $audit['reservation_rate_label'] = $audit['reservation_rate'] === null ? 'No registrado' : $audit['reservation_rate'];
+            $audit['stored_partial_label'] = $audit['stored_partial'] === null ? 'No registrado' : $audit['stored_partial'];
+            $audit['payment_sum_label'] = $audit['payments_total'];
+            $audit['first_mp_payment'] = null;
+            foreach ($audit['payments'] as $payment) {
+                if (strtolower((string) ($payment['payment_method'] ?? '')) === 'mercado_pago') {
+                    $audit['first_mp_payment'] = $payment;
+                    break;
+                }
+            }
+            return $this->response->setJSON($this->setResponse(null, null, $audit, 'Respuesta exitosa'));
+        } catch (\Throwable $e) {
+            return $this->response->setJSON($this->setResponse(500, true, null, $e->getMessage()));
+        }
+    }
+
     public function getReports()
     {
         $paymentsModel = new PaymentsModel();
@@ -723,14 +1071,28 @@ class Bookings extends BaseController
 
         $paymentsResult = $query->findAll();
 
-        // 3. Formateo de salida (mucho más ligero)
-        $payments = array_map(function ($p) {
+        // 3. Formateo de salida evitando contar dos veces el mismo pago de Mercado Pago.
+        $payments = [];
+        $seenPaymentKeys = [];
+
+        foreach ($paymentsResult as $p) {
+            $bookingId = (int) ($p['booking_id'] ?? 0);
+            $paymentId = trim((string) ($p['id_mercado_pago'] ?? ''));
+            $rowId = (int) ($p['id'] ?? 0);
+            $dedupeKey = $bookingId . '|' . ($paymentId !== '' ? 'mp:' . $paymentId : 'row:' . $rowId);
+
+            if (isset($seenPaymentKeys[$dedupeKey])) {
+                continue;
+            }
+            $seenPaymentKeys[$dedupeKey] = true;
+
             $monto = (float)($p['amount'] ?? 0);
             $metodo = strtolower(str_replace(' ', '_', (string)($p['payment_method'] ?? '')));
             if ($monto <= 0 && $metodo === 'mercado_pago') {
                 $monto = ($p['booking_total_payment'] ?? 0) ? ($p['booking_total'] ?? 0) : ($p['booking_payment'] ?? 0);
             }
-            return [
+
+            $payments[] = [
                 'fecha'           => date("d/m/Y", strtotime($p['date'])),
                 'pago'            => $monto,
                 'usuario'         => $p['nombre_usuario'] ?? 'N/A',
@@ -742,10 +1104,10 @@ class Bookings extends BaseController
                 'bookingId'       => $p['booking_id'],
                 'totalReserva'    => $p['booking_total'],
             ];
-        }, $paymentsResult);
+        }
 
-        // Agregar pagos de Mercado Pago que no estén en la tabla payments
-        $mpBookings = $bookingsModel->select('bookings.date, bookings.payment, bookings.total, bookings.total_payment, bookings.payment_method, bookings.id, bookings.name as booking_name, bookings.phone as booking_phone, customers.name as customer_name, customers.phone as customer_phone')
+        // Agregar una única fila de respaldo por reserva cuando no existe un pago real registrado.
+        $mpBookings = $bookingsModel->select('bookings.date, bookings.payment, bookings.reservation, bookings.total, bookings.total_payment, bookings.payment_method, bookings.id, bookings.name as booking_name, bookings.phone as booking_phone, customers.name as customer_name, customers.phone as customer_phone')
             ->join('customers', 'customers.id = bookings.id_customer', 'left')
             ->join('payments', 'payments.id_booking = bookings.id', 'left')
             ->where('bookings.date >=', $data->fechaDesde)
@@ -756,37 +1118,13 @@ class Bookings extends BaseController
             ->findAll();
 
         foreach ($mpBookings as $b) {
-            $monto = ($b['total_payment'] ?? 0) ? $b['total'] : $b['payment'];
+            $monto = (float) ($b['payment'] ?? 0);
+            if ($monto <= 0) {
+                $monto = (float) ($b['reservation'] ?? 0);
+            }
             $payments[] = [
                 'fecha'           => date("d/m/Y", strtotime($b['date'])),
                 'pago'            => $monto,
-                'usuario'         => 'CLIENTE',
-                'idUsuario'       => null,
-                'cliente'         => $b['customer_name'] ?? $b['booking_name'] ?? 'N/A',
-                'telefonoCliente' => $b['customer_phone'] ?? $b['booking_phone'] ?? 'N/A',
-                'metodoPago'      => 'mercado_pago',
-                'idMercadoPago'   => null,
-                'bookingId'       => $b['id'],
-                'totalReserva'    => $b['total'],
-            ];
-        }
-
-        // Agregar el pago de seña por Mercado Pago si existe y no está en payments
-        $mpReservations = $bookingsModel->select('bookings.date, bookings.reservation, bookings.total, bookings.total_payment, bookings.id, bookings.name as booking_name, bookings.phone as booking_phone, customers.name as customer_name, customers.phone as customer_phone')
-            ->join('customers', 'customers.id = bookings.id_customer', 'left')
-            ->join('payments as pmp', "pmp.id_booking = bookings.id AND (pmp.payment_method = 'mercado_pago' OR pmp.payment_method = 'Mercado Pago')", 'left')
-            ->where('bookings.date >=', $data->fechaDesde)
-            ->where('bookings.date <=', $data->fechaHasta)
-            ->where('bookings.mp', 1)
-            ->where('bookings.reservation >', 0)
-            ->where('bookings.reservation < bookings.total')
-            ->where('pmp.id', null)
-            ->findAll();
-
-        foreach ($mpReservations as $b) {
-            $payments[] = [
-                'fecha'           => date("d/m/Y", strtotime($b['date'])),
-                'pago'            => $b['reservation'],
                 'usuario'         => 'CLIENTE',
                 'idUsuario'       => null,
                 'cliente'         => $b['customer_name'] ?? $b['booking_name'] ?? 'N/A',
@@ -1052,6 +1390,10 @@ class Bookings extends BaseController
         $discountPercentage = $originalTotal > 0 ? round(($discountTotal * 100) / $originalTotal, 2) : 0;
         $paymentAmount = round((float) ($data->monto ?? 0), 2);
         $pagoTotal = abs($paymentAmount - $finalTotal) < 0.01 ? 1 : 0;
+        $reservationRate = $this->getCurrentReservationRate();
+        $partialAmount = $reservationRate !== null
+            ? $this->calculateExpectedPartial($finalTotal, $reservationRate)
+            : null;
         $customerId = !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null;
         $customerOfferId = !empty($bookingQuote['customer_offer_id']) ? (int) $bookingQuote['customer_offer_id'] : null;
 
@@ -1070,6 +1412,8 @@ class Bookings extends BaseController
             'discount_amount' => $discountTotal,
             'payment'         => $paymentAmount,
             'total'           => $finalTotal,
+            'parcial'         => $partialAmount,
+            'reservation_rate'=> $reservationRate,
             'description'     => $data->descripcion,
             'diference'       => max(0, $finalTotal - $paymentAmount),
             'total_payment'   => $pagoTotal,
@@ -1077,7 +1421,7 @@ class Bookings extends BaseController
             'approved'        => 1,
             'mp'              => 1,
             'annulled'        => 0,
-            'created_by_type' => 'CREADO POR ADMIN',
+            'created_by_type' => 'ADMINISTRADOR',
             'created_by_name' => session()->get('name') ?? session()->get('user'),
             'created_by_user_id' => session()->get('id_user'),
         ];
@@ -1116,6 +1460,8 @@ class Bookings extends BaseController
                 $additionalQuery['discount_amount'] = (float) ($additionalQuote['discount_amount'] ?? 0);
                 $additionalQuery['total'] = (float) ($additionalQuote['final_amount'] ?? 0);
                 $additionalQuery['payment'] = 0;
+                $additionalQuery['parcial'] = 0;
+                $additionalQuery['reservation_rate'] = $reservationRate;
                 $additionalQuery['diference'] = 0;
                 $additionalQuery['description'] = trim(($additionalQuery['description'] ?? '') . ' Quincho adicional de la reserva #' . $bookingId);
                 $additionalQuery['use_offer'] = !empty($additionalOffer['applicable']) ? 1 : 0;
@@ -1231,8 +1577,19 @@ class Bookings extends BaseController
         $paymentsResult = $query->findAll();
 
         $payments = [];
+        $seenPaymentKeys = [];
 
         foreach ($paymentsResult as $payment) {
+            $bookingId = (int) ($payment['id_booking'] ?? 0);
+            $paymentId = trim((string) ($payment['id_mercado_pago'] ?? ''));
+            $rowId = (int) ($payment['id'] ?? 0);
+            $dedupeKey = $bookingId . '|' . ($paymentId !== '' ? 'mp:' . $paymentId : 'row:' . $rowId);
+
+            if (isset($seenPaymentKeys[$dedupeKey])) {
+                continue;
+            }
+            $seenPaymentKeys[$dedupeKey] = true;
+
             $monto = (float)($payment['amount'] ?? 0);
             $metodo = strtolower(str_replace(' ', '_', (string)($payment['payment_method'] ?? '')));
             if ($monto <= 0 && $metodo === 'mercado_pago') {
@@ -1251,12 +1608,14 @@ class Bookings extends BaseController
                 'telefonoCliente' => $customersModel->getCustomerPhone($payment['id_customer']),
                 'metodoPago' => $payment['payment_method'],
                 'idMercadoPago' => $payment['id_mercado_pago'],
+                'bookingId' => $bookingId,
+                'totalReserva' => $payment['booking_total'],
             ];
 
             array_push($payments, $pago);
         }
 
-        $mpBookings = $bookingsModel->select('bookings.date, bookings.payment, bookings.total, bookings.total_payment, bookings.payment_method, bookings.id, bookings.name as booking_name, bookings.phone as booking_phone, customers.name as customer_name, customers.phone as customer_phone')
+        $mpBookings = $bookingsModel->select('bookings.date, bookings.payment, bookings.reservation, bookings.total, bookings.total_payment, bookings.payment_method, bookings.id, bookings.name as booking_name, bookings.phone as booking_phone, customers.name as customer_name, customers.phone as customer_phone')
             ->join('customers', 'customers.id = bookings.id_customer', 'left')
             ->join('payments', 'payments.id_booking = bookings.id', 'left')
             ->where('bookings.date >=', $fechaDesde)
@@ -1272,41 +1631,13 @@ class Bookings extends BaseController
         $mpBookingsResult = $mpBookings->findAll();
 
         foreach ($mpBookingsResult as $b) {
-            $monto = ($b['total_payment'] ?? 0) ? $b['total'] : $b['payment'];
+            $monto = (float) ($b['payment'] ?? 0);
+            if ($monto <= 0) {
+                $monto = (float) ($b['reservation'] ?? 0);
+            }
             $pago = [
                 'fecha' => date("d/m/Y", strtotime($b['date'])),
                 'pago' => $monto,
-                'usuario' => 'CLIENTE',
-                'idUsuario' => null,
-                'cliente' => $b['customer_name'] ?? $b['booking_name'] ?? 'N/A',
-                'telefonoCliente' => $b['customer_phone'] ?? $b['booking_phone'] ?? 'N/A',
-                'metodoPago' => 'mercado_pago',
-                'idMercadoPago' => null,
-            ];
-
-            array_push($payments, $pago);
-        }
-
-        $mpReservations = $bookingsModel->select('bookings.date, bookings.reservation, bookings.total, bookings.total_payment, bookings.id, bookings.name as booking_name, bookings.phone as booking_phone, customers.name as customer_name, customers.phone as customer_phone')
-            ->join('customers', 'customers.id = bookings.id_customer', 'left')
-            ->join('payments as pmp', "pmp.id_booking = bookings.id AND (pmp.payment_method = 'mercado_pago' OR pmp.payment_method = 'Mercado Pago')", 'left')
-            ->where('bookings.date >=', $fechaDesde)
-            ->where('bookings.date <=', $fechaHasta)
-            ->where('bookings.mp', 1)
-            ->where('bookings.reservation >', 0)
-            ->where('bookings.reservation < bookings.total')
-            ->where('pmp.id', null);
-
-        if ($user !== 'all') {
-            $mpReservations->where('bookings.created_by_user_id', $user);
-        }
-
-        $mpReservationsResult = $mpReservations->findAll();
-
-        foreach ($mpReservationsResult as $b) {
-            $pago = [
-                'fecha' => date("d/m/Y", strtotime($b['date'])),
-                'pago' => $b['reservation'],
                 'usuario' => 'CLIENTE',
                 'idUsuario' => null,
                 'cliente' => $b['customer_name'] ?? $b['booking_name'] ?? 'N/A',

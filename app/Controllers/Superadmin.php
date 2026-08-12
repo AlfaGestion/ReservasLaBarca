@@ -194,6 +194,47 @@ class Superadmin extends BaseController
         return minutesToHuman($untilMinutes - $fromMinutes);
     }
 
+    private function summarizeBookingPaidAmounts(array $paymentsRows, array $fallbackByBooking = []): array
+    {
+        $paidByBooking = [];
+        $seenKeysByBooking = [];
+
+        foreach ($paymentsRows as $row) {
+            $bookingId = (int) ($row['id_booking'] ?? 0);
+            if ($bookingId <= 0) {
+                continue;
+            }
+
+            $amount = (float) ($row['amount'] ?? 0);
+            $idMercadoPago = trim((string) ($row['id_mercado_pago'] ?? ''));
+            $uniqueKey = $idMercadoPago !== ''
+                ? 'mp:' . $idMercadoPago
+                : 'row:' . (int) ($row['id'] ?? 0);
+
+            if (!isset($seenKeysByBooking[$bookingId])) {
+                $seenKeysByBooking[$bookingId] = [];
+            }
+            if (isset($seenKeysByBooking[$bookingId][$uniqueKey])) {
+                continue;
+            }
+
+            $seenKeysByBooking[$bookingId][$uniqueKey] = true;
+            $paidByBooking[$bookingId] = ($paidByBooking[$bookingId] ?? 0) + $amount;
+        }
+
+        foreach ($fallbackByBooking as $bookingId => $fallbackAmount) {
+            $bookingId = (int) $bookingId;
+            if ($bookingId <= 0) {
+                continue;
+            }
+            if (!isset($paidByBooking[$bookingId]) || $paidByBooking[$bookingId] <= 0) {
+                $paidByBooking[$bookingId] = (float) $fallbackAmount;
+            }
+        }
+
+        return $paidByBooking;
+    }
+
     private function cleanupExpiredPendingBookings(): void
     {
         $bookingsModel = new BookingsModel();
@@ -691,14 +732,17 @@ class Superadmin extends BaseController
 
         if (!empty($bookingIds)) {
             $paymentsRows = $paymentsModel
-                ->select('id_booking, SUM(amount) as paid_total')
+                ->select('id, id_booking, id_mercado_pago, amount')
                 ->whereIn('id_booking', $bookingIds)
-                ->groupBy('id_booking')
                 ->findAll();
-
-            foreach ($paymentsRows as $pr) {
-                $paidByBooking[(int)$pr['id_booking']] = (float)($pr['paid_total'] ?? 0);
+            $fallbackByBooking = [];
+            foreach ($getBookings as $bookingRow) {
+                $bookingId = (int) ($bookingRow['id'] ?? 0);
+                if ($bookingId > 0) {
+                    $fallbackByBooking[$bookingId] = (float) ($bookingRow['payment'] ?? 0);
+                }
             }
+            $paidByBooking = $this->summarizeBookingPaidAmounts($paymentsRows, $fallbackByBooking);
         }
 
         foreach ($getBookings as $booking) {
@@ -706,9 +750,7 @@ class Superadmin extends BaseController
             $serviceType = (string)($fieldData['service_type'] ?? 'football');
             $serviceData = $servicesModel->getByCode($serviceType);
             $bookingId = (int)$booking['id'];
-            $paymentsSum = $paidByBooking[$bookingId] ?? 0.0;
-            $bookingPaid = (float)($booking['payment'] ?? 0);
-            $paid = max($paymentsSum, $bookingPaid);
+            $paid = (float)($paidByBooking[$bookingId] ?? (float)($booking['payment'] ?? 0));
             $total = (float)($booking['total'] ?? 0);
             $difference = $total - $paid;
             if ($difference < 0) {
@@ -771,14 +813,17 @@ class Superadmin extends BaseController
 
         if (!empty($bookingIds)) {
             $paymentsRows = $paymentsModel
-                ->select('id_booking, SUM(amount) as paid_total')
+                ->select('id, id_booking, id_mercado_pago, amount')
                 ->whereIn('id_booking', $bookingIds)
-                ->groupBy('id_booking')
                 ->findAll();
-
-            foreach ($paymentsRows as $pr) {
-                $paidByBooking[(int)$pr['id_booking']] = (float)($pr['paid_total'] ?? 0);
+            $fallbackByBooking = [];
+            foreach ($getBookings as $bookingRow) {
+                $bookingId = (int) ($bookingRow['id'] ?? 0);
+                if ($bookingId > 0) {
+                    $fallbackByBooking[$bookingId] = (float) ($bookingRow['payment'] ?? 0);
+                }
             }
+            $paidByBooking = $this->summarizeBookingPaidAmounts($paymentsRows, $fallbackByBooking);
         }
 
         foreach ($getBookings as $booking) {
@@ -786,9 +831,7 @@ class Superadmin extends BaseController
             $serviceType = (string)($fieldData['service_type'] ?? 'football');
             $serviceData = $servicesModel->getByCode($serviceType);
             $bookingId = (int)$booking['id'];
-            $paymentsSum = $paidByBooking[$bookingId] ?? 0.0;
-            $bookingPaid = (float)($booking['payment'] ?? 0);
-            $paid = max($paymentsSum, $bookingPaid);
+            $paid = (float)($paidByBooking[$bookingId] ?? (float)($booking['payment'] ?? 0));
             $total = (float)($booking['total'] ?? 0);
             $difference = $total - $paid;
             if ($difference < 0) {
@@ -853,14 +896,17 @@ class Superadmin extends BaseController
 
         if (!empty($bookingIds)) {
             $paymentsRows = $paymentsModel
-                ->select('id_booking, SUM(amount) as paid_total')
+                ->select('id, id_booking, id_mercado_pago, amount')
                 ->whereIn('id_booking', $bookingIds)
-                ->groupBy('id_booking')
                 ->findAll();
-
-            foreach ($paymentsRows as $pr) {
-                $paidByBooking[(int)$pr['id_booking']] = (float)($pr['paid_total'] ?? 0);
+            $fallbackByBooking = [];
+            foreach ($getBookings as $bookingRow) {
+                $bookingId = (int) ($bookingRow['id'] ?? 0);
+                if ($bookingId > 0) {
+                    $fallbackByBooking[$bookingId] = (float) ($bookingRow['payment'] ?? 0);
+                }
             }
+            $paidByBooking = $this->summarizeBookingPaidAmounts($paymentsRows, $fallbackByBooking);
         }
 
         foreach ($getBookings as $booking) {
@@ -868,9 +914,7 @@ class Superadmin extends BaseController
             $serviceType = (string)($fieldData['service_type'] ?? 'football');
             $serviceData = $servicesModel->getByCode($serviceType);
             $bookingId = (int)$booking['id'];
-            $paymentsSum = $paidByBooking[$bookingId] ?? 0.0;
-            $bookingPaid = (float)($booking['payment'] ?? 0);
-            $paid = max($paymentsSum, $bookingPaid);
+            $paid = (float)($paidByBooking[$bookingId] ?? (float)($booking['payment'] ?? 0));
             $total = (float)($booking['total'] ?? 0);
             $difference = $total - $paid;
             if ($difference < 0) {

@@ -210,6 +210,12 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <div class="alert alert-light border d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <div class="small text-muted">Porcentaje configurado actualmente</div>
+                        <div class="fw-bold" id="currentRateValueDisplay"><?php if ($rate) : ?><?= $rate['value'] ?>%<?php else : ?>No configurado<?php endif; ?></div>
+                    </div>
+                </div>
                 <div class="input-group mb-3">
                     <span class="input-group-text" id="basic-addon1">%</span>
                     <?php if ($rate) : ?>
@@ -220,8 +226,33 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary me-auto" id="viewRateHistory">Ver historial</button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
                 <button type="button" class="btn btn-primary" id="saveRate">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal historial rate -->
+<div class="modal fade" id="rateHistoryModal" tabindex="-1" aria-labelledby="rateHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="rateHistoryModalLabel">Historial del porcentaje de reserva</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-light border">
+                    <div class="small text-muted">Valor actual configurado</div>
+                    <div class="fw-bold" id="rateHistoryCurrentValue">No configurado</div>
+                </div>
+                <div id="rateHistoryTable" class="table-responsive">
+                    <div class="text-muted small">Cargando historial...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>

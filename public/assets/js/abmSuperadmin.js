@@ -47,6 +47,10 @@ const closuresTabList = document.getElementById('closuresTabList')
 const configPanel = document.getElementById('configPanel')
 const closureTextConfig = document.getElementById('closureTextConfig')
 const bookingEmailConfig = document.getElementById('bookingEmailConfig')
+const rateHistoryModalElement = document.getElementById('rateHistoryModal')
+const rateHistoryModal = rateHistoryModalElement ? new bootstrap.Modal(rateHistoryModalElement) : null
+const rateHistoryTable = document.getElementById('rateHistoryTable')
+const rateHistoryCurrentValue = document.getElementById('rateHistoryCurrentValue')
 let idBooking
 let editingCancelReservationId = null
 
@@ -694,6 +698,21 @@ document.addEventListener('click', async (e) => {
             }
 
             saveRate(`${baseUrl}saveRate`, data)
+
+        } else if (e.target.id == 'viewRateHistory') {
+            try {
+                const payload = await fetchRateHistory()
+                if (rateHistoryTable) {
+                    rateHistoryTable.innerHTML = renderRateHistoryTable(payload.current_rate || null, payload.history || [])
+                }
+                rateHistoryModal?.show()
+            } catch (error) {
+                console.error('Error:', error)
+                if (rateHistoryTable) {
+                    rateHistoryTable.innerHTML = '<div class="text-danger small">No se pudo cargar el historial.</div>'
+                }
+                rateHistoryModal?.show()
+            }
 
         } else if (e.target.id == 'saveOfferRate') {
 
@@ -1400,6 +1419,56 @@ function renderCancelReservationsResult(result, payload) {
     `
 
     cancelReservationsResult.innerHTML = html
+}
+
+function formatRateHistoryPercent(value) {
+    if (value === null || value === undefined || value === '') return 'N/D'
+    const numeric = Number(value)
+    if (!Number.isFinite(numeric)) return String(value)
+    return `${numeric.toFixed(2).replace(/\.00$/, '')}%`
+}
+
+async function fetchRateHistory() {
+    const response = await fetch(`${baseUrl}getRateHistory`)
+    const json = await response.json()
+    if (!response.ok || json.error) throw new Error(json.message || 'No se pudo obtener el historial del porcentaje.')
+    return json.data || {}
+}
+
+function renderRateHistoryTable(currentRate, history) {
+    const currentValue = currentRate && currentRate.value !== undefined && currentRate.value !== null
+        ? formatRateHistoryPercent(currentRate.value)
+        : 'No configurado'
+    if (rateHistoryCurrentValue) {
+        rateHistoryCurrentValue.textContent = currentValue
+    }
+
+    if (!Array.isArray(history) || history.length === 0) {
+        return '<div class="text-muted small">Aún no hay cambios registrados.</div>'
+    }
+
+    return `
+        <table class="table table-sm table-striped align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Fecha y hora</th>
+                    <th>Usuario</th>
+                    <th>Porcentaje anterior</th>
+                    <th>Porcentaje nuevo</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${history.map((row) => `
+                    <tr>
+                        <td>${escapeHtml(formatDateTime(row.created_at))}</td>
+                        <td>${escapeHtml(row.user_name || 'N/D')}</td>
+                        <td>${escapeHtml(formatRateHistoryPercent(row.old_value))}</td>
+                        <td>${escapeHtml(formatRateHistoryPercent(row.new_value))}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `
 }
 
 async function completePayment(url, data) {
