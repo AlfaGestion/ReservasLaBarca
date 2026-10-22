@@ -6,6 +6,7 @@ use App\Controllers\BaseController;
 use App\Libraries\AvailabilityService;
 use App\Libraries\CustomerOfferService;
 use App\Libraries\MercadoPagoLibrary;
+use App\Libraries\PlayerPortalSettings;
 use App\Models\BookingSlotsModel;
 use App\Models\BookingsModel;
 use App\Models\CancelReservationsModel;
@@ -15,6 +16,8 @@ use App\Models\FieldsModel;
 use App\Models\MercadoPagoModel;
 use App\Models\MercadoPagoKeysModel;
 use App\Models\PaymentsModel;
+use App\Models\PlayerBookingLinksModel;
+use App\Models\PlayerAccountsModel;
 use App\Models\RateModel;
 use App\Models\ServicesModel;
 use App\Models\TimeModel;
@@ -27,6 +30,52 @@ class MercadoPago extends BaseController
     {
         $value = strtoupper(trim((string)$color));
         return preg_match('/^#[0-9A-F]{6}$/', $value) ? $value : '#F39323';
+    }
+
+    private function linkPlayerBooking(int $bookingId): void
+    {
+        $playerId = (int) session()->get('player_id');
+        if (! session()->get('player_logged_in') || $playerId <= 0 || $bookingId <= 0) {
+            return;
+        }
+
+        $db = \Config\Database::connect();
+        if (! $db->tableExists('player_booking_links') || ! (new PlayerAccountsModel())->find($playerId)) {
+            return;
+        }
+
+        $links = new PlayerBookingLinksModel();
+        if (! $links->where('player_id', $playerId)->where('booking_id', $bookingId)->first()) {
+            $links->insert(['player_id' => $playerId, 'booking_id' => $bookingId, 'created_at' => date('Y-m-d H:i:s')]);
+        }
+    }
+
+    private function updatePlayerProfileFromBooking(array $booking): void
+    {
+        $playerId = (int) session()->get('player_id');
+        if (! session()->get('player_logged_in') || $playerId <= 0) {
+            return;
+        }
+
+        $changes = [];
+        foreach (['first_name', 'last_name', 'phone', 'locality'] as $field) {
+            if (array_key_exists($field, $booking)) {
+                $value = trim((string) $booking[$field]);
+                if ($value !== '') {
+                    $changes[$field] = mb_substr($value, 0, $field === 'phone' ? 40 : ($field === 'locality' ? 120 : 80));
+                }
+            }
+        }
+
+        if ($changes === []) {
+            return;
+        }
+
+        $changes['updated_at'] = date('Y-m-d H:i:s');
+        $model = new PlayerAccountsModel();
+        if (! $model->find($playerId) || ! $model->update($playerId, $changes)) {
+            throw new \RuntimeException('No se pudo actualizar el perfil del jugador.');
+        }
     }
 
     private function bookingEmailHtml(array $booking, string $fieldName, string $serviceColor, string $fecha, string $horario, string $duracion, string $localidad): string
@@ -1148,6 +1197,9 @@ class MercadoPago extends BaseController
         $bookingId = null;
         $createdBookingInThisAttempt = false;
         try {
+            $testMode = (new PlayerPortalSettings())->isTestMode()
+                && session()->get('player_logged_in')
+                && (int) session()->get('player_id') > 0;
             $rateModel = new RateModel();
             $rateRow = $rateModel->first();
             $bookingsModel = new BookingsModel();
@@ -1163,7 +1215,10 @@ class MercadoPago extends BaseController
             }
             $this->ensureLocalityExists($localidad);
 
-            if (!$rateRow || !isset($rateRow['value'])) {
+            // En modo prueba no se inicia un pago y, por lo tanto, no hace
+            // falta tener configurado el porcentaje de seña. El flujo real
+            // mantiene la validación existente antes de usar Mercado Pago.
+            if (!$testMode && (!$rateRow || !isset($rateRow['value']))) {
                 return $this->response->setJSON($this->setResponse(400, true, null, 'No existe tasa de reserva configurada.'));
             }
             if (!$booking) {
@@ -1231,7 +1286,7 @@ class MercadoPago extends BaseController
                 return $this->response->setJSON($this->setResponse(409, true, null, 'No se pudo calcular el monto de la reserva.'));
             }
 
-            $rate = (float) $rateRow['value'];
+            $rate = (float) ($rateRow['value'] ?? 0);
             $montoParcial = (float) (($montoTotal * $rate) / 100);
             $bookingArr['total'] = $montoTotal;
             $bookingArr['parcial'] = $montoParcial;
@@ -1352,6 +1407,27 @@ class MercadoPago extends BaseController
                 $bookingArr['additionalBookingId'] = $additionalBookingId;
             }
 
+            if ($testMode) {
+                $confirmedData = [
+                    'approved' => 1,
+                    'payment' => 0,
+                    'reservation' => 0,
+                    'total_payment' => 0,
+                    'payment_method' => 'Modo prueba',
+                    'mp' => 0,
+                ];
+                $bookingsModel->update($bookingId, $confirmedData);
+                $bookingSlotsModel->update($slotId, ['status' => 'confirmed', 'expires_at' => null]);
+                if (! empty($additionalBookingId)) {
+                    $bookingsModel->update($additionalBookingId, $confirmedData);
+                    $bookingSlotsModel->update($additionalSlotId, ['status' => 'confirmed', 'expires_at' => null]);
+                }
+                $this->linkPlayerBooking((int) $bookingId);
+                if (! empty($additionalBookingId)) $this->linkPlayerBooking((int) $additionalBookingId);
+                $this->updatePlayerProfileFromBooking($bookingArr);
+                return $this->response->setJSON($this->setResponse(null, null, ['bookingId' => $bookingId, 'testMode' => true], 'Reserva confirmada en modo prueba.'));
+            }
+
             $mp = new MercadoPagoLibrary();
             $mp->setPreference('Pago total de reserva', $montoTotal, 1, ['external_reference' => (string) $bookingId]);
             $preferenceIdTotal = $mp->preferenceId;
@@ -1377,6 +1453,17 @@ class MercadoPago extends BaseController
                 ]);
             }
 
+            // Solo las reservas creadas desde una sesión de jugador quedan asociadas.
+            // Las reservas tradicionales y las históricas permanecen sin cambios.
+            $this->linkPlayerBooking((int) $bookingId);
+            if (!empty($additionalBookingId)) {
+                $this->linkPlayerBooking((int) $additionalBookingId);
+            }
+
+            // Los datos editados durante la reserva se guardan solo después de
+            // crear correctamente la reserva y sus preferencias de pago.
+            $this->updatePlayerProfileFromBooking($bookingArr);
+
             $bookingArr['preferenceIdParcial'] = $preferenceIdParcial;
             $bookingArr['preferenceIdTotal'] = $preferenceIdTotal;
             $bookingArr['bookingId'] = $bookingId;
@@ -1396,10 +1483,16 @@ class MercadoPago extends BaseController
                     $this->releaseBookingSlot($bookingSlotsModel ?? new BookingSlotsModel(), (int)$slotId);
                 }
                 if (!empty($additionalBookingId)) {
+                    if ((int) session()->get('player_id') > 0) {
+                        (new PlayerBookingLinksModel())->where('player_id', (int) session()->get('player_id'))->where('booking_id', (int) $additionalBookingId)->delete();
+                    }
                     $bookingsModel = $bookingsModel ?? new BookingsModel();
                     $bookingsModel->delete((int)$additionalBookingId);
                 }
                 if (!empty($bookingId) && $createdBookingInThisAttempt) {
+                    if ((int) session()->get('player_id') > 0) {
+                        (new PlayerBookingLinksModel())->where('player_id', (int) session()->get('player_id'))->where('booking_id', (int) $bookingId)->delete();
+                    }
                     $bookingsModel = $bookingsModel ?? new BookingsModel();
                     $bookingsModel->delete((int)$bookingId);
                 }

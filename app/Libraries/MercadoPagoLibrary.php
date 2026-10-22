@@ -64,7 +64,7 @@ class MercadoPagoLibrary
             $this->preferenceId = $preference->id;
         } catch (\Exception $e) {
             log_message('error', 'MP setPreference exception: ' . $e->getMessage());
-            throw new \Exception('Error al crear la preferencia de pago: ' . $e->getMessage());
+            throw new \Exception('No pudimos preparar el pago. Intentá nuevamente.');
         }
     }
 

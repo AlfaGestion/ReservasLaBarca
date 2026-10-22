@@ -381,14 +381,14 @@ function renderBookingAuditModal(data) {
 
     const mpLiveRows = []
     if (mp.payment_id || mpLive.payment_id) {
-        mpLiveRows.push(['Payment ID', mp.payment_id || mpLive.payment_id])
-        mpLiveRows.push(['Preference parcial', booking.id_preference_parcial || 'N/D'])
-        mpLiveRows.push(['Preference total', booking.id_preference_total || 'N/D'])
-        mpLiveRows.push(['Estado MP', mp.status || mpLive.status || 'N/D'])
+        mpLiveRows.push(['ID de pago', mp.payment_id || mpLive.payment_id])
+        mpLiveRows.push(['Preferencia parcial', booking.id_preference_parcial || 'N/D'])
+        mpLiveRows.push(['Preferencia total', booking.id_preference_total || 'N/D'])
+        mpLiveRows.push(['Estado de Mercado Pago', mp.status || mpLive.status || 'N/D'])
         mpLiveRows.push(['Status confirmed', (mp.status || mpLive.status || '') === 'approved' ? 'Sí' : 'No'])
-        mpLiveRows.push(['MP transaction_amount', mpLive.transaction_amount ?? 'No registrado'])
-        mpLiveRows.push(['Merchant order ID', mpLive.merchant_order_id || mp.merchant_order_id || 'N/D'])
-        mpLiveRows.push(['Fecha MP', mpLive.date_approved || mpLive.date_created || 'N/D'])
+        mpLiveRows.push(['Importe de la transacción', mpLive.transaction_amount ?? 'No registrado'])
+        mpLiveRows.push(['ID de orden del comercio', mpLive.merchant_order_id || mp.merchant_order_id || 'N/D'])
+        mpLiveRows.push(['Fecha de Mercado Pago', mpLive.date_approved || mpLive.date_created || 'N/D'])
     }
     if (firstMpPayment) {
         mpLiveRows.push(['Primer pago MP', formatPriceAR(firstMpPayment.amount || 0)])
@@ -396,8 +396,12 @@ function renderBookingAuditModal(data) {
         mpLiveRows.push(['Primer pago MP usuario', firstMpPayment.user_name || 'N/D'])
     }
 
-    const mpHtml = mpLiveRows.length > 0
-        ? `<dl class="row mb-0">${mpLiveRows.map(([label, value]) => `
+    const translatedMpRows = mpLiveRows.map(([label, value]) => [
+        label === 'Status confirmed' ? 'Estado confirmado' : label,
+        value,
+    ])
+    const mpHtml = translatedMpRows.length > 0
+        ? `<dl class="row mb-0">${translatedMpRows.map(([label, value]) => `
             <dt class="col-sm-4">${escapeHtml(label)}</dt>
             <dd class="col-sm-8">${escapeHtml(String(value))}</dd>
         `).join('')}</dl>`
@@ -445,7 +449,7 @@ function renderBookingAuditModal(data) {
             <dd class="col-sm-8">${escapeHtml(customer.phone || booking.phone || 'N/D')}</dd>
             <dt class="col-sm-4">Localidad</dt>
             <dd class="col-sm-8">${escapeHtml(customer.city || booking.locality || 'N/D')}</dd>
-            <dt class="col-sm-4">Customer ID</dt>
+            <dt class="col-sm-4">ID de cliente</dt>
             <dd class="col-sm-8">${escapeHtml(booking.id_customer || 'N/D')}</dd>
         </dl>
     `
@@ -458,9 +462,9 @@ function renderBookingAuditModal(data) {
             <dd class="col-sm-8">${escapeHtml(formatAuditMoney(booking.discount_amount))} (${escapeHtml(booking.discount_percentage ?? '0')}%)</dd>
             <dt class="col-sm-4">Total final</dt>
             <dd class="col-sm-8">${escapeHtml(total)}</dd>
-            <dt class="col-sm-4">Booking.payment</dt>
+            <dt class="col-sm-4">Pago registrado</dt>
             <dd class="col-sm-8">${escapeHtml(formatAuditMoney(booking.payment ?? data.booking_payment_snapshot ?? 0))}</dd>
-            <dt class="col-sm-4">Booking.reservation</dt>
+            <dt class="col-sm-4">Seña registrada</dt>
             <dd class="col-sm-8">${escapeHtml(booking.reservation === null || booking.reservation === undefined ? 'No registrado' : formatAuditMoney(booking.reservation))}</dd>
             <dt class="col-sm-4">Seña calculada</dt>
             <dd class="col-sm-8">${escapeHtml(expectedPartial)}</dd>

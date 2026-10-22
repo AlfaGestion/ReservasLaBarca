@@ -78,7 +78,12 @@ class AvailabilityService
             return false;
         }
 
-        $now = $now ? \DateTimeImmutable::createFromInterface($now)->setTimezone($timezone) : new \DateTimeImmutable('now', $timezone);
+        // DateTimeImmutable::createFromInterface() no existe en PHP 7.4.
+        // El timestamp conserva el instante y permite mantener compatibilidad
+        // con la versión de PHP utilizada por este proyecto.
+        $now = $now
+            ? (new \DateTimeImmutable('@' . $now->getTimestamp()))->setTimezone($timezone)
+            : new \DateTimeImmutable('now', $timezone);
 
         return $start <= $now;
     }

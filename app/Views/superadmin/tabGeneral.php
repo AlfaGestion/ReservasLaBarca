@@ -7,6 +7,7 @@
         <button type="button" class="btn btn-primary mt-2 mb-2" id="openOfferRateModal" data-bs-toggle="modal" data-bs-target="#offerRateModal"><i class="fa-solid fa-percent me-1"></i>Editar porcentaje de oferta</button>
         <button type="button" class="btn btn-outline-dark mt-2 mb-2" id="toggleConfigPanel"><i class="fa-solid fa-gear me-1"></i>Configuracion</button>
         <button type="button" class="btn btn-outline-secondary mt-2 mb-2" id="toggleCancelReservations"><i class="fa-solid fa-calendar-xmark me-1"></i>Cierre de cancha</button>
+        <a href="<?= base_url('admin/portal') ?>" class="btn btn-outline-primary mt-2 mb-2"><i class="fa-solid fa-mobile-screen-button me-1"></i>Configurar portal</a>
     <?php endif; ?>
 
 </div>

@@ -5,7 +5,7 @@ $message = $message ?? 'Estamos esperando la confirmacion oficial de Mercado Pag
 
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-AR">
 
 <head>
     <meta charset="UTF-8">

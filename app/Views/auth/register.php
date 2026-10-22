@@ -5,7 +5,7 @@ $usersScriptPath = FCPATH . 'assets/js/users.js';
 $usersScriptVersion = is_file($usersScriptPath) ? filemtime($usersScriptPath) : time();
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-AR">
 
 <head>
     <meta charset="UTF-8">

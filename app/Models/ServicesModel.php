@@ -90,6 +90,7 @@ class ServicesModel extends Model
         'booking_interval_minutes',
         'active',
         'online_available',
+        'is_sport',
         'allows_quincho_addon',
         'display_order',
         'color',

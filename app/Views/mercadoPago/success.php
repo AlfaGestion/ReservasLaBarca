@@ -7,7 +7,7 @@ $fieldsModel = new FieldsModel()
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es-AR">
 
 <head>
     <meta charset="UTF-8">
@@ -22,7 +22,7 @@ $fieldsModel = new FieldsModel()
 <body>
     <div class="page">
         <div class="div-principal d-flex justify-content-center align-items-center flex-column">
-            <h4 class="status-title">Reserva confirmada!</h4>
+            <h4 class="status-title">¡Reserva confirmada!</h4>
             <i class="fa-regular fa-circle-check status-icon"></i>
         </div>
 
@@ -52,6 +52,7 @@ $fieldsModel = new FieldsModel()
             }
             $duracion = minutesToHuman($untilMinutes - $fromMinutes);
             ?>
+            <?php $paymentStatusLabels = ['approved' => 'Aprobado', 'pending' => 'Pendiente', 'in_process' => 'En proceso', 'rejected' => 'Rechazado', 'cancelled' => 'Cancelado', 'refunded' => 'Reintegrado']; ?>
             <ul>
                 <li><strong>Nombre:</strong> <?= $booking['name'] ?></li>
                 <li><strong>Teléfono:</strong> <?= $booking['phone'] ?></li>
@@ -61,7 +62,7 @@ $fieldsModel = new FieldsModel()
                 <li><strong>Tipo de reserva:</strong> <?= $fieldsModel->getField($booking['id_field'])['name'] ?></li>
                 <hr>
                 <li><strong>Id de pago de Mercado Pago:</strong> <?= $mercadoPago['payment_id'] ?> </li>
-                <li><strong>Estado del pago:</strong> <?= $mercadoPago['status'] ?></li>
+                <li><strong>Estado del pago:</strong> <?= esc($paymentStatusLabels[$mercadoPago['status'] ?? ''] ?? 'Pendiente') ?></li>
                 <hr>
                 <li><strong>Valor total de la reserva:</strong> <?= format_price_ar($booking['total']) ?></li>
                 <li><strong>Pagado:</strong> <?= format_price_ar($booking['payment']) ?></li>

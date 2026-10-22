@@ -131,7 +131,8 @@ class Auth extends BaseController
         try {
             $insertId = $modelUsers->insert($query);
         } catch (\Exception $e) {
-            return $respondError('Error al insertar datos: ' . $e->getMessage(), 500);
+            log_message('error', 'No se pudo registrar el usuario administrativo: ' . $e->getMessage());
+            return $respondError('No pudimos guardar el usuario. Intentá nuevamente.', 500);
         }
 
         if ($isAjaxRequest) {

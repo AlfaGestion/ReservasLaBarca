@@ -30,6 +30,43 @@ $routes->set404Override();
 // We get a performance increase by specifying the default
 // route since we don't have to scan directories.
 $routes->get('/', 'Home::index');
+
+// Player portal: separate identity/session from the legacy administrative area.
+$routes->group('app', function ($routes) {
+    $routes->get('/', 'PlayerPortal::index');
+    $routes->get('login', 'PlayerPortal::login');
+    $routes->post('login', 'PlayerPortal::authenticate', ['filter' => 'csrf']);
+    $routes->get('registro', 'PlayerPortal::register');
+    $routes->post('registro', 'PlayerPortal::createAccount', ['filter' => 'csrf']);
+    $routes->get('verificar-email', 'PlayerPortal::verification');
+    $routes->post('verificar-email/reenviar', 'PlayerPortal::resendVerification', ['filter' => 'csrf']);
+    $routes->get('recuperar-clave', 'PlayerPortal::forgotPassword');
+    $routes->post('recuperar-clave', 'PlayerPortal::sendReset', ['filter' => 'csrf']);
+    $routes->get('logout', 'PlayerPortal::logout');
+    $routes->group('', ['filter' => 'playerAuth'], function ($routes) {
+        $routes->get('perfil', 'PlayerPortal::profile');
+        $routes->post('perfil', 'PlayerPortal::updateProfile', ['filter' => 'csrf']);
+        $routes->get('reservas', 'PlayerBookings::index');
+        $routes->get('mis-reservas', 'PlayerBookings::index');
+        $routes->get('reservas/disponibilidad', 'PlayerBookings::availability');
+        $routes->post('reservas/cotizar', 'PlayerBookings::quote', ['filter' => 'csrf']);
+        $routes->post('reservas/crear', 'MercadoPago::setPreference', ['filter' => 'csrf']);
+        $routes->get('reservas/detalle/(:num)', 'PlayerBookings::detail/$1');
+        $routes->get('partidos', 'PlayerMatches::index');
+        $routes->get('partidos/crear', 'PlayerMatches::create');
+        $routes->get('partidos/detalle/(:num)', 'PlayerMatches::detail/$1');
+        $routes->get('jugadores/(:num)', 'PlayerMatches::publicProfile/$1');
+        $routes->get('mis-partidos', 'PlayerMatches::mine');
+        $routes->get('notificaciones/leer/(:num)', 'PlayerNotifications::read/$1');
+        $routes->get('notificaciones/nuevas', 'PlayerNotifications::latest');
+        $routes->post('partidos/publicar', 'PlayerMatches::publish', ['filter' => 'csrf']);
+        $routes->post('partidos/(:num)/unirse', 'PlayerMatches::join/$1', ['filter' => 'csrf']);
+        $routes->post('partidos/(:num)/solicitud/cancelar', 'PlayerMatches::cancelRequest/$1', ['filter' => 'csrf']);
+        $routes->post('partidos/solicitudes/(:num)/(:alpha)', 'PlayerMatches::decide/$1/$2', ['filter' => 'csrf']);
+        $routes->post('partidos/(:num)/(:alpha)', 'PlayerMatches::close/$1/$2', ['filter' => 'csrf']);
+        $routes->post('partidos/(:num)/retirarse', 'PlayerMatches::leave/$1', ['filter' => 'csrf']);
+    });
+});
 $routes->post('formInfo', 'Home::infoReserva');
 $routes->post('checkClosure', 'Home::checkClosure');
 $routes->get('getUpcomingClosure', 'Home::getUpcomingClosure');
@@ -88,6 +125,12 @@ $routes->group('', ['filter' => 'auth'], function ($routes) {
     $routes->get('configMpView', 'Superadmin::configMpView');
     $routes->post('configMp', 'Superadmin::configMp');
     $routes->get('abmAdmin', 'Superadmin::index');
+    $routes->get('admin/portal', 'PlayerPortalAdmin::index');
+    $routes->post('admin/portal/guardar', 'PlayerPortalAdmin::save', ['filter' => 'csrf']);
+    $routes->get('admin/carrusel', 'PlayerCarouselAdmin::index');
+    $routes->post('admin/carrusel/subir', 'PlayerCarouselAdmin::upload', ['filter' => 'csrf']);
+    $routes->post('admin/carrusel/alternar/(:num)', 'PlayerCarouselAdmin::toggle/$1', ['filter' => 'csrf']);
+    $routes->post('admin/carrusel/eliminar/(:num)', 'PlayerCarouselAdmin::delete/$1', ['filter' => 'csrf']);
     $routes->post('saveField', 'Superadmin::saveField');
     $routes->post('editField/(:any)', 'Superadmin::editField/$1');
     $routes->post('saveService', 'Superadmin::saveService');
