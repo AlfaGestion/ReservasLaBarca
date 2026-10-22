@@ -65,6 +65,9 @@ class PlayerPortal extends BaseController
     {
         $email = strtolower($this->input('email'));
         $password = (string) $this->request->getPost('password');
+        if (! $this->allowRequest('login', $this->request->getIPAddress() . '|' . $email, 5)) {
+            return $this->redirectWithError('app/login', 'Esperá unos segundos antes de volver a intentarlo.');
+        }
         $player = $this->players()->where('email', $email)->first();
         if (! $player || ! password_verify($password, $player['password_hash'])) {
             return $this->redirectWithError('app/login', 'El correo o la contraseña no son correctos.');

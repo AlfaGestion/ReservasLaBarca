@@ -24,6 +24,9 @@ class PlayerCarousel extends BaseConfig
             $db = \Config\Database::connect();
             if ($db->tableExists('player_carousel_slides')) {
                 $rows = $db->table('player_carousel_slides')->where('active', 1)->orderBy('sort_order', 'ASC')->orderBy('id', 'ASC')->limit(10)->get()->getResultArray();
+                $rows = array_values(array_filter($rows, static function (array $slide): bool {
+                    return ! empty($slide['image_path']) && is_file(FCPATH . ltrim((string) $slide['image_path'], '/'));
+                }));
                 return array_map(static function (array $slide): array {
                     return ['image' => $slide['image_path'], 'category' => $slide['category'], 'alt' => $slide['alt_text'], 'order' => $slide['sort_order'], 'active' => (bool) $slide['active']];
                 }, $rows);
@@ -32,7 +35,7 @@ class PlayerCarousel extends BaseConfig
             log_message('error', 'No se pudo leer la configuración del carrusel: ' . $exception->getMessage());
         }
         $slides = array_values(array_filter($this->slides, static function (array $slide): bool {
-            return ! empty($slide['active']) && ! empty($slide['image']);
+            return ! empty($slide['active']) && ! empty($slide['image']) && is_file(FCPATH . ltrim((string) $slide['image'], '/'));
         }));
         usort($slides, static function (array $first, array $second): int {
             return ((int) ($first['order'] ?? 0)) <=> ((int) ($second['order'] ?? 0));

@@ -6,23 +6,24 @@ use CodeIgniter\Config\BaseConfig;
 
 class Email extends BaseConfig
 {
-    public string $fromEmail  = 'enviosalfagestion@gmail.com';
-    public string $fromName   = 'Reservas';
+    public string $fromEmail  = '';
+    public string $fromName   = 'La Barca Centro Deportivo';
     public string $recipients = '';
-    public array $accounts = [
-        [
-            'fromEmail' => 'enviosreservaalfagestion@gmail.com',
-            'fromName' => 'Reservas',
-            'SMTPUser' => 'enviosreservaalfagestion@gmail.com',
-            'SMTPPass' => 'ukagewrabmclzqpq',
-        ],
-        [
-            'fromEmail' => 'enviosalfagestion@gmail.com',
-            'fromName' => 'Reservas',
-            'SMTPUser' => 'enviosalfagestion@gmail.com',
-            'SMTPPass' => 'vheqqqxsifrrjlat',
-        ],
-    ];
+    public array $accounts = [];
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->fromEmail = trim((string) env('player.email.fromEmail', ''));
+        $this->fromName = (string) env('player.email.fromName', 'La Barca Centro Deportivo');
+        $this->SMTPHost = trim((string) env('player.email.smtpHost', ''));
+        $this->SMTPUser = trim((string) env('player.email.smtpUser', ''));
+        $this->SMTPPass = (string) env('player.email.smtpPassword', '');
+        $this->SMTPPort = (int) env('player.email.smtpPort', 587);
+        $this->SMTPTimeout = max(5, (int) env('player.email.smtpTimeout', 8));
+        $this->SMTPCrypto = (string) env('player.email.smtpCrypto', 'tls');
+        $this->protocol = (string) env('player.email.protocol', 'smtp');
+    }
 
     /**
      * The "user agent"
@@ -42,17 +43,17 @@ class Email extends BaseConfig
     /**
      * SMTP Server Address
      */
-    public string $SMTPHost = 'smtp.gmail.com';
+    public string $SMTPHost = '';
 
     /**
      * SMTP Username
      */
-    public string $SMTPUser = 'enviosalfagestion@gmail.com';
+    public string $SMTPUser = '';
 
     /**
      * SMTP Password
      */
-    public string $SMTPPass = 'vheqqqxsifrrjlat';
+    public string $SMTPPass = '';
 
     /**
      * SMTP Port

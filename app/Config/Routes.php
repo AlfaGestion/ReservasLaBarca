@@ -19,7 +19,7 @@ $routes->set404Override();
 // where controller filters or CSRF protection are bypassed.
 // If you don't want to define all routes, please use the Auto Routing (Improved).
 // Set `$autoRoutesImproved` to true in `app/Config/Feature.php` and set the following to true.
-// $routes->setAutoRoute(false);
+$routes->setAutoRoute(false);
 
 /*
  * --------------------------------------------------------------------
@@ -71,8 +71,7 @@ $routes->post('formInfo', 'Home::infoReserva');
 $routes->post('checkClosure', 'Home::checkClosure');
 $routes->get('getUpcomingClosure', 'Home::getUpcomingClosure');
 $routes->get('getDataMp', 'Home::getDataMp');
-$routes->get('deleteRejected', 'Home::deleteRejected');
-$routes->get('phpinfo', 'Debug::phpinfo');
+$routes->post('deleteRejected', 'Home::deleteRejected', ['filter' => 'csrf']);
 
 $routes->post('setPreference', 'MercadoPago::setPreference');
 $routes->post('cancelPendingMpReservation', 'MercadoPago::cancelPendingMpReservation');
@@ -82,7 +81,7 @@ $routes->get('payment/failure', 'MercadoPago::failure');
 $routes->post('payment/webhook', 'MercadoPago::webhook');
 
 $routes->group('auth', function ($routes) {
-    $routes->post('register', 'Auth::dbRegister');
+    $routes->post('register', 'Auth::dbRegister', ['filter' => 'csrf']);
     $routes->get('registerWindow', 'Auth::registerWindow');
     $routes->get('logOut', 'Auth::log_out');
     $routes->get('login', 'Auth::index');

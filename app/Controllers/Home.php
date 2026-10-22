@@ -167,9 +167,9 @@ class Home extends BaseController
             }
 
             return $this->response->setJSON($this->setResponse(null, null, null, 'Limpieza exitosa de todas las tablas'));
-        } catch (\Exception $e) {
-            // Devuelve el error detallado para seguir debugueando si falta otra tabla
-            return $this->response->setJSON($this->setResponse(500, true, null, $e->getMessage()));
+        } catch (\Throwable $exception) {
+            log_message('error', 'No se pudieron limpiar las reservas pendientes vencidas: ' . $exception->getMessage());
+            return $this->response->setJSON($this->setResponse(500, true, null, 'No se pudo completar la limpieza de reservas pendientes.'));
         }
     }
 

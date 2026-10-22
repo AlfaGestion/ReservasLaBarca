@@ -314,6 +314,7 @@ $usersScriptVersion = is_file($usersScriptPath) ? filemtime($usersScriptPath) : 
                     <div id="userRegisterFeedback" class="mb-3"></div>
 
                     <form action="<?= base_url('auth/register') ?>" method="POST" id="formUsers">
+                        <?= csrf_field() ?>
                         <?php if (session('msg')) : ?>
                             <div class="alert alert-<?= session('msg.type') ?> alert-dismissible fade show" role="alert">
                                 <small><?= session('msg.body') ?></small>

@@ -42,6 +42,9 @@ $RECYCLE.BIN/
 # These should never be under version control,
 # as it poses a security risk.
 .env
+.env.*
+!.env.example
+.envREAL
 .vagrant
 Vagrantfile
 
@@ -124,4 +127,7 @@ nb-configuration.xml
 /results/
 /phpunit*.xml
 /.phpunit.*.cache
+
+# Temporary local configuration and tunnel files
+tmp_remote_config.js
 

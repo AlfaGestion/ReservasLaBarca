@@ -626,7 +626,11 @@ telefono.addEventListener('input', async () => {
 
 async function deleteRejected() {
     try {
-        const response = await fetch(`${baseUrl}deleteRejected`);
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        const response = await fetch(`${baseUrl}deleteRejected`, {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' },
+        });
 
         const responseData = await response.json();
 
