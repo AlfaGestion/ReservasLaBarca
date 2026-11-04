@@ -95,6 +95,7 @@ class ServicesModel extends Model
         'display_order',
         'color',
         'icon',
+        'image_path',
         'offer_active',
         'offer_text',
         'discount_type',
@@ -142,10 +143,12 @@ class ServicesModel extends Model
                 'booking_interval_minutes' => "ALTER TABLE services ADD COLUMN booking_interval_minutes INT NOT NULL DEFAULT 60 AFTER minimum_duration_minutes",
                 'active' => "ALTER TABLE services ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1 AFTER booking_interval_minutes",
                 'online_available' => "ALTER TABLE services ADD COLUMN online_available TINYINT(1) NOT NULL DEFAULT 1 AFTER active",
+                'is_sport' => "ALTER TABLE services ADD COLUMN is_sport TINYINT(1) NOT NULL DEFAULT 0 AFTER online_available",
                 'allows_quincho_addon' => "ALTER TABLE services ADD COLUMN allows_quincho_addon TINYINT(1) NOT NULL DEFAULT 1 AFTER online_available",
                 'display_order' => "ALTER TABLE services ADD COLUMN display_order INT NOT NULL DEFAULT 0 AFTER allows_quincho_addon",
                 'color' => "ALTER TABLE services ADD COLUMN color VARCHAR(20) NULL AFTER display_order",
                 'icon' => "ALTER TABLE services ADD COLUMN icon VARCHAR(80) NULL AFTER color",
+                'image_path' => "ALTER TABLE services ADD COLUMN image_path VARCHAR(255) NULL AFTER icon",
                 'offer_active' => "ALTER TABLE services ADD COLUMN offer_active TINYINT(1) NOT NULL DEFAULT 0 AFTER icon",
                 'offer_text' => "ALTER TABLE services ADD COLUMN offer_text VARCHAR(255) NULL AFTER offer_active",
                 'discount_type' => "ALTER TABLE services ADD COLUMN discount_type ENUM('percentage','fixed') NOT NULL DEFAULT 'percentage' AFTER offer_text",
@@ -176,6 +179,7 @@ class ServicesModel extends Model
                 booking_interval_minutes INT NOT NULL DEFAULT 60,
                 active TINYINT(1) NOT NULL DEFAULT 1,
                 online_available TINYINT(1) NOT NULL DEFAULT 1,
+                is_sport TINYINT(1) NOT NULL DEFAULT 0,
                 allows_quincho_addon TINYINT(1) NOT NULL DEFAULT 1,
                 display_order INT NOT NULL DEFAULT 0,
                 color VARCHAR(20) NULL,
@@ -211,6 +215,18 @@ class ServicesModel extends Model
         }
 
         return $builder->orderBy('display_order', 'ASC')->orderBy('id', 'ASC')->findAll();
+    }
+
+    public function getPortalServices(bool $onlineOnly = true): array
+    {
+        $services = $this->getActiveServices($onlineOnly);
+        if (! $this->db->tableExists('player_service_match_settings')) {
+            return $services;
+        }
+
+        $enabled = $this->db->table('player_service_match_settings')->select('service_id')->where('portal_enabled', 1)->get()->getResultArray();
+        $ids = array_map(static fn (array $row): int => (int) $row['service_id'], $enabled);
+        return array_values(array_filter($services, static fn (array $service): bool => in_array((int) $service['id'], $ids, true)));
     }
 
     public function getByCode(string $code): ?array

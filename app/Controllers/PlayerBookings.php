@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Libraries\AvailabilityService;
 use App\Libraries\CustomerOfferService;
+use App\Libraries\PlayerDiscountService;
 use App\Libraries\PlayerPortalSettings;
 use App\Models\BookingSlotsModel;
 use App\Models\CancelReservationsModel;
@@ -34,7 +35,7 @@ class PlayerBookings extends BaseController
     {
         $servicesModel = new ServicesModel();
         $servicesModel->ensureDefaultServices();
-        $services = $servicesModel->getActiveServices(true);
+        $services = $servicesModel->getPortalServices(true);
         $fields = (new FieldsModel())->getFields();
         $fieldsByService = [];
         foreach ($fields as $field) {
@@ -51,6 +52,8 @@ class PlayerBookings extends BaseController
             'fieldsByService' => $fieldsByService,
             'publicKeyMp' => (string) ($keys['public_key'] ?? ''),
             'playerPortalTestMode' => (new PlayerPortalSettings())->isTestMode(),
+            'matchSettings' => $this->matchSettings(),
+            'matchSettingsByService' => $this->matchSettingsByService($services),
             'bookings' => $this->myBookings(),
         ]);
     }
@@ -65,7 +68,7 @@ class PlayerBookings extends BaseController
 
         $field = (new FieldsModel())->getField($fieldId);
         $service = $field ? (new ServicesModel())->getByField($field) : null;
-        if (! $field || ! $service || (int) ($field['disabled'] ?? 0) === 1 || (int) ($service['active'] ?? 1) !== 1 || (int) ($service['online_available'] ?? 1) !== 1) {
+        if (! $field || ! $service || ! $this->portalServiceEnabled($service) || (int) ($field['disabled'] ?? 0) === 1 || (int) ($service['active'] ?? 1) !== 1 || (int) ($service['online_available'] ?? 1) !== 1) {
             return $this->response->setStatusCode(404)->setJSON(['error' => true, 'message' => 'La instalación no está disponible online.']);
         }
 
@@ -114,7 +117,8 @@ class PlayerBookings extends BaseController
         $from = trim((string) ($data['from'] ?? ''));
         $until = trim((string) ($data['until'] ?? ''));
         $field = (new FieldsModel())->getField($fieldId);
-        if (! $field || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $from === '' || $until === '') {
+        $service = $field ? (new ServicesModel())->getByField($field) : null;
+        if (! $field || ! $service || ! $this->portalServiceEnabled($service) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $from === '' || $until === '') {
             return $this->response->setStatusCode(422)->setJSON(['error' => true, 'message' => 'Completá todos los datos de la reserva.']);
         }
 
@@ -155,6 +159,7 @@ class PlayerBookings extends BaseController
             ];
         }
         $quote = (new CustomerOfferService())->calculateBookingQuote($items, $player['phone'] ?? null, $date);
+        $quote = (new PlayerDiscountService())->applyToQuote($quote, (int) $player['id'], $date);
         if (! empty($quote['error'])) {
             return $this->response->setStatusCode(409)->setJSON(['error' => true, 'message' => $quote['message'] ?? 'No se pudo calcular el precio.']);
         }
@@ -162,6 +167,7 @@ class PlayerBookings extends BaseController
         $total = (float) ($quote['final_total'] ?? 0);
         $rate = (new RateModel())->first();
         $rateValue = $rate && is_numeric($rate['value'] ?? null) ? (float) $rate['value'] : null;
+        $matchSettings = $this->matchSettingsForService($service);
         return $this->response->setJSON([
             'error' => false,
             'data' => [
@@ -175,6 +181,8 @@ class PlayerBookings extends BaseController
                 'deposit' => $rateValue !== null ? round($total * $rateValue / 100, 2) : null,
                 'deposit_rate' => $rateValue,
                 'items' => $quote['items'] ?? [],
+                'match_search_enabled' => (int) (($service['is_sport'] ?? 0) == 1 && (int) ($matchSettings['portal_enabled'] ?? 1) === 1 && (int) ($matchSettings['search_players'] ?? ($this->matchSettings()['search_players_in_reservation'] ?? 1)) === 1),
+                'match_settings' => $matchSettings,
                 'csrfToken' => csrf_hash(),
             ],
         ]);
@@ -231,5 +239,52 @@ class PlayerBookings extends BaseController
             $minutes += 1440;
         }
         return sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
+    }
+
+    private function matchSettings(): array
+    {
+        return \Config\Database::connect()->table('player_match_settings')->where('id', 1)->get()->getRowArray() ?: ['search_players_in_reservation' => 1, 'allow_free_join' => 1, 'allow_auto_join' => 1, 'allow_approval' => 1, 'min_players' => 2, 'max_players' => 30];
+    }
+
+    private function portalServiceEnabled(array $service): bool
+    {
+        $db = \Config\Database::connect();
+        if (! $db->tableExists('player_service_match_settings')) {
+            return true;
+        }
+        $settings = $db->table('player_service_match_settings')->where('service_id', (int) ($service['id'] ?? 0))->get()->getRowArray();
+        return ! $settings || (int) ($settings['portal_enabled'] ?? 1) === 1;
+    }
+
+    private function matchSettingsForService(?array $service): array
+    {
+        $global = $this->matchSettings();
+        if (! $service || ! \Config\Database::connect()->tableExists('player_service_match_settings')) {
+            return array_merge($global, [
+                'portal_enabled' => 1,
+                'search_players' => (int) ($global['search_players_in_reservation'] ?? 1),
+            ]);
+        }
+        $local = \Config\Database::connect()->table('player_service_match_settings')->where('service_id', (int) ($service['id'] ?? 0))->get()->getRowArray() ?: [];
+        $merged = array_merge($global, [
+            'portal_enabled' => 1,
+            'search_players' => (int) ($global['search_players_in_reservation'] ?? 1),
+        ], $local);
+        // La opción global es una condición superior: un servicio no puede
+        // volver a habilitar Buscar jugadores si el administrador lo apagó.
+        $merged['search_players'] = (int) ($global['search_players_in_reservation'] ?? 0);
+        $merged['allow_auto_join'] = (int) ($global['allow_auto_join'] ?? 0);
+        $merged['allow_approval'] = (int) ($global['allow_approval'] ?? 0);
+        $merged['allow_leave'] = (int) ($global['allow_leave'] ?? 0);
+        return $merged;
+    }
+
+    private function matchSettingsByService(array $services): array
+    {
+        $settings = [];
+        foreach ($services as $service) {
+            $settings[(string) $service['code']] = $this->matchSettingsForService($service);
+        }
+        return $settings;
     }
 }

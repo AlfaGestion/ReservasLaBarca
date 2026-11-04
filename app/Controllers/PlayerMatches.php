@@ -46,7 +46,9 @@ class PlayerMatches extends BaseController
     {
         $match = $this->match($matchId);
         if (! $match) return redirect()->to(base_url('app/partidos'))->with('player_msg', ['type' => 'error', 'body' => 'No encontramos ese partido.']);
-        return $this->page('match_detail', ['match' => $match, 'participants' => $this->participants($matchId), 'request' => $this->requestFor($matchId), 'pendingRequests' => $this->pendingForMatch($matchId)]);
+        (new \App\Libraries\PlayerMatchPaymentService())->releaseExpiredHolds($matchId);
+        $match = $this->match($matchId);
+        return $this->page('match_detail', ['match' => $match, 'participants' => $this->participants($matchId), 'request' => $this->requestFor($matchId), 'participant' => $this->participant($matchId, (int) $this->player()['id']), 'pendingRequests' => $this->pendingForMatch($matchId), 'settings' => $this->settings()]);
     }
 
     public function publicProfile(int $playerId)
@@ -97,7 +99,11 @@ class PlayerMatches extends BaseController
         $max = (int) ($data['max_players'] ?? 0);
         $confirmed = (int) ($data['confirmed_players'] ?? 1);
         $mode = in_array(($data['join_mode'] ?? ''), ['auto', 'approval'], true) ? $data['join_mode'] : '';
-        $settings = $this->settings();
+        $settings = array_merge($this->settings(), $this->serviceSettings((int) ($booking['service_id'] ?? 0)));
+        if (empty($settings['portal_enabled']) || empty($settings['search_players'])) return $this->backWithError('app/partidos/crear', 'Este servicio no permite buscar jugadores desde el portal.');
+        $paymentMode = (string) ($data['payment_mode'] ?? \App\Libraries\PlayerMatchPaymentService::ORGANIZER_DEPOSIT);
+        $paymentService = new \App\Libraries\PlayerMatchPaymentService();
+        if (! $paymentService->isEnabled($paymentMode, $settings)) return $this->backWithError('app/partidos/crear', 'La modalidad de pago seleccionada no está disponible.');
         $minPlayers = max(2, (int) ($settings['min_players'] ?? 2)); $maxPlayers = max($minPlayers, (int) ($settings['max_players'] ?? 30));
         if ($max < $minPlayers || $max > $maxPlayers || $confirmed < 1 || $confirmed > $max) return $this->backWithError('app/partidos/crear', 'Revisá la cantidad de jugadores.');
         if (($mode === 'auto' && ! $settings['allow_auto_join']) || ($mode === 'approval' && ! $settings['allow_approval'])) return $this->backWithError('app/partidos/crear', 'Esta modalidad de ingreso no está habilitada.');
@@ -106,11 +112,14 @@ class PlayerMatches extends BaseController
         $db = \Config\Database::connect();
         $db->transStart();
         $matches = new PlayerMatchesModel();
-        $matches->insert(['booking_id' => $bookingId, 'organizer_player_id' => $playerId, 'max_players' => $max, 'confirmed_players' => $confirmed, 'description' => trim((string) ($data['description'] ?? '')) ?: null, 'level' => trim((string) ($data['level'] ?? '')) ?: null, 'join_mode' => $mode, 'status' => 'open', 'created_at' => $now, 'updated_at' => $now]);
+        $amounts = $paymentService->bookingAmounts($bookingId);
+        $matches->insert(['booking_id' => $bookingId, 'organizer_player_id' => $playerId, 'max_players' => $max, 'confirmed_players' => $confirmed, 'description' => trim((string) ($data['description'] ?? '')) ?: null, 'level' => trim((string) ($data['level'] ?? '')) ?: null, 'join_mode' => $mode, 'payment_mode' => $paymentMode, 'payment_total' => $amounts['total'], 'participant_share' => round($amounts['total'] / max(1, $max), 2), 'reserved_players' => 0, 'payment_policy' => $paymentService->paymentPolicy($paymentMode), 'status' => 'open', 'created_at' => $now, 'updated_at' => $now]);
         $matchId = (int) $matches->getInsertID();
         (new PlayerMatchParticipantsModel())->insert(['match_id' => $matchId, 'player_id' => $playerId, 'role' => 'organizer', 'status' => 'confirmed', 'created_at' => $now, 'updated_at' => $now]);
         $db->transComplete();
         if ($db->transStatus() === false || $matchId <= 0) return $this->backWithError('app/partidos/crear', 'No pudimos publicar el partido. Intentá nuevamente.');
+        $paymentService->syncParticipants($matchId);
+        (new \App\Libraries\PlayerMatchNotificationService())->enqueueForMatch($matchId);
         return redirect()->to(base_url('app/mis-partidos'))->with('player_msg', ['type' => 'success', 'body' => 'El partido fue publicado correctamente.']);
     }
 
@@ -118,15 +127,20 @@ class PlayerMatches extends BaseController
     {
         $playerId = (int) $this->player()['id'];
         $match = $this->match($matchId);
+        if ($match) (new \App\Libraries\PlayerMatchPaymentService())->releaseExpiredHolds($matchId);
+        $match = $this->match($matchId);
         if (! $match || ! $this->isOpen($match)) return $this->backWithError('app/partidos', 'Este partido ya no está disponible.');
         if ((int) $match['organizer_player_id'] === $playerId) return $this->backWithError('app/partidos/detalle/' . $matchId, 'Ya sos el organizador de este partido.');
         if ($this->participant($matchId, $playerId)) return $this->backWithError('app/partidos/detalle/' . $matchId, 'Ya estás incorporado a este partido.');
+        $serviceSettings = $this->serviceSettings((int) ($match['service_id'] ?? 0));
+        if (($match['join_mode'] === 'auto' && empty($serviceSettings['allow_auto_join'])) || ($match['join_mode'] === 'approval' && empty($serviceSettings['allow_approval']))) return $this->backWithError('app/partidos/detalle/' . $matchId, 'Esta modalidad de ingreso no está habilitada para este servicio.');
         $now = date('Y-m-d H:i:s');
         $db = \Config\Database::connect();
         $db->transStart();
-        $mode = $match['join_mode'] === 'auto' ? 'confirmed' : 'pending';
+        $requiresPayment = ($match['payment_mode'] ?? '') === \App\Libraries\PlayerMatchPaymentService::SPLIT;
+        $mode = (!$requiresPayment && $match['join_mode'] === 'auto') ? 'confirmed' : 'pending';
         if ($mode === 'confirmed') {
-            $updated = $db->table('player_matches')->where('id', $matchId)->where('status', 'open')->where('confirmed_players <', (int) $match['max_players'])->set('confirmed_players', 'confirmed_players + 1', false)->set('updated_at', $now)->update();
+            $updated = $db->table('player_matches')->where('id', $matchId)->where('status', 'open')->where('confirmed_players + reserved_players <', (int) $match['max_players'])->set('confirmed_players', 'confirmed_players + 1', false)->set('updated_at', $now)->update();
             if (! $updated) { $db->transRollback(); return $this->backWithError('app/partidos/detalle/' . $matchId, 'El partido se completó. Elegí otro.'); }
             (new PlayerMatchParticipantsModel())->insert(['match_id' => $matchId, 'player_id' => $playerId, 'role' => 'participant', 'status' => 'confirmed', 'created_at' => $now, 'updated_at' => $now]);
         } else {
@@ -158,6 +172,23 @@ class PlayerMatches extends BaseController
         return redirect()->to(base_url('app/partidos/detalle/' . $matchId))->with('player_msg', ['type' => 'success', 'body' => 'Solicitud cancelada.']);
     }
 
+    public function createParticipantPayment(int $matchId)
+    {
+        $playerId = (int) $this->player()['id'];
+        $participant = $this->participant($matchId, $playerId);
+        $row = $participant ? (new \App\Libraries\PlayerMatchPaymentService())->createPayment($matchId, (int) $participant['id'], $playerId) : null;
+        if (!$row) return $this->backWithError('app/partidos/detalle/' . $matchId, 'No hay un importe pendiente para iniciar.');
+        try {
+            $mp = new \App\Libraries\MercadoPagoLibrary();
+            $mp->setPreference('Aporte para partido abierto', (float) $row['amount'], 1, ['external_reference' => $row['external_reference']]);
+            (new \App\Models\PlayerMatchParticipantPaymentsModel())->update($row['id'], ['preference_id' => $mp->preferenceId, 'updated_at' => date('Y-m-d H:i:s')]);
+            return redirect()->to('https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=' . rawurlencode($mp->preferenceId));
+        } catch (\Throwable $e) {
+            log_message('error', 'No se pudo crear preferencia de aporte de partido: ' . $e->getMessage());
+            return $this->backWithError('app/partidos/detalle/' . $matchId, 'No pudimos iniciar el pago. Intentá nuevamente.');
+        }
+    }
+
     public function decide(int $requestId, string $decision)
     {
         $playerId = (int) $this->player()['id']; $requests = new PlayerMatchRequestsModel(); $request = $requests->find($requestId); $match = $request ? $this->match((int) $request['match_id']) : null;
@@ -170,19 +201,22 @@ class PlayerMatches extends BaseController
         }
         if ($decision !== 'accept' || ! $this->isOpen($match)) return $this->backWithError('app/mis-partidos', 'El partido ya no está disponible.');
         $db = \Config\Database::connect(); $db->transStart();
-        $updated = $db->table('player_matches')->where('id', $match['id'])->where('confirmed_players <', (int) $match['max_players'])->set('confirmed_players', 'confirmed_players + 1', false)->set('updated_at', date('Y-m-d H:i:s'))->update();
+        $requiresPayment = ($match['payment_mode'] ?? '') === \App\Libraries\PlayerMatchPaymentService::SPLIT;
+        $counter = $requiresPayment ? 'reserved_players' : 'confirmed_players';
+        $updated = $db->table('player_matches')->where('id', $match['id'])->where('confirmed_players + reserved_players <', (int) $match['max_players'])->set($counter, $counter . ' + 1', false)->set('updated_at', date('Y-m-d H:i:s'))->update();
         if (! $updated) { $db->transRollback(); return $this->backWithError('app/mis-partidos', 'No quedan lugares disponibles.'); }
         $participants = new PlayerMatchParticipantsModel();
         $existingParticipant = $participants->where('match_id', $match['id'])->where('player_id', $request['player_id'])->first();
         if ($existingParticipant) {
-            $participants->update($existingParticipant['id'], ['status' => 'confirmed', 'updated_at' => date('Y-m-d H:i:s')]);
+            $participants->update($existingParticipant['id'], ['status' => $requiresPayment ? 'payment_pending' : 'confirmed', 'updated_at' => date('Y-m-d H:i:s')]);
         } else {
-            $participants->insert(['match_id' => $match['id'], 'player_id' => $request['player_id'], 'role' => 'participant', 'status' => 'confirmed', 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
+            $participants->insert(['match_id' => $match['id'], 'player_id' => $request['player_id'], 'role' => 'participant', 'status' => $requiresPayment ? 'payment_pending' : 'confirmed', 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')]);
         }
         $requests->update($requestId, ['status' => 'accepted', 'updated_at' => date('Y-m-d H:i:s')]); $db->transComplete();
         if ($db->transStatus() === false) {
             return $this->backWithError('app/mis-partidos', 'No pudimos aceptar la solicitud.');
         }
+        (new \App\Libraries\PlayerMatchPaymentService())->syncParticipants((int) $match['id']);
         $requester = (new PlayerAccountsModel())->find((int) $request['player_id']);
         $this->notifyMatchEvent($requester, 'solicitud_aceptada', 'Solicitud aceptada', 'El organizador te aceptó en el partido de ' . $this->matchLabel($match) . '.', 'app/partidos/detalle/' . (int) $match['id'], 'Ver partido');
         return $this->backWithSuccess('app/mis-partidos', 'Jugador aceptado en el partido.');
@@ -199,24 +233,35 @@ class PlayerMatches extends BaseController
     {
         $playerId = (int) $this->player()['id']; $match = $this->match($matchId); $participant = $this->participant($matchId, $playerId);
         if (! $match || ! $participant || $participant['role'] === 'organizer' || $participant['status'] !== 'confirmed') return $this->backWithError('app/mis-partidos', 'No podés retirarte de este partido.');
-        $db = \Config\Database::connect(); $db->transStart(); (new PlayerMatchParticipantsModel())->update($participant['id'], ['status' => 'withdrawn', 'updated_at' => date('Y-m-d H:i:s')]); $db->table('player_matches')->where('id', $matchId)->where('confirmed_players >', 1)->set('confirmed_players', 'confirmed_players - 1', false)->set('updated_at', date('Y-m-d H:i:s'))->update(); $db->transComplete();
-        return $db->transStatus() === false ? $this->backWithError('app/mis-partidos', 'No pudimos registrar tu retiro.') : $this->backWithSuccess('app/mis-partidos', 'Te retiraste del partido.');
+        $settings = array_merge($this->settings(), $this->serviceSettings((int) ($match['service_id'] ?? 0)));
+        if (empty($settings['allow_leave'])) return $this->backWithError('app/partidos/detalle/' . $matchId, 'El administrador no habilitó la salida de participantes.');
+        $matchStart = strtotime((string) $match['date'] . ' ' . (string) $match['time_from']);
+        $hoursLimit = $settings['leave_hours_limit'] === null || $settings['leave_hours_limit'] === '' ? null : max(0, (int) $settings['leave_hours_limit']);
+        if ($hoursLimit !== null && $matchStart !== false && $matchStart - time() < ($hoursLimit * 3600)) return $this->backWithError('app/partidos/detalle/' . $matchId, 'Ya no podés salir del partido porque se encuentra dentro del límite configurado.');
+        $reason = trim((string) $this->request->getPost('reason'));
+        $now = date('Y-m-d H:i:s'); $db = \Config\Database::connect(); $db->transStart();
+        (new PlayerMatchParticipantsModel())->update($participant['id'], ['status' => 'withdrawn', 'withdrawn_at' => $now, 'withdrawal_reason' => $reason !== '' ? $reason : null, 'updated_at' => $now]);
+        $db->table('player_matches')->where('id', $matchId)->where('confirmed_players >', 1)->set('confirmed_players', 'confirmed_players - 1', false)->set('updated_at', $now)->update(); $db->transComplete();
+        if ($db->transStatus() === false) return $this->backWithError('app/mis-partidos', 'No pudimos registrar tu salida.');
+        $organizer = (new PlayerAccountsModel())->find((int) $match['organizer_player_id']);
+        $this->notifyMatchEvent($organizer, 'jugador_se retiro', 'Un jugador salió del partido', $this->playerName($this->player()) . ' salió del partido de ' . $this->matchLabel($match) . '.', 'app/partidos/detalle/' . $matchId, 'Ver partido');
+        return $this->backWithSuccess('app/partidos/detalle/' . $matchId, 'Saliste del partido y el cupo quedó liberado.');
     }
 
     private function publicMatches(string $sport, string $date): array
     {
-        $today = date('Y-m-d'); $builder = \Config\Database::connect()->table('player_matches m')->select('m.*, b.date, b.time_from, b.time_until, b.annulled, f.name AS field_name, s.name AS service_name, s.code AS service_code, o.first_name AS organizer_first_name, o.last_name AS organizer_last_name')->join('bookings b', 'b.id = m.booking_id')->join('fields f', 'f.id = b.id_field')->join('services s', 's.code = f.service_type')->join('player_accounts o', 'o.id = m.organizer_player_id')->where('m.status', 'open')->where('s.is_sport', 1)->where('b.annulled', 0)->where('b.date >=', $today)->where('m.confirmed_players < m.max_players', null, false)->orderBy('b.date', 'ASC')->orderBy('b.time_from', 'ASC');
+        $today = date('Y-m-d'); $builder = \Config\Database::connect()->table('player_matches m')->select('m.*, b.date, b.time_from, b.time_until, b.annulled, f.name AS field_name, s.name AS service_name, s.code AS service_code, o.first_name AS organizer_first_name, o.last_name AS organizer_last_name')->join('bookings b', 'b.id = m.booking_id')->join('fields f', 'f.id = b.id_field')->join('services s', 's.code = f.service_type')->join('player_accounts o', 'o.id = m.organizer_player_id')->where('m.status', 'open')->where('s.is_sport', 1)->where('b.annulled', 0)->where('b.date >=', $today)->where('m.confirmed_players + m.reserved_players < m.max_players', null, false)->orderBy('b.date', 'ASC')->orderBy('b.time_from', 'ASC');
         if ($sport !== '') $builder->where('s.code', $sport); if ($date !== '') $builder->where('b.date', $date); return $builder->get()->getResultArray();
     }
 
     private function eligibleBookings(): array
     {
-        $playerId = (int) $this->player()['id']; $db = \Config\Database::connect(); $used = (new PlayerMatchesModel())->select('booking_id')->whereIn('status', ['open', 'closed'])->findColumn('booking_id'); $builder = $db->table('player_booking_links l')->select('b.id, b.date, b.time_from, b.time_until, f.name AS field_name, s.name AS service_name')->join('bookings b', 'b.id = l.booking_id')->join('fields f', 'f.id = b.id_field')->join('services s', 's.code = f.service_type')->where('l.player_id', $playerId)->where('s.is_sport', 1)->where('b.annulled', 0)->where('b.date >=', date('Y-m-d')); if (! empty($used)) $builder->whereNotIn('b.id', $used); return $builder->orderBy('b.date', 'ASC')->get()->getResultArray();
+        $playerId = (int) $this->player()['id']; $db = \Config\Database::connect(); $used = (new PlayerMatchesModel())->select('booking_id')->whereIn('status', ['open', 'closed'])->findColumn('booking_id'); $builder = $db->table('player_booking_links l')->select('b.id, b.date, b.time_from, b.time_until, f.name AS field_name, s.id AS service_id, s.name AS service_name')->join('bookings b', 'b.id = l.booking_id')->join('fields f', 'f.id = b.id_field')->join('services s', 's.code = f.service_type')->where('l.player_id', $playerId)->where('s.is_sport', 1)->where('b.annulled', 0)->where('b.date >=', date('Y-m-d')); if (! empty($used)) $builder->whereNotIn('b.id', $used); return $builder->orderBy('b.date', 'ASC')->get()->getResultArray();
     }
 
     private function eligibleBooking(int $bookingId, int $playerId): ?array { foreach ($this->eligibleBookings() as $booking) if ((int) $booking['id'] === $bookingId) return $booking; return null; }
-    private function match(int $id): ?array { return \Config\Database::connect()->table('player_matches m')->select('m.*, b.date, b.time_from, b.time_until, b.annulled, f.name AS field_name, s.name AS service_name, s.code AS service_code, s.is_sport, o.first_name AS organizer_first_name, o.last_name AS organizer_last_name')->join('bookings b', 'b.id = m.booking_id')->join('fields f', 'f.id = b.id_field')->join('services s', 's.code = f.service_type')->join('player_accounts o', 'o.id = m.organizer_player_id')->where('m.id', $id)->get()->getRowArray() ?: null; }
-    private function participants(int $id): array { return \Config\Database::connect()->table('player_match_participants p')->select('p.*, a.first_name, a.last_name')->join('player_accounts a', 'a.id = p.player_id')->where('p.match_id', $id)->where('p.status', 'confirmed')->get()->getResultArray(); }
+    private function match(int $id): ?array { return \Config\Database::connect()->table('player_matches m')->select('m.*, b.date, b.time_from, b.time_until, b.annulled, f.name AS field_name, s.id AS service_id, s.name AS service_name, s.code AS service_code, s.is_sport, o.first_name AS organizer_first_name, o.last_name AS organizer_last_name')->join('bookings b', 'b.id = m.booking_id')->join('fields f', 'f.id = b.id_field')->join('services s', 's.code = f.service_type')->join('player_accounts o', 'o.id = m.organizer_player_id')->where('m.id', $id)->get()->getRowArray() ?: null; }
+    private function participants(int $id): array { return \Config\Database::connect()->table('player_match_participants p')->select('p.*, a.first_name, a.last_name')->join('player_accounts a', 'a.id = p.player_id')->where('p.match_id', $id)->whereIn('p.status', ['confirmed', 'payment_pending'])->get()->getResultArray(); }
     private function participant(int $matchId, int $playerId): ?array { return (new PlayerMatchParticipantsModel())->where('match_id', $matchId)->where('player_id', $playerId)->first(); }
     private function canViewProfileInMatch(int $viewerId, int $playerId, int $matchId): bool
     {
@@ -236,8 +281,22 @@ class PlayerMatches extends BaseController
     private function pendingRequests(int $playerId): array { return \Config\Database::connect()->table('player_match_requests r')->select('r.*, m.max_players, m.confirmed_players, b.date, b.time_from, s.name AS service_name, f.name AS field_name, o.first_name AS organizer_first_name, o.last_name AS organizer_last_name')->join('player_matches m', 'm.id = r.match_id')->join('bookings b', 'b.id = m.booking_id')->join('fields f', 'f.id = b.id_field')->join('services s', 's.code = f.service_type')->join('player_accounts o', 'o.id = m.organizer_player_id')->where('r.player_id', $playerId)->where('r.status', 'pending')->get()->getResultArray(); }
     private function sports(): array { return \Config\Database::connect()->table('services')->select('code, name')->where('is_sport', 1)->where('active', 1)->orderBy('display_order', 'ASC')->get()->getResultArray(); }
     private function favoriteSportCode(): string { $player = $this->player(); if (! $player) return ''; $favorites = json_decode((string) ($player['favorite_sports'] ?? '[]'), true); if (! is_array($favorites)) return ''; foreach ($this->sports() as $sport) if (in_array($sport['code'], $favorites, true) || in_array($sport['name'], $favorites, true)) return (string) $sport['code']; return ''; }
-    private function settings(): array { return \Config\Database::connect()->table('player_match_settings')->where('id', 1)->get()->getRowArray() ?: ['allow_auto_join' => 1, 'allow_approval' => 1, 'min_players' => 2, 'max_players' => 30]; }
-    private function isOpen(array $match): bool { return (int) ($match['annulled'] ?? 0) === 0 && $match['status'] === 'open' && $match['date'] >= date('Y-m-d') && (int) $match['confirmed_players'] < (int) $match['max_players']; }
+    private function settings(): array { return \Config\Database::connect()->table('player_match_settings')->where('id', 1)->get()->getRowArray() ?: ['allow_auto_join' => 1, 'allow_approval' => 1, 'min_players' => 2, 'max_players' => 30, 'allow_leave' => 1, 'leave_hours_limit' => null, 'allow_free_join' => 1, 'allow_paid_join' => 0, 'organizer_choose_payment' => 0, 'payment_mode_organizer_deposit' => 1, 'payment_mode_split' => 0, 'payment_mode_venue' => 0, 'favorite_notifications_enabled' => 1, 'search_players_in_reservation' => 1]; }
+    private function isOpen(array $match): bool { return (int) ($match['annulled'] ?? 0) === 0 && $match['status'] === 'open' && $match['date'] >= date('Y-m-d') && ((int) $match['confirmed_players'] + (int) ($match['reserved_players'] ?? 0)) < (int) $match['max_players']; }
+    private function serviceSettings(int $serviceId): array
+    {
+        $global = $this->settings();
+        if ($serviceId <= 0 || ! \Config\Database::connect()->tableExists('player_service_match_settings')) {
+            return array_merge($global, ['portal_enabled' => 1, 'search_players' => (int) ($global['search_players_in_reservation'] ?? 1)]);
+        }
+        $local = \Config\Database::connect()->table('player_service_match_settings')->where('service_id', $serviceId)->get()->getRowArray() ?: [];
+        $merged = array_merge($global, ['portal_enabled' => 1, 'search_players' => (int) ($global['search_players_in_reservation'] ?? 1)], $local);
+        $merged['search_players'] = (int) ($global['search_players_in_reservation'] ?? 0);
+        $merged['allow_auto_join'] = (int) ($global['allow_auto_join'] ?? 0);
+        $merged['allow_approval'] = (int) ($global['allow_approval'] ?? 0);
+        $merged['allow_leave'] = (int) ($global['allow_leave'] ?? 0);
+        return $merged;
+    }
     private function notifyMatchEvent(?array $player, string $type, string $title, string $message, string $url, string $button): void
     {
         if (! $player || empty($player['id'])) {

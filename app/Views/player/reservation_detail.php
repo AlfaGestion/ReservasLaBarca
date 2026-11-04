@@ -13,6 +13,7 @@ $status = (int) ($booking['annulled'] ?? 0) === 1 ? 'Cancelada' : ((int) ($booki
             <div><dt>Instalación</dt><dd><?= esc($booking['field_name'] ?? 'N/D') ?></dd></div>
             <div><dt>Fecha</dt><dd><?= esc(date('d/m/Y', strtotime($booking['date'] ?? 'now'))) ?></dd></div>
             <div><dt>Horario</dt><dd><?= esc(substr((string) ($booking['time_from'] ?? ''), 0, 5)) ?> a <?= esc(substr((string) ($booking['time_until'] ?? ''), 0, 5)) ?></dd></div>
+            <?php if ((float) ($booking['discount_amount'] ?? 0) > 0): ?><div><dt>Precio original</dt><dd>$ <?= esc(number_format((float) ($booking['original_total'] ?? 0), 2, ',', '.')) ?></dd></div><div><dt>Descuento</dt><dd class="booking-discount">- $ <?= esc(number_format((float) ($booking['discount_amount'] ?? 0), 2, ',', '.')) ?></dd></div><?php endif; ?>
             <div><dt>Total</dt><dd>$ <?= esc(number_format((float) ($booking['total'] ?? 0), 2, ',', '.')) ?></dd></div>
             <div><dt>Pagado</dt><dd>$ <?= esc(number_format((float) ($booking['payment'] ?? 0), 2, ',', '.')) ?></dd></div>
             <div><dt>Saldo</dt><dd>$ <?= esc(number_format((float) ($booking['diference'] ?? 0), 2, ',', '.')) ?></dd></div>

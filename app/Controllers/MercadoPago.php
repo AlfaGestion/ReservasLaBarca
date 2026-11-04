@@ -7,6 +7,7 @@ use App\Libraries\AvailabilityService;
 use App\Libraries\CustomerOfferService;
 use App\Libraries\MercadoPagoLibrary;
 use App\Libraries\PlayerPortalSettings;
+use App\Libraries\PlayerDiscountService;
 use App\Models\BookingSlotsModel;
 use App\Models\BookingsModel;
 use App\Models\CancelReservationsModel;
@@ -1021,6 +1022,7 @@ class MercadoPago extends BaseController
             $result['mercado_pago'] = $mercadoPago;
             $result['confirmed'] = true;
             $result['email_sent'] = $isFirstConfirmation;
+            (new \App\Libraries\PlayerMatchPublicationService())->publishIfEligible($primaryBookingId);
 
             if ($isFirstConfirmation) {
                 $this->sendBookingEmail($primaryBookingId);
@@ -1241,6 +1243,12 @@ class MercadoPago extends BaseController
                 if ((int)($field['online_available'] ?? 1) !== 1) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'El servicio seleccionado no esta disponible para reservar online.'));
                 }
+                if (session()->get('player_logged_in') && \Config\Database::connect()->tableExists('player_service_match_settings')) {
+                    $portalService = \Config\Database::connect()->table('player_service_match_settings')->where('service_id', (int) ($field['service_id'] ?? 0))->get()->getRowArray();
+                    if ($portalService && (int) ($portalService['portal_enabled'] ?? 1) !== 1) {
+                        return $this->response->setJSON($this->setResponse(409, true, null, 'Este servicio no está disponible para reservas desde el Portal de Jugadores.'));
+                    }
+                }
                 if ($index === 0) {
                     $primaryField = $field;
                 } elseif (($field['service_type'] ?? '') !== 'quincho' || (int)($primaryField['allows_quincho_addon'] ?? 0) !== 1) {
@@ -1269,6 +1277,7 @@ class MercadoPago extends BaseController
             }
 
             $bookingArr = json_decode(json_encode($booking), true);
+            $matchOptions = is_array($bookingArr['matchOptions'] ?? null) ? $bookingArr['matchOptions'] : null;
             $bookingPhone = trim((string) ($bookingArr['telefono'] ?? $bookingArr['phone'] ?? ''));
             $customerOfferService = new CustomerOfferService();
             $bookingQuote = $customerOfferService->calculateBookingQuote(
@@ -1276,6 +1285,9 @@ class MercadoPago extends BaseController
                 $bookingPhone !== '' ? $bookingPhone : null,
                 is_string($bookingDate) ? $bookingDate : null
             );
+            if ($testMode || session()->get('player_logged_in')) {
+                $bookingQuote = (new PlayerDiscountService())->applyToQuote($bookingQuote, (int) session()->get('player_id'), is_string($bookingDate) ? $bookingDate : null);
+            }
 
             if (!empty($bookingQuote['error'])) {
                 return $this->response->setJSON($this->setResponse(409, true, null, $bookingQuote['message'] ?? 'No se pudo calcular el monto de la reserva.'));
@@ -1425,6 +1437,8 @@ class MercadoPago extends BaseController
                 $this->linkPlayerBooking((int) $bookingId);
                 if (! empty($additionalBookingId)) $this->linkPlayerBooking((int) $additionalBookingId);
                 $this->updatePlayerProfileFromBooking($bookingArr);
+                if ($matchOptions && (int) session()->get('player_id') > 0) (new \App\Libraries\PlayerMatchPublicationService())->queue((int) $bookingId, (int) session()->get('player_id'), $matchOptions);
+                (new \App\Libraries\PlayerMatchPublicationService())->publishIfEligible((int) $bookingId);
                 return $this->response->setJSON($this->setResponse(null, null, ['bookingId' => $bookingId, 'testMode' => true], 'Reserva confirmada en modo prueba.'));
             }
 
@@ -1458,6 +1472,9 @@ class MercadoPago extends BaseController
             $this->linkPlayerBooking((int) $bookingId);
             if (!empty($additionalBookingId)) {
                 $this->linkPlayerBooking((int) $additionalBookingId);
+            }
+            if ($matchOptions && (int) session()->get('player_id') > 0) {
+                (new \App\Libraries\PlayerMatchPublicationService())->queue((int) $bookingId, (int) session()->get('player_id'), $matchOptions);
             }
 
             // Los datos editados durante la reserva se guardan solo después de
@@ -1528,6 +1545,10 @@ class MercadoPago extends BaseController
         }
 
         if (trim((string) ($paymentData['status'] ?? '')) === 'approved') {
+            if (strpos(trim((string) ($paymentData['external_reference'] ?? '')), 'match_participant:') === 0) {
+                $participantResult = (new \App\Libraries\PlayerMatchPaymentService())->confirmMercadoPago($paymentData);
+                return view('mercadoPago/pending', ['title' => !empty($participantResult['confirmed']) ? 'Pago recibido' : 'Pago en revisión', 'message' => !empty($participantResult['confirmed']) ? 'El aporte del partido quedó registrado. La participación se actualizará con la confirmación oficial.' : 'El pago fue recibido, pero todavía no pudo confirmarse.']);
+            }
             $result = $this->confirmApprovedPayment($paymentData, $requestPreferenceId, 'success');
             if (!empty($result['confirmed']) && !empty($result['booking']['id'])) {
                 $mercadoPago = $this->buildMercadoPagoViewRecord($paymentData, $result['mercado_pago'] ?? null);
@@ -1577,6 +1598,10 @@ class MercadoPago extends BaseController
         }
 
         if (trim((string) ($paymentData['status'] ?? '')) === 'approved') {
+            if (strpos(trim((string) ($paymentData['external_reference'] ?? '')), 'match_participant:') === 0) {
+                $participantResult = (new \App\Libraries\PlayerMatchPaymentService())->confirmMercadoPago($paymentData);
+                return $this->response->setJSON($this->setResponse(null, null, ['processed' => true, 'confirmed' => !empty($participantResult['confirmed']), 'duplicate' => !empty($participantResult['duplicate'])], 'Webhook de aporte procesado.'));
+            }
             $result = $this->confirmApprovedPayment($paymentData, $requestPreferenceId, 'webhook');
             return $this->response->setJSON($this->setResponse(null, null, [
                 'processed' => true,

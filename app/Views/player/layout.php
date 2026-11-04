@@ -38,13 +38,14 @@ if ($player) {
     <link rel="stylesheet" href="<?= base_url('assets/player/player-mobile.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/player/player-bookings.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/player/player-theme.css') ?>">
+    <?php if (($contentView ?? '') === 'player/login'): ?><link rel="stylesheet" href="<?= base_url('assets/player/player-login.css') ?>"><?php endif; ?>
     <script src="<?= base_url('assets/player/player-theme.js') ?>" defer></script>
     <script src="<?= base_url('assets/player/player-carousel.js') ?>" defer></script>
     <script src="<?= base_url('assets/player/player-notifications.js') ?>" defer></script>
 </head>
-<body class="player-app<?= !empty($minimalLayout) ? ' player-minimal' : '' ?>" data-player-notifications="<?= $player ? 'true' : 'false' ?>" data-notification-last-id="<?= $playerLastNotificationId ?>">
+<body class="player-app<?= !empty($minimalLayout) ? ' player-minimal' : '' ?><?= ($contentView ?? '') === 'player/login' ? ' login-screen' : '' ?>" data-player-notifications="<?= $player ? 'true' : 'false' ?>" data-notification-last-id="<?= $playerLastNotificationId ?>">
 <header class="player-header">
-    <a class="brand" href="<?= base_url('app') ?>"><img src="<?= base_url(PUBLIC_FOLDER . 'assets/images/logo.png') ?>" alt="La Barca Centro Deportivo"></a>
+    <a class="brand" href="<?= base_url('app') ?>"><img class="brand-logo" src="<?= base_url(PUBLIC_FOLDER . 'assets/images/logo.png') ?>" alt="La Barca Centro Deportivo"></a>
     <nav class="desktop-nav" aria-label="Navegación principal">
         <a href="<?= base_url('app') ?>">Inicio</a>
         <a href="<?= base_url('app/partidos') ?>">Partidos</a>

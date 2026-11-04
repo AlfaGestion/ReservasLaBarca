@@ -2,6 +2,8 @@
 $title = 'Detalle del partido';
 helper('url');
 $isOrganizer = (int) $match['organizer_player_id'] === (int) $player['id'];
+$leaveAllowed = ! empty($settings['allow_leave']) && ! empty($participant) && ($participant['status'] ?? '') === 'confirmed' && ($participant['role'] ?? '') !== 'organizer';
+if ($leaveAllowed && $settings['leave_hours_limit'] !== null && $settings['leave_hours_limit'] !== '') $leaveAllowed = strtotime($match['date'] . ' ' . $match['time_from']) - time() >= ((int) $settings['leave_hours_limit'] * 3600);
 $profileUrl = static function (int $playerId) use ($match): string {
     return base_url('app/jugadores/' . $playerId . '?partido=' . (int) $match['id']);
 };
@@ -13,9 +15,11 @@ $profileUrl = static function (int $playerId) use ($match): string {
         <h1><?= esc($match['field_name']) ?></h1>
         <p class="match-date"><strong><?= esc(date('d/m/Y', strtotime($match['date']))) ?></strong> · <?= esc(substr($match['time_from'], 0, 5)) ?> a <?= esc(substr($match['time_until'], 0, 5)) ?></p>
         <p class="match-organizer"><i class="fa-solid fa-user" aria-hidden="true"></i> Organiza <?= esc(trim($match['organizer_first_name'] . ' ' . $match['organizer_last_name'])) ?></p>
-        <div class="match-capacity detail-capacity"><strong><?= (int) $match['confirmed_players'] ?>/<?= (int) $match['max_players'] ?></strong><span>jugadores confirmados · <?= max(0, (int) $match['max_players'] - (int) $match['confirmed_players']) ?> lugares libres</span></div>
+        <div class="match-capacity detail-capacity"><strong><?= (int) $match['confirmed_players'] + (int) ($match['reserved_players'] ?? 0) ?>/<?= (int) $match['max_players'] ?></strong><span>lugares ocupados · <?= max(0, (int) $match['max_players'] - (int) $match['confirmed_players'] - (int) ($match['reserved_players'] ?? 0)) ?> lugares libres</span></div>
         <?php if (! empty($match['description'])): ?><p class="match-description"><?= esc($match['description']) ?></p><?php endif; ?>
         <p class="match-join-note"><?= $match['join_mode'] === 'auto' ? 'Podés incorporarte directamente si hay lugar.' : 'Tu solicitud será revisada por el organizador.' ?></p>
+        <?php if (($match['payment_mode'] ?? '') === 'organizer_deposit'): ?><p class="match-join-note">La seña de la reserva la abona el organizador. Los participantes no pagan online.</p><?php elseif (($match['payment_mode'] ?? '') === 'venue'): ?><p class="match-join-note">Cada jugador debe abonar $<?= number_format((float) ($match['participant_share'] ?? 0), 2, ',', '.') ?> en la cancha. El administrador registrará el pago.</p><?php elseif (($match['payment_mode'] ?? '') === 'split'): ?><p class="match-join-note">Tu parte estimada es de $<?= number_format((float) ($participant['amount_due'] ?? $match['participant_share'] ?? 0), 2, ',', '.') ?>. Los pagos se confirman únicamente con Mercado Pago.</p><?php endif; ?>
+        <?php if (!empty($participant) && ($participant['payment_status'] ?? '') === 'pending' && ($match['payment_mode'] ?? '') === 'split'): ?><form method="post" action="<?= base_url('app/partidos/' . $match['id'] . '/pago/crear') ?>"><input type="hidden" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>"><button class="button button-primary button-full" type="submit">Pagar mi parte con Mercado Pago</button></form><?php elseif (!empty($participant) && ($participant['payment_status'] ?? '') === 'paid'): ?><div class="match-success">Tu pago está registrado.</div><?php endif; ?>
         <?php if (! $isOrganizer && $match['status'] === 'open'): ?>
             <?php if (! empty($request) && $request['status'] === 'pending'): ?><form method="post" action="<?= base_url('app/partidos/' . $match['id'] . '/solicitud/cancelar') ?>"><input type="hidden" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>"><button class="button button-ghost button-full" type="submit">Cancelar solicitud</button></form>
             <?php elseif (! empty($request) && $request['status'] === 'accepted'): ?><div class="match-success">Ya estás incorporado a este partido.</div>
@@ -39,6 +43,6 @@ $profileUrl = static function (int $playerId) use ($match): string {
                 <?php endif; ?>
             </section>
             <div class="match-organizer-actions"><form method="post" action="<?= base_url('app/partidos/' . $match['id'] . ($match['status'] === 'open' ? '/close' : '/reopen')) ?>"><input type="hidden" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>"><button class="button button-ghost" type="submit"><?= $match['status'] === 'open' ? 'Cerrar búsqueda' : 'Reabrir búsqueda' ?></button></form></div>
-        <?php elseif (! empty($request) && $request['status'] === 'accepted'): ?><form method="post" action="<?= base_url('app/partidos/' . $match['id'] . '/retirarse') ?>"><input type="hidden" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>"><button class="button button-ghost" type="submit">Retirarme del partido</button></form><?php endif; ?>
+        <?php elseif ($leaveAllowed): ?><form method="post" action="<?= base_url('app/partidos/' . $match['id'] . '/retirarse') ?>" onsubmit="return confirm('¿Querés salir del partido? El cupo quedará disponible para otro jugador.')"><input type="hidden" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>"><label class="field-help" for="leave-reason">Motivo (opcional)</label><input id="leave-reason" name="reason" maxlength="500" placeholder="Podés contarnos el motivo"><button class="button button-ghost" type="submit">Salir del partido</button></form><?php endif; ?>
     </article>
 </section>

@@ -1,5 +1,6 @@
 (function () {
-    const STORAGE_KEY = 'reservas_theme';
+    const STORAGE_KEY = 'la-barca-theme';
+    const LEGACY_STORAGE_KEY = 'reservas_theme';
     const THEME_DARK = 'dark';
     const THEME_LIGHT = 'light';
 
@@ -26,6 +27,7 @@
         const setMode = (mode) => {
             const normalized = mode === THEME_DARK ? THEME_DARK : THEME_LIGHT;
             localStorage.setItem(STORAGE_KEY, normalized);
+            localStorage.setItem(LEGACY_STORAGE_KEY, normalized);
             applyTheme(normalized);
             button.dataset.mode = normalized;
             const icon = button.querySelector('.theme-toggle-active-icon');
@@ -36,7 +38,8 @@
             }
         };
 
-        const initial = localStorage.getItem(STORAGE_KEY) === THEME_DARK ? THEME_DARK : THEME_LIGHT;
+        const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
+        const initial = saved === THEME_DARK ? THEME_DARK : THEME_LIGHT;
         setMode(initial);
         button.addEventListener('click', () => {
             const next = button.dataset.mode === THEME_DARK ? THEME_LIGHT : THEME_DARK;

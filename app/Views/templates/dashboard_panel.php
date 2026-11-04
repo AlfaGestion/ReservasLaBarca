@@ -9,10 +9,8 @@
     <script>
         (function () {
             try {
-                if (localStorage.getItem('reservas_theme') === 'dark') {
-                    document.addEventListener('DOMContentLoaded', function () {
-                        document.body.classList.add('theme-dark');
-                    });
+                if ((localStorage.getItem('la-barca-theme') || localStorage.getItem('reservas_theme')) === 'dark') {
+                    document.documentElement.dataset.savedTheme = 'dark';
                 }
             } catch (e) {}
         })();
@@ -33,6 +31,11 @@
 </head>
 
 <body class="site-body <?php echo trim((string) $this->renderSection('bodyClass')) ?>">
+    <script>
+        if (document.documentElement.dataset.savedTheme === 'dark') {
+            document.body.classList.add('theme-dark');
+        }
+    </script>
     <?php echo $this->renderSection('navbar') ?>
     <nav class="navbar navbar-expand-lg site-navbar" style="background-color: #ffffff;">
         <div class="container-fluid d-flex justify-content-center align-items-center flex-row">

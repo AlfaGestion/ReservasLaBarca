@@ -10,7 +10,7 @@
     <script>
         (function () {
             try {
-                if (localStorage.getItem('reservas_theme') === 'dark') {
+                if ((localStorage.getItem('la-barca-theme') || localStorage.getItem('reservas_theme')) === 'dark') {
                     document.addEventListener('DOMContentLoaded', function () {
                         document.body.classList.add('theme-dark');
                     });

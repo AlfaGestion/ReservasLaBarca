@@ -132,7 +132,14 @@
         updateProgress()
         if (step === 3) renderFields()
         if (step === 4) loadPrimarySlots()
-        if (step === 5) updateAddonVisibility()
+        if (step === 5) {
+            updateAddonVisibility()
+            const serviceSettings = config.matchSettingsByService?.[selectedService] || config.matchSettings || {}
+            renderMatchSearchOption({
+                match_search_enabled: Array.isArray(config.sportServiceCodes) && config.sportServiceCodes.includes(selectedService) && Number(serviceSettings.portal_enabled ?? 1) === 1,
+                match_settings: serviceSettings,
+            })
+        }
         const heading = screens.find(screen => Number(screen.dataset.step) === step)?.querySelector('h2')
         if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }) }
     }
@@ -206,6 +213,22 @@
         if (!allowed && addQuincho) { addQuincho.checked = false; addonBox.hidden = true }
     }
 
+    function renderMatchSearchOption(data) {
+        const existing = document.getElementById('booking-match-search'); existing?.remove()
+        if (!data?.match_search_enabled || !(Number(data?.match_settings?.search_players ?? data?.match_settings?.search_players_in_reservation ?? 0) === 1)) return
+        const settings = data.match_settings
+        const box = document.createElement('div'); box.id = 'booking-match-search'; box.className = 'wizard-addon';
+        const paymentOptions = `${Number(settings.payment_mode_organizer_deposit) ? '<option value="organizer_deposit">El organizador paga la seña</option>' : ''}${Number(settings.payment_mode_split) && Number(settings.allow_paid_join) ? '<option value="split">Cada jugador paga su parte</option>' : ''}${Number(settings.payment_mode_venue) ? '<option value="venue">Todos pagan en la cancha</option>' : ''}`
+        box.innerHTML = `<label class="switch-line"><input id="booking-find-players" type="checkbox" checked><span>Buscar jugadores para esta reserva</span></label><div id="booking-find-players-fields"><label>Cupos totales<input id="booking-match-max" type="number" min="${Number(settings.min_players || 2)}" max="${Number(settings.max_players || 30)}" value="${Number(settings.min_players || 2)}"></label><label>Modalidad de incorporación<select id="booking-match-mode">${Number(settings.allow_auto_join) ? '<option value="auto">Ingreso automático</option>' : ''}${Number(settings.allow_approval) ? '<option value="approval">Ingreso con aprobación</option>' : ''}</select></label><label>Modalidad de pago<select id="booking-match-payment">${paymentOptions}</select></label><label>Información adicional<textarea id="booking-match-description" maxlength="500" rows="3"></textarea></label></div>`
+        document.querySelector('.wizard-player-card')?.after(box)
+        document.getElementById('booking-find-players').addEventListener('change', event => { document.getElementById('booking-find-players-fields').hidden = !event.target.checked })
+    }
+
+    function matchOptions() {
+        const toggle = document.getElementById('booking-find-players'); if (!toggle?.checked) return null
+        return { enabled: true, max_players: Number(document.getElementById('booking-match-max')?.value || 0), join_mode: document.getElementById('booking-match-mode')?.value || '', payment_mode: document.getElementById('booking-match-payment')?.value || 'organizer_deposit', description: document.getElementById('booking-match-description')?.value || '' }
+    }
+
     function splitName(fullName) { const parts = fullName.trim().split(/\s+/).filter(Boolean); return { first_name: parts.shift() || '', last_name: parts.join(' ') } }
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[character])) }
 
@@ -248,7 +271,9 @@
             step = 5; updateProgress()
             const name = document.getElementById('booking-name').value
             const extra = additional ? `<div><dt>Quincho adicional</dt><dd>${escapeHtml(addonFrom.value)} a ${escapeHtml(addonUntil.value)}</dd></div>` : ''
+            const discountSummary = Number(quote.discount_total || 0) > 0 ? `<div><dt>Precio original</dt><dd>${money(quote.original_total)}</dd></div><div><dt>Descuento para tu cuenta</dt><dd class="booking-discount">- ${money(quote.discount_total)}</dd></div>` : ''
             summary.innerHTML = `<dl><div><dt>Servicio</dt><dd>${escapeHtml(quote.field.service_name || selectedService)}</dd></div><div><dt>Cancha o espacio</dt><dd>${escapeHtml(quote.field.name)}</dd></div><div><dt>Fecha</dt><dd>${date.value.split('-').reverse().join('/')}</dd></div><div><dt>Horario</dt><dd>${from.value} a ${until.value}</dd></div>${extra}<div><dt>Jugador</dt><dd>${escapeHtml(name)}</dd></div><div><dt>Total</dt><dd>${money(quote.total)}</dd></div>${quote.deposit !== null ? `<div><dt>Seña (${quote.deposit_rate}%)</dt><dd>${money(quote.deposit)}</dd></div>` : ''}</dl>`
+            if (discountSummary) summary.querySelector('dl')?.insertAdjacentHTML('beforeend', discountSummary)
             formScreen.hidden = true; summaryScreen.hidden = false; if (aside) aside.hidden = true; if (myBookings) myBookings.hidden = true; summaryError.hidden = true
         } catch (error) { message(formMessage, error.message || 'No pudimos obtener el resumen. Intentá nuevamente.', true) }
         quoteButton.disabled = false; quoteButton.innerHTML = 'Ver resumen <span aria-hidden="true">→</span>'
@@ -261,7 +286,7 @@
         try {
             const name = splitName(document.getElementById('booking-name').value)
             const additional = addQuincho?.checked ? { enabled: true, fecha: date.value, cancha: addonField.value, horarioDesde: addonFrom.value, horarioHasta: addonUntil.value } : null
-            const result = await postJson(config.createUrl, { booking: { fecha: date.value, cancha: selectedField, horarioDesde: from.value, horarioHasta: until.value, nombre: document.getElementById('booking-name').value.trim(), first_name: name.first_name, last_name: name.last_name, telefono: document.getElementById('booking-phone').value.trim(), localidad: document.getElementById('booking-locality').value.trim(), metodoDePago: 'Mercado Pago', additionalQuincho: additional } })
+            const result = await postJson(config.createUrl, { booking: { fecha: date.value, cancha: selectedField, horarioDesde: from.value, horarioHasta: until.value, nombre: document.getElementById('booking-name').value.trim(), first_name: name.first_name, last_name: name.last_name, telefono: document.getElementById('booking-phone').value.trim(), localidad: document.getElementById('booking-locality').value.trim(), metodoDePago: 'Mercado Pago', additionalQuincho: additional, matchOptions: matchOptions() } })
             const prefs = result.data || {}
             summaryScreen.hidden = true; resultScreen.hidden = false; resultScreen.querySelector('#booking-result-title').textContent = 'Reserva pendiente de pago'; resultScreen.querySelector('#booking-result-message').textContent = 'La reserva fue creada y quedó pendiente de confirmación del pago.'; if (aside) aside.hidden = true; if (myBookings) myBookings.hidden = true
             if (prefs.testMode) {

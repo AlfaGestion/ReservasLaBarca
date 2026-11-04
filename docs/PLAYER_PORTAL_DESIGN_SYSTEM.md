@@ -77,3 +77,42 @@ La imagen principal del inicio está preparada en `.hero-photo` para recibir una
 Correcto: `background: var(--app-surface); color: var(--app-text);`.
 
 Incorrecto: agregar fondos negros, verdes o azules nuevos directamente dentro de una vista, usar Arial/serif, o crear un botón con una combinación de contraste distinta al sistema.
+
+## Estados visuales obligatorios
+
+Todos los componentes interactivos deben usar los tokens del tema para sus estados:
+
+- Normal: `--app-surface`, `--app-text`, `--app-border`.
+- Hover y foco: `--app-primary-hover` o `--app-focus`, con un indicador visible.
+- Seleccionado o disponible: `--app-selection` y `--app-selection-bg`.
+- Deshabilitado: `--app-surface-alt`, `--app-border`, `--app-text-muted`, sin depender solamente de opacidad.
+- Éxito: `--app-success-bg` y `--app-success-text`.
+- Error: `--app-danger-bg` y `--app-danger-text`.
+- Información: `--app-surface-alt`, `--app-text` y `--app-border`.
+
+Los formularios deben conservar una altura mínima de 48 px, texto de 16 px en campos, etiquetas asociadas mediante `for`/`id`, foco visible y mensajes de error cercanos al campo correspondiente.
+
+## Convenciones de responsive
+
+- El contenido principal debe poder contraerse hasta 320 px sin overflow horizontal.
+- Los puntos de corte existentes del portal son 760 px para móvil y 900/1120 px para composiciones intermedias; no crear otro punto de corte sin documentar su motivo.
+- La navegación inferior debe reservar espacio inferior mediante `padding-bottom` y `env(safe-area-inset-bottom)`.
+- Las grillas deben usar `minmax(0, ...)` cuando exista riesgo de desbordamiento por textos largos.
+- Las imágenes deben conservar proporción con `object-fit: cover` o `contain`; nunca deformarse por dimensiones rígidas.
+- Las decoraciones deben quedar contenidas, tener `pointer-events: none` y no utilizar posiciones que generen scroll horizontal.
+
+## Acciones en pantallas administrativas
+
+Las pantallas de alta y edición del administrador deben mostrar la barra de acciones en la parte superior del formulario, en este orden:
+
+1. **Nuevo**.
+2. **Grabar**.
+3. **Cancelar / Salir**.
+
+Los botones deben mantener el mismo layout administrativo, ser accesibles en celular y no quedar al final de formularios extensos. Los grupos de datos relacionados deben presentarse dentro de frames o paneles plegables cuando corresponda, para permitir cerrar una sección y continuar editando otra.
+
+## Componentes y deuda visual conocida
+
+El portal carga una base legacy (`player.css`) y capas específicas (`player-theme.css`, `player-bookings.css`, `player-login.css`). Las pantallas nuevas deben agregar reglas en la capa específica correspondiente y reutilizar `--app-*`; no sumar overrides globales ni repetir selectores para resolver el mismo estado.
+
+Durante una limpieza futura, los estilos legacy de reservas y los estilos inline de vistas administrativas/verificación deben migrarse gradualmente a la capa temática sin modificar la lógica de negocio. Hasta completar esa migración, toda corrección debe comprobarse en claro y oscuro porque algunas reglas antiguas contienen colores de tema oscuro.

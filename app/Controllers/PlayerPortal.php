@@ -50,7 +50,7 @@ class PlayerPortal extends BaseController
         $services = new ServicesModel();
         $carousel = config('PlayerCarousel');
         $player = $this->currentPlayer();
-        return $this->viewPage('home', ['player' => $player, 'activeBooking' => $this->upcomingBooking($player), 'services' => $services->getActiveServices(true), 'carouselSlides' => $carousel->activeSlides()]);
+        return $this->viewPage('home', ['player' => $player, 'activeBooking' => $this->upcomingBooking($player), 'services' => $services->getPortalServices(true), 'carouselSlides' => $carousel->activeSlides()]);
     }
 
     public function login()
@@ -71,6 +71,9 @@ class PlayerPortal extends BaseController
         $player = $this->players()->where('email', $email)->first();
         if (! $player || ! password_verify($password, $player['password_hash'])) {
             return $this->redirectWithError('app/login', 'El correo o la contraseña no son correctos.');
+        }
+        if (($player['status'] ?? 'active') === 'blocked') {
+            return $this->redirectWithError('app/login', 'Tu cuenta está bloqueada. Comunicate con el complejo para recibir ayuda.');
         }
         if (empty($player['email_verified_at'])) {
             return redirect()->to(base_url('app/verificar-email'))->with('player_msg', [
@@ -270,7 +273,7 @@ class PlayerPortal extends BaseController
     {
         $services = new ServicesModel();
         $services->ensureDefaultServices();
-        return $this->viewPage('profile', ['player' => $this->currentPlayer(), 'favoriteServices' => $services->where('active', 1)->where('is_sport', 1)->orderBy('display_order', 'ASC')->findAll()]);
+        return $this->viewPage('profile_with_notifications', ['player' => $this->currentPlayer(), 'favoriteServices' => $services->where('active', 1)->where('is_sport', 1)->orderBy('display_order', 'ASC')->findAll()]);
     }
 
     public function updateProfile()
@@ -282,6 +285,7 @@ class PlayerPortal extends BaseController
             'phone' => $this->input('phone'),
             'locality' => $this->input('locality'),
             'favorite_sports' => json_encode($this->validFavoriteSports($this->request->getPost('favorite_sports') ?? []), JSON_UNESCAPED_UNICODE),
+            'notify_favorite_matches' => $this->request->getPost('notify_favorite_matches') ? 1 : 0,
             'updated_at' => date('Y-m-d H:i:s'),
         ];
         if (! $player || $data['first_name'] === '' || $data['last_name'] === '') {
@@ -321,7 +325,7 @@ class PlayerPortal extends BaseController
             return null;
         }
         $player = $this->players()->find($id);
-        if (! $player || empty($player['email_verified_at']) || (int) session()->get('player_session_version') !== (int) ($player['session_version'] ?? 0)) {
+        if (! $player || ($player['status'] ?? 'active') === 'blocked' || empty($player['email_verified_at']) || (int) session()->get('player_session_version') !== (int) ($player['session_version'] ?? 0)) {
             session()->remove(['player_logged_in', 'player_id', 'player_email', 'player_session_version']);
             return null;
         }

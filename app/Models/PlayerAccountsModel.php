@@ -13,7 +13,7 @@ class PlayerAccountsModel extends Model
         'first_name', 'last_name', 'email', 'phone', 'locality', 'password_hash', 'avatar_path',
         'favorite_sports', 'reset_token_hash', 'reset_expires_at', 'reset_used_at',
         'email_verified_at', 'verification_token_hash', 'verification_expires_at',
-        'verification_sent_at', 'session_version',
+        'verification_sent_at', 'session_version', 'status', 'notify_favorite_matches',
         'created_at', 'updated_at',
     ];
     protected $useTimestamps = false;

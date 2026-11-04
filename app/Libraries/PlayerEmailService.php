@@ -72,6 +72,19 @@ class PlayerEmailService
         ));
     }
 
+    public function sendFavoriteMatchNotification(array $player, array $match): bool
+    {
+        $available = max(0, (int) ($match['max_players'] ?? 0) - (int) ($match['confirmed_players'] ?? 0) - (int) ($match['reserved_players'] ?? 0));
+        $date = date('d/m/Y', strtotime((string) ($match['date'] ?? 'now')));
+        $time = substr((string) ($match['time_from'] ?? ''), 0, 5) . ' a ' . substr((string) ($match['time_until'] ?? ''), 0, 5);
+        $conditions = ($match['join_mode'] ?? '') === 'auto' ? 'Ingreso automático.' : 'Ingreso sujeto a aprobación del organizador.';
+        $paymentMode = (string) ($match['payment_mode'] ?? 'organizer_deposit');
+        if ($paymentMode === 'organizer_deposit' || $paymentMode === 'free') $conditions .= ' La seña la abona el organizador.';
+        elseif ($paymentMode === 'split') $conditions .= ' Cada jugador abona su parte mediante Mercado Pago.';
+        elseif ($paymentMode === 'venue') $conditions .= ' El pago se realiza en la cancha.';
+        return $this->sendMatchNotification($player, 'Nuevo partido de tu deporte favorito · La Barca', 'Hay un nuevo partido para vos', 'Se publicó un partido de ' . ($match['service_name'] ?? 'deporte') . ' el ' . $date . ', de ' . $time . ', en ' . ($match['field_name'] ?? 'la instalación') . '. Quedan ' . $available . ' cupos. ' . $conditions, 'app/partidos/detalle/' . (int) $match['id'], 'Ver partido');
+    }
+
     private function send(string $to, string $subject, string $message): bool
     {
         if (! $this->isConfigured()) {

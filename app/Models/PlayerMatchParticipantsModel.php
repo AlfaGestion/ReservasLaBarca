@@ -9,6 +9,6 @@ class PlayerMatchParticipantsModel extends Model
     protected $table = 'player_match_participants';
     protected $primaryKey = 'id';
     protected $returnType = 'array';
-    protected $allowedFields = ['match_id', 'player_id', 'role', 'status', 'created_at', 'updated_at'];
+    protected $allowedFields = ['match_id', 'player_id', 'role', 'status', 'withdrawn_at', 'withdrawal_reason', 'amount_due', 'amount_paid', 'payment_status', 'payment_expires_at', 'payment_confirmed_at', 'created_at', 'updated_at'];
     protected $useTimestamps = false;
 }

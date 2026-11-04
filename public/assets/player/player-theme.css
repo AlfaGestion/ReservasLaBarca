@@ -201,10 +201,16 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
 .player-app .slot-choice:hover, .player-app .slot-choice.selected { background: var(--app-selection); border-color: var(--app-selection); color: #fff; }
 .player-app .check-pill input:checked + span { border-color: var(--app-selection); color: var(--app-selection); background: var(--app-selection-bg); }
 .player-app .addon-section, .player-app .booking-summary-card, .player-app .booking-payment { background: var(--app-surface-alt); border-color: var(--app-border); color: var(--app-text); }
+.player-app .addon-section .switch-line { color: var(--app-text) !important; }
+.player-app .addon-section .switch-line span { color: inherit; }
 .player-app .booking-summary-card dt, .player-app .booking-summary-card dd, .player-app .booking-summary-card dl div { color: var(--app-text); border-color: var(--app-border); }
 .player-app .booking-alert { background: var(--app-surface-alt); color: var(--app-text); border-color: var(--app-border); }
 .player-app .booking-alert-error { background: var(--app-danger-bg); color: var(--app-danger-text); border-color: currentColor; }
 .player-app .reservation-status { color: var(--app-success-text); background: var(--app-success-bg); }
+.player-app .booking-list-item { background: var(--app-surface); border-color: var(--app-border); color: var(--app-text); box-shadow: var(--app-shadow); }
+.player-app .booking-list-item h3, .player-app .booking-list-item strong { color: var(--app-text); }
+.player-app .booking-list-item p, .player-app .booking-list-item small { color: var(--app-text-muted); }
+.player-app .booking-list-item .booking-service, .player-app .booking-list-item a { color: var(--app-primary-hover); }
 .player-app .detail-list div, .player-app .detail-list dt { border-color: var(--app-border); color: var(--app-text-muted); }
 .player-app .detail-list dd { color: var(--app-text); }
 .player-app .hero-home h1 { font-size: clamp(32px, 6vw, 64px); }
@@ -251,6 +257,7 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
 .player-app .home-services .sport-card strong { color: var(--app-text); font-size: var(--app-text-lg); }
 .player-app .home-services .sport-card small { color: var(--app-text-muted); font-size: var(--app-text-sm); }
 .player-app .home-services .sport-card b { color: var(--app-primary-hover); }
+.player-app .home-services .sport-card-image { width: 56px; height: 56px; object-fit: cover; border-radius: 14px; border: 1px solid var(--app-border); background: var(--app-surface-alt); }
 .player-app .home-empty-state { display: flex; align-items: center; gap: 14px; padding: 20px; border: 1px solid var(--app-border); border-radius: var(--app-radius-md); background: var(--app-surface); color: var(--app-text-muted); }
 .player-app .home-empty-state i { color: var(--app-primary-hover); font-size: 22px; }
 .player-app .home-empty-state strong { color: var(--app-text); }
@@ -301,6 +308,14 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
 @keyframes wizard-spin { to { transform: rotate(360deg); } }
 .player-app .wizard-empty { padding: 22px; border: 1px dashed var(--app-border); border-radius: var(--app-radius-md); color: var(--app-text-muted); text-align: center; }
 .player-app .wizard-player-card { padding: var(--app-space-5); border: 1px solid var(--app-border); border-radius: var(--app-radius-md); background: var(--app-surface-alt); }
+.player-app .wizard-addon { background: var(--app-surface-alt); border: 1px solid var(--app-border); border-radius: var(--app-radius-md); color: var(--app-text); padding: var(--app-space-4); }
+.player-app .wizard-addon .switch-line { color: var(--app-text) !important; font-size: 1rem; font-weight: 500; }
+.player-app .wizard-addon .switch-line span { color: inherit; }
+.player-app .wizard-addon > div:not(.switch-line) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--app-space-3); margin-top: var(--app-space-4); }
+.player-app .wizard-addon label:not(.switch-line) { display: grid; gap: var(--app-space-2); color: var(--app-text); font-size: 0.875rem; font-weight: 600; }
+.player-app .wizard-addon input:not([type="checkbox"]), .player-app .wizard-addon select, .player-app .wizard-addon textarea { width: 100%; min-height: 48px; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-input-bg, var(--app-surface)); color: var(--app-text); padding: 0.7rem 0.85rem; font: inherit; }
+.player-app .wizard-addon textarea { min-height: 96px; resize: vertical; }
+.player-app .wizard-addon input:focus, .player-app .wizard-addon select:focus, .player-app .wizard-addon textarea:focus { outline: 2px solid var(--app-primary); outline-offset: 2px; }
 .player-app .wizard-player-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
 .player-app .wizard-player-heading strong { font-size: var(--app-text-lg); }
 .player-app .wizard-player-heading p { margin: 2px 0 0; color: var(--app-text-muted); font-size: var(--app-text-sm); }
@@ -322,6 +337,8 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
     .player-app .wizard-choice { min-height: 116px; padding: 16px; }
     .player-app .wizard-choice strong { font-size: 16px; }
     .player-app .wizard-actions .button { flex: 1; }
+    .player-app .wizard-addon { padding: var(--app-space-4); }
+    .player-app .wizard-addon > div:not(.switch-line) { grid-template-columns: 1fr; }
     .player-app .home-services .sport-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; overflow: visible; padding: 2px 0; }
     .player-app .home-services .sport-card { min-width: 0; min-height: 132px; padding: 14px; }
     .player-app .home-services .sport-icon { width: 34px; height: 34px; margin-bottom: 12px; font-size: 16px; }
@@ -593,3 +610,4 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
     .player-app .match-request-row { align-items: flex-start; flex-wrap: wrap; }
     .player-app .match-request-actions { width: 100%; padding-left: 42px; }
 }
+.player-app .booking-discount{color:var(--app-selection)!important;font-weight:700}

@@ -1,0 +1,48 @@
+/* Login de jugadores: composición aislada de la tarjeta de referencia. */
+.player-app.login-screen .player-main { max-width: none; padding: 0; }
+.player-app.login-screen .player-header { background: transparent; }
+.player-app.login-screen .brand-logo { display: block; }
+:root[data-theme="dark"] .player-app.login-screen .brand-logo { content: url('/assets/images/wlogo.png'); }
+.login-reference-shell { --login-orange: var(--app-primary); --login-card-width: 1080px; --login-card-height: 560px; position: relative; isolation: isolate; width: 100%; max-width: none !important; min-height: calc(100vh - 82px); margin: 0 !important; padding: 42px 24px 58px !important; display: grid !important; grid-template-columns: 1fr 1fr !important; align-items: stretch !important; justify-content: center; background: radial-gradient(ellipse at 10% 68%, color-mix(in srgb, var(--app-surface-alt) 92%, transparent) 0%, transparent 34%), radial-gradient(ellipse at 92% 22%, color-mix(in srgb, var(--app-primary) 12%, transparent) 0%, transparent 29%), var(--app-bg); overflow: hidden; }
+.login-reference-shell > * { width: min(100%, calc(var(--login-card-width) / 2)); }
+.login-reference-shell > .login-poster { justify-self: end; }
+.login-reference-shell > .auth-form-card { justify-self: start; }
+.login-poster { min-height: var(--login-card-height); position: relative; isolation: isolate; overflow: hidden; border: 1px solid color-mix(in srgb, var(--app-border) 82%, #17324d); border-right-color: transparent; border-radius: 18px 0 0 18px; background-image: linear-gradient(180deg, rgba(7,30,52,.18), rgba(5,22,38,.48) 54%, rgba(3,17,30,.92)), url('login-sports-cluster.png'), url('carousel/futbol.jpg'); background-repeat: no-repeat; background-position: center, right 12px bottom -12px, center; background-size: cover, 54% auto, cover; }
+.login-poster-inner { display: flex; height: 100%; min-height: var(--login-card-height); flex-direction: column; align-items: flex-start; padding: 45px 42px 38px; }
+.login-poster-copy { width: 100%; margin-top: auto; }
+.login-poster-copy h1 { margin: 0; color: #fff; font-size: clamp(36px, 3.35vw, 50px); line-height: .94; letter-spacing: -.06em; }
+.login-poster-copy h1 span { display: block; white-space: nowrap; }
+.login-poster-copy h1 em { color: var(--login-orange); font-style: normal; }
+.login-poster-tagline { margin: 16px 0 0; color: rgba(255,255,255,.88); font-size: 18px; font-style: italic; font-weight: 500; letter-spacing: .01em; }
+.login-benefits { display: grid; width: min(100%, 235px); gap: 12px; margin: 19px 0 0; padding: 17px 0 0; border-top: 1px solid rgba(255,255,255,.24); color: #fff; list-style: none; font-size: 14px; }
+.login-benefits li { display: flex; align-items: center; gap: 13px; min-height: 22px; }
+.login-benefits i { width: 20px; flex: 0 0 20px; color: var(--login-orange); font-size: 18px; text-align: center; }
+.auth-form-card { min-height: var(--login-card-height); margin-left: -1px; padding: 54px 58px 44px !important; border: 1px solid var(--app-border) !important; border-left-color: transparent !important; border-radius: 0 18px 18px 0 !important; background: var(--app-surface) !important; box-shadow: var(--app-shadow); display: flex; flex-direction: column; justify-content: center !important; }
+.auth-form-heading { margin: 0 0 26px; }
+.auth-form-kicker { display: block; margin-bottom: 8px; color: var(--app-primary-hover); font-size: 12px; font-weight: 800; letter-spacing: .11em; }
+.auth-form-heading h2 { margin: 0 0 7px; color: var(--app-text); font-size: 34px; line-height: 1.05; letter-spacing: -.045em; }
+.auth-form-heading .form-intro { margin: 0; color: var(--app-text-muted); font-size: 15px; }
+.auth-form-card form { display: grid; gap: 18px; }
+.auth-form-card label { display: grid; gap: 8px; color: var(--app-text); font-size: 14px; font-weight: 700; }
+.auth-form-card label > span { display: inline-flex; align-items: center; gap: 7px; }
+.auth-form-card label i { color: var(--app-primary-hover); font-size: 13px; }
+.auth-form-card input { width: 100%; min-height: 48px !important; padding: 11px 14px !important; border: 1px solid var(--app-border) !important; border-radius: 12px !important; background: var(--app-input-bg) !important; color: var(--app-input-text) !important; font-size: 16px !important; }
+.auth-form-card input:focus { border-color: var(--app-focus) !important; box-shadow: 0 0 0 3px rgba(243,147,35,.18); outline: 0; }
+.password-input { position: relative; }
+.password-input input { padding-right: 48px !important; }
+.password-toggle { position: absolute; top: 50%; right: 10px; width: 32px; height: 32px; padding: 0; transform: translateY(-50%); border: 0; border-radius: 8px; background: transparent; color: var(--app-text-muted); cursor: pointer; }
+.password-toggle:hover,.password-toggle:focus-visible { color: var(--app-primary-hover); background: var(--app-surface-alt); outline: 0; }
+.password-toggle svg { display: block; width: 18px; height: 18px; margin: auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.auth-form-card .button-primary { min-height: 48px; margin-top: 2px; border: 0; border-radius: 12px; background: var(--login-orange); color: #fff; box-shadow: 0 8px 18px rgba(243,147,35,.24); }
+.auth-form-card .button-primary:hover { background: var(--app-primary-hover); }
+.auth-form-card .form-help { margin-top: 15px; color: var(--app-primary-hover); font-size: 13px; font-weight: 700; text-align: right; }
+.auth-form-card .form-footer { margin: 25px 0 0; padding-top: 17px; border-top: 1px solid var(--app-border); color: var(--app-text-muted); font-size: 13px; text-align: center; }
+.auth-form-card .form-footer a { color: var(--app-primary-hover); font-weight: 800; }
+.auth-message { margin: 0 0 18px; }
+:root[data-theme="dark"] .login-poster { border-color: #527598; border-right-color: transparent; }
+:root[data-theme="dark"] .auth-form-card { border-color: #527598 !important; border-left-color: transparent !important; }
+@media (min-width: 761px) { .login-reference-shell { grid-template-columns: minmax(0,calc(var(--login-card-width) / 2)) minmax(0,calc(var(--login-card-width) / 2)) !important; } }
+@media (max-width: 1120px) and (min-width: 761px) { .login-reference-shell { --login-card-height: 530px; grid-template-columns: minmax(0,50%) minmax(0,50%) !important; padding-inline: 20px !important; } .login-poster-inner { padding-inline: 32px; } .auth-form-card { padding-inline: 38px !important; } }
+@media (max-width: 760px) { .login-reference-shell { display: grid !important; grid-template-columns: 1fr !important; gap: 0 !important; min-height: auto; padding: 24px 16px calc(86px + env(safe-area-inset-bottom)) !important; } .login-reference-shell > * { width: 100%; justify-self: stretch; } .login-poster { min-height: 325px; border-right-color: var(--app-border); border-bottom: 0; border-radius: 16px 16px 0 0; background-position: center,right -14px bottom -8px,center; background-size: cover,35% auto,cover; } .login-poster-inner { min-height: 325px; padding: 25px 22px 23px; } .login-poster-copy { width: 100%; margin-top: 0; } .login-poster-copy h1 { font-size: clamp(30px,8.4vw,40px); line-height: .96; } .login-poster-copy h1 span { white-space: normal; } .login-poster-tagline { margin-top: 11px; font-size: 16px; } .login-benefits { display: grid; width: min(100%, 220px); gap: 8px; margin-top: 15px; padding-top: 12px; font-size: 12px; } .login-benefits li { gap: 10px; min-height: 20px; } .login-benefits i { width: 18px; flex-basis: 18px; font-size: 15px; } .auth-form-card { min-height: auto; margin-left: 0; padding: 32px 24px 30px !important; border-top: 0 !important; border-left-color: var(--app-border) !important; border-radius: 0 0 16px 16px !important; } .auth-form-heading { margin-bottom: 23px; } .auth-form-heading h2 { font-size: 30px; } }
+@media (max-width: 760px) { .login-screen .mobile-nav { background: var(--app-surface); border-top-color: var(--app-border); box-shadow: 0 -10px 30px color-mix(in srgb, var(--app-text) 14%, transparent); } .login-screen .mobile-nav a { color: var(--app-text-muted); } .login-screen .mobile-nav a:first-child { color: var(--app-primary-hover); } }
+@media (max-width: 375px) { .login-reference-shell { padding-inline: 12px !important; } .login-poster,.login-poster-inner { min-height: 245px; } .login-poster-inner { padding: 23px 20px 22px; } .login-poster-copy h1 { font-size: 36px; } .auth-form-card { padding-inline: 19px !important; } }

@@ -273,6 +273,11 @@ class CustomerOfferService
         return in_array($fromHour, $nocturnalHours, true) && in_array($untilHour, $nocturnalHours, true);
     }
 
+    private function servicePriceForBlock(array $field, string $date, int $minutesFromStart, float $fallback): float
+    {
+        return $fallback;
+    }
+
     public function calculateBaseAmountForItem(array $item): array
     {
         $fieldId = (int) ($item['cancha'] ?? $item['field_id'] ?? 0);
@@ -313,14 +318,24 @@ class CustomerOfferService
             ? $nightPrice
             : $basePrice;
 
-        $baseAmount = round($units * $perBlockAmount, 2);
+        $date = (string) ($item['fecha'] ?? $item['date'] ?? date('Y-m-d'));
+        $fullBlocks = (int) floor($units);
+        $remaining = max(0, $units - $fullBlocks);
+        $effectiveAmount = 0.0;
+        for ($block = 0; $block < $fullBlocks; $block++) {
+            $effectiveAmount += $this->servicePriceForBlock($field, $date, $fromMinutes + ($block * $blockMinutes), $perBlockAmount);
+        }
+        if ($remaining > 0) {
+            $effectiveAmount += $this->servicePriceForBlock($field, $date, $fromMinutes + ($fullBlocks * $blockMinutes), $perBlockAmount) * $remaining;
+        }
+        $baseAmount = round($effectiveAmount, 2);
 
         return [
             'error' => false,
             'field' => $field,
             'field_id' => $fieldId,
             'base_amount' => $baseAmount,
-            'per_block_amount' => round($perBlockAmount, 2),
+            'per_block_amount' => round($units > 0 ? $effectiveAmount / $units : $perBlockAmount, 2),
             'duration_minutes' => $durationMinutes,
             'block_minutes' => $blockMinutes,
             'is_nocturnal' => $this->isNocturnalSlot($normalizedFrom, $normalizedUntil),

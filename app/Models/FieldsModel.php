@@ -135,7 +135,7 @@ class FieldsModel extends Model
                 ->orderBy('id', 'DESC')
                 ->get()
                 ->getRowArray();
-            if ($price && (float)($price['base_price'] ?? 0) > 0) {
+            if ($price && (float)($price['base_price'] ?? 0) > 0 && (float)($field['value'] ?? 0) <= 0) {
                 $field['value'] = (float)$price['base_price'];
                 $field['charge_type'] = $price['charge_type'] ?? null;
                 $field['deposit_price'] = $price['deposit_price'] ?? null;
