@@ -36,6 +36,23 @@ class PlayerPortalAdmin extends BaseController
         return preg_match('/^#[0-9a-fA-F]{6}$/', $color) ? strtolower($color) : '#198754';
     }
 
+    private function parsePortalFieldPrice($value): ?float
+    {
+        if (is_array($value) || is_object($value)) return null;
+        $raw = trim((string) $value);
+        if ($raw === '') return null;
+        $raw = str_replace(["$", ' ', "\xc2\xa0"], '', $raw);
+        if (preg_match('/^\d+(?:[.,]\d{1,2})?$/', $raw)) {
+            $normalized = str_replace(',', '.', $raw);
+        } elseif (preg_match('/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/', $raw)) {
+            $normalized = str_replace(',', '.', str_replace('.', '', $raw));
+        } else {
+            return null;
+        }
+        $price = filter_var($normalized, FILTER_VALIDATE_FLOAT);
+        return $price === false || ! is_finite((float) $price) ? null : (float) $price;
+    }
+
     private function logAction(string $action, string $type, $id, ?array $old = null, ?array $new = null): void
     {
         try {
@@ -138,9 +155,9 @@ class PlayerPortalAdmin extends BaseController
         $service = $services->find($serviceId); $field = $fields->find($fieldId);
         if (! $service || ! $field || ((int) ($field['service_id'] ?? 0) !== $serviceId && (string) ($field['service_type'] ?? '') !== (string) $service['code'])) return $this->back('servicios', 'danger', 'La cancha seleccionada no pertenece al servicio.');
         $name = trim((string) $this->request->getPost('name'));
-        $base = parse_price_ar($this->request->getPost('value'));
-        $night = parse_price_ar($this->request->getPost('ilumination_value'));
-        if ($name === '' || $base < 0 || $night < 0) return redirect()->to(base_url('admin/portal/servicios/' . $serviceId . '/canchas/' . $fieldId))->with('msg', ['type' => 'danger', 'body' => 'Completá el nombre y los precios con valores válidos.']);
+        $base = $this->parsePortalFieldPrice($this->request->getPost('value'));
+        $night = $this->parsePortalFieldPrice($this->request->getPost('ilumination_value'));
+        if ($name === '' || $base === null || $night === null || $base < 0 || $night < 0) return redirect()->to(base_url('admin/portal/servicios/' . $serviceId . '/canchas/' . $fieldId))->with('msg', ['type' => 'danger', 'body' => 'Completá el nombre y los precios con importes válidos. Usá números positivos, por ejemplo 30.000,00.']);
         $data = ['name' => $name, 'sizes' => trim((string) $this->request->getPost('sizes')), 'floor_type' => trim((string) $this->request->getPost('floor_type')), 'elements_rent' => trim((string) $this->request->getPost('elements_rent')), 'roofed' => $this->request->getPost('roofed') ? 1 : 0, 'disabled' => $this->request->getPost('disabled') ? 1 : 0, 'value' => round($base, 2), 'ilumination_value' => round($night, 2)];
         if (! $fields->update($fieldId, $data)) return redirect()->to(base_url('admin/portal/servicios/' . $serviceId . '/canchas/' . $fieldId))->with('msg', ['type' => 'danger', 'body' => 'No se pudieron guardar los datos de la cancha.']);
         $this->logAction('editar_cancha_servicio', 'field', $fieldId, $field, $data);
