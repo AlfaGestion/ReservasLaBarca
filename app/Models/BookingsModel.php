@@ -39,6 +39,25 @@ class BookingsModel extends Model
     protected $beforeDelete   = [];
     protected $afterDelete    = [];
 
+    /**
+     * La columna email se agregó después de la instalación original.
+     * Mientras una base existente no ejecute la migración, no debemos
+     * incluirla en INSERT/UPDATE porque eso impediría crear reservas.
+     */
+    protected function initialize()
+    {
+        parent::initialize();
+
+        try {
+            if (! $this->db->fieldExists('email', $this->table)) {
+                $this->allowedFields = array_values(array_diff($this->allowedFields, ['email']));
+            }
+        } catch (\Throwable $e) {
+            // La validación definitiva queda a cargo de la base. No bloquear
+            // la inicialización del modelo por una comprobación auxiliar.
+        }
+    }
+
 
     public function getBookings(){
         $bookings = $this->findAll();

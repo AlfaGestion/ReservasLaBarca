@@ -39,6 +39,24 @@ class CustomersModel extends Model
     protected $beforeDelete   = [];
     protected $afterDelete    = [];
 
+    /**
+     * Compatibilidad con instalaciones que todavía no ejecutaron la
+     * migración de email. Evita que el alta de una reserva falle por esa
+     * columna opcional ausente.
+     */
+    protected function initialize()
+    {
+        parent::initialize();
+
+        try {
+            if (! $this->db->fieldExists('email', $this->table)) {
+                $this->allowedFields = array_values(array_diff($this->allowedFields, ['email']));
+            }
+        } catch (\Throwable $e) {
+            // No impedir el uso del modelo por una comprobación auxiliar.
+        }
+    }
+
     public function getCustomers()
     {
         $customers = $this->findAll();
