@@ -730,12 +730,9 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
         const isFreeBooking = String(reserva.metodo_pago || '').toLowerCase() === 'sin cargo'
             || Number(reserva.total_reserva || 0) <= 0
 
-        if (reserva.mp == 0 && !isFreeBooking) {
-            if (existPending == false) {
-                existPending = true
-                alert('Hay pagos pendientes de Mercado Pago para confirmar.')
-            }
-        }
+        // Los pagos pendientes se muestran en la pestaña "Pendientes y bloqueos".
+        // No interrumpir al administrador con un alert en cada actualización.
+        if (reserva.mp == 0 && !isFreeBooking) existPending = true
 
         reserva.anulada == 1 ? state = 'Anulada' : state = 'Activa'
         stateMP = isFreeBooking ? 'Sin cargo' : (reserva.mp == 0 ? 'Pendiente' : 'Confirmado')
