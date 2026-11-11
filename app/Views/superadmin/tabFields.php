@@ -371,12 +371,12 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                             <div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Disponibilidad</span><h6>Franja horaria de la cancha</h6></div><span class="field-editor-helper">Opcional. Sin franja se usa el horario general.</span></div>
                             <input type="hidden" name="availability_windows_json" data-availability-json value="[]">
                             <div data-availability-rows>
-                                <div class="field-availability-row d-flex gap-2 align-items-center mb-2">
-                                    <input type="time" class="form-control" data-availability-start aria-label="Desde">
-                                    <span class="text-muted">a</span>
-                                    <input type="time" class="form-control" data-availability-end aria-label="Hasta">
-                                    <input type="number" class="form-control" data-availability-duration min="15" step="15" value="<?= esc($defaultService['duration_minutes'] ?? 60) ?>" aria-label="Duración de la franja" placeholder="Minutos">
-                                    <input type="text" class="form-control" data-availability-price aria-label="Precio de la franja" placeholder="Precio">
+                                <div class="field-availability-row d-flex gap-2 align-items-end mb-2">
+                                    <label class="field-availability-control flex-fill"><span class="small text-muted">Desde</span><input type="time" class="form-control" data-availability-start aria-label="Desde"></label>
+                                    <span class="text-muted pb-2">a</span>
+                                    <label class="field-availability-control flex-fill"><span class="small text-muted">Hasta</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"></label>
+                                    <label class="field-availability-control flex-fill"><span class="small text-muted">Duración (min)</span><input type="number" class="form-control" data-availability-duration min="15" step="15" value="<?= esc($defaultService['duration_minutes'] ?? 60) ?>" aria-label="Duración de la franja" placeholder="Minutos"></label>
+                                    <label class="field-availability-control flex-fill"><span class="small text-muted">Precio</span><input type="text" class="form-control" data-availability-price aria-label="Precio de la franja" placeholder="0,00" inputmode="decimal"></label>
                                     <button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>
                                     <small class="field-availability-hint text-muted w-100"></small>
                                 </div>

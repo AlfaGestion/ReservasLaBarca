@@ -106,6 +106,11 @@ function normalizePriceInputValue(input) {
     input.value = formatPriceInputAR(number)
 }
 
+function normalizeAvailabilityPriceInput(input) {
+    if (!input || !String(input.value || '').trim()) return
+    input.value = formatPriceInputAR(parseLocalizedPrice(input.value))
+}
+
 function minutesToHuman(minutes) {
     const total = Math.max(0, Number(minutes || 0))
     const hours = Math.floor(total / 60)
@@ -532,6 +537,8 @@ document.addEventListener('change', (e) => {
     if (priceInput) {
         normalizePriceInputValue(priceInput)
     }
+    const availabilityPrice = e.target.closest('[data-availability-price]')
+    if (availabilityPrice) normalizeAvailabilityPriceInput(availabilityPrice)
 })
 
 document.addEventListener('input', (e) => {
@@ -543,8 +550,12 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('blur', (e) => {
     const priceInput = e.target?.closest?.('input[name="valor"], input[name="valorIluminacion"], input[name="discount_value"]')
-    if (!priceInput) return
-    normalizePriceInputValue(priceInput)
+    if (priceInput) {
+        normalizePriceInputValue(priceInput)
+        return
+    }
+    const availabilityPrice = e.target?.closest?.('[data-availability-price]')
+    if (availabilityPrice) normalizeAvailabilityPriceInput(availabilityPrice)
 }, true)
 
 async function refreshServicesPanelFromServer() {
@@ -1727,11 +1738,11 @@ function fillDiv(field) {
     const availabilityRows = availabilityWindows.length > 0 ? availabilityWindows : [{ start_time: '', end_time: '' }]
     const availabilityRowsHtml = availabilityRows.map(window => `
                         <div class="field-availability-row d-flex gap-2 align-items-center mb-2">
-                            <input type="time" class="form-control" data-availability-start value="${escapeHtml(String(window.start_time || '').slice(0, 5))}" aria-label="Desde">
-                            <span class="text-muted">a</span>
-                            <input type="time" class="form-control" data-availability-end value="${escapeHtml(String(window.end_time || '').slice(0, 5))}" aria-label="Hasta">
-                            <input type="number" class="form-control" data-availability-duration min="15" step="15" value="${escapeHtml(String(window.duration_minutes || field.duration_minutes || field.block_minutes || 60))}" aria-label="Duración de la franja" placeholder="Minutos">
-                            <input type="text" class="form-control" data-availability-price value="${escapeHtml(window.price || '')}" aria-label="Precio de la franja" placeholder="Precio">
+                            <label class="field-availability-control flex-fill"><span class="small text-muted">Desde</span><input type="time" class="form-control" data-availability-start value="${escapeHtml(String(window.start_time || '').slice(0, 5))}" aria-label="Desde"></label>
+                            <span class="text-muted pb-2">a</span>
+                            <label class="field-availability-control flex-fill"><span class="small text-muted">Hasta</span><input type="time" class="form-control" data-availability-end value="${escapeHtml(String(window.end_time || '').slice(0, 5))}" aria-label="Hasta"></label>
+                            <label class="field-availability-control flex-fill"><span class="small text-muted">Duración (min)</span><input type="number" class="form-control" data-availability-duration min="15" step="15" value="${escapeHtml(String(window.duration_minutes || field.duration_minutes || field.block_minutes || 60))}" aria-label="Duración de la franja" placeholder="Minutos"></label>
+                            <label class="field-availability-control flex-fill"><span class="small text-muted">Precio</span><input type="text" class="form-control" data-availability-price value="${escapeHtml(window.price ? formatPriceInputAR(window.price) : '')}" aria-label="Precio de la franja" placeholder="0,00" inputmode="decimal"></label>
                             <button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>
                             <small class="field-availability-hint text-muted w-100"></small>
                         </div>`).join('')
@@ -1857,7 +1868,7 @@ document.addEventListener('click', (event) => {
         const defaultDuration = container.closest('form')?.querySelector('input[name="blockMinutes"]')?.value || 60
         const row = document.createElement('div')
         row.className = 'field-availability-row d-flex gap-2 align-items-center mb-2'
-        row.innerHTML = `<input type="time" class="form-control" data-availability-start aria-label="Desde"><span class="text-muted">a</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"><input type="number" class="form-control" data-availability-duration min="15" step="15" value="${escapeHtml(String(defaultDuration))}" aria-label="Duración de la franja" placeholder="Minutos"><input type="text" class="form-control" data-availability-price aria-label="Precio de la franja" placeholder="Precio"><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button><small class="field-availability-hint text-muted w-100"></small>`
+        row.innerHTML = `<label class="field-availability-control flex-fill"><span class="small text-muted">Desde</span><input type="time" class="form-control" data-availability-start aria-label="Desde"></label><span class="text-muted pb-2">a</span><label class="field-availability-control flex-fill"><span class="small text-muted">Hasta</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"></label><label class="field-availability-control flex-fill"><span class="small text-muted">Duración (min)</span><input type="number" class="form-control" data-availability-duration min="15" step="15" value="${escapeHtml(String(defaultDuration))}" aria-label="Duración de la franja" placeholder="Minutos"></label><label class="field-availability-control flex-fill"><span class="small text-muted">Precio</span><input type="text" class="form-control" data-availability-price aria-label="Precio de la franja" placeholder="0,00" inputmode="decimal"></label><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove mb-1" aria-label="Quitar franja">&times;</button><small class="field-availability-hint text-muted w-100"></small>`
         container.appendChild(row)
         return
     }
@@ -1869,7 +1880,7 @@ document.addEventListener('click', (event) => {
         if (container && !container.querySelector('.field-availability-row')) {
             const empty = document.createElement('div')
             empty.className = 'field-availability-row d-flex gap-2 align-items-center mb-2'
-            empty.innerHTML = '<input type="time" class="form-control" data-availability-start aria-label="Desde"><span class="text-muted">a</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"><input type="number" class="form-control" data-availability-duration min="15" step="15" value="60" aria-label="Duración de la franja" placeholder="Minutos"><input type="text" class="form-control" data-availability-price aria-label="Precio de la franja" placeholder="Precio"><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button><small class="field-availability-hint text-muted w-100"></small>'
+            empty.innerHTML = '<label class="field-availability-control flex-fill"><span class="small text-muted">Desde</span><input type="time" class="form-control" data-availability-start aria-label="Desde"></label><span class="text-muted pb-2">a</span><label class="field-availability-control flex-fill"><span class="small text-muted">Hasta</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"></label><label class="field-availability-control flex-fill"><span class="small text-muted">Duración (min)</span><input type="number" class="form-control" data-availability-duration min="15" step="15" value="60" aria-label="Duración de la franja" placeholder="Minutos"></label><label class="field-availability-control flex-fill"><span class="small text-muted">Precio</span><input type="text" class="form-control" data-availability-price aria-label="Precio de la franja" placeholder="0,00" inputmode="decimal"></label><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove mb-1" aria-label="Quitar franja">&times;</button><small class="field-availability-hint text-muted w-100"></small>'
             container.appendChild(empty)
         }
     }
