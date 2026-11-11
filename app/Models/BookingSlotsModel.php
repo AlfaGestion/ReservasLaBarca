@@ -114,7 +114,16 @@ class BookingSlotsModel extends Model
         foreach ($builder->findAll() as $slot) {
             // Un slot confirmado sin reserva asociada quedó huérfano por un
             // fallo durante el alta. No debe bloquear nuevas reservas.
-            if (empty($slot['booking_id']) && ($slot['status'] ?? '') !== 'pending') {
+            $booking = null;
+            if (($slot['status'] ?? '') !== 'pending' && !empty($slot['booking_id'])) {
+                $booking = $this->db->table('bookings')
+                    ->select('id, annulled')
+                    ->where('id', (int) $slot['booking_id'])
+                    ->get()
+                    ->getRowArray();
+            }
+
+            if (($slot['status'] ?? '') !== 'pending' && (empty($slot['booking_id']) || !$booking || (int) ($booking['annulled'] ?? 0) === 1)) {
                 $this->update((int) ($slot['id'] ?? 0), [
                     'active' => 0,
                     'status' => 'cancelled',
