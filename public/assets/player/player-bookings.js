@@ -53,6 +53,16 @@
     const resultEditButton = document.getElementById('booking-result-edit')
     const cancelUrl = config.cancelUrl || (config.createUrl ? new URL('../../cancelPendingMpReservation', config.createUrl).toString() : '')
     if (resultEditButton) resultEditButton.textContent = 'Cancelar reserva y volver'
+    const paymentPrepScreen = document.createElement('section')
+    paymentPrepScreen.className = 'booking-screen booking-payment-prep-screen'
+    paymentPrepScreen.hidden = true
+    paymentPrepScreen.innerHTML = '<div class="booking-screen-heading"><span class="eyebrow orange">PAGO DE RESERVA</span><h2>Revisá y pagá tu reserva</h2><p>La reserva se crea recién cuando presionás «Pagar con Mercado Pago».</p></div><div class="booking-summary-card"><div id="booking-payment-summary"></div><label class="booking-terms-check"><input type="checkbox" id="booking-terms"><span>Acepto las normas y condiciones de uso del complejo.</span></label><div id="booking-payment-error" class="booking-alert booking-alert-error" hidden></div><div class="booking-summary-actions"><button type="button" class="button button-ghost" id="booking-payment-back">Volver y editar</button><button type="button" class="button button-primary" id="booking-pay">Pagar con Mercado Pago</button></div></div>'
+    resultScreen.before(paymentPrepScreen)
+    const paymentSummary = paymentPrepScreen.querySelector('#booking-payment-summary')
+    const paymentError = paymentPrepScreen.querySelector('#booking-payment-error')
+    const paymentTerms = paymentPrepScreen.querySelector('#booking-terms')
+    const paymentBack = paymentPrepScreen.querySelector('#booking-payment-back')
+    const payButton = paymentPrepScreen.querySelector('#booking-pay')
     let csrf = document.querySelector('meta[name="csrf-token"]')?.content || ''
     const addonSection = document.getElementById('addon-section')
     const addonBox = document.getElementById('addon-fields')
@@ -363,9 +373,22 @@
             const discountSummary = Number(quote.discount_total || 0) > 0 ? `<div><dt>Precio original</dt><dd>${money(quote.original_total)}</dd></div><div><dt>Descuento para tu cuenta</dt><dd class="booking-discount">- ${money(quote.discount_total)}</dd></div>` : ''
             summary.innerHTML = `<dl><div><dt>Servicio</dt><dd>${escapeHtml(quote.field.service_name || selectedService)}</dd></div><div><dt>Cancha o espacio</dt><dd>${escapeHtml(quote.field.name)}</dd></div><div><dt>Fecha</dt><dd>${date.value.split('-').reverse().join('/')}</dd></div><div><dt>Horario</dt><dd>${from.value} a ${until.value}</dd></div>${extra}<div><dt>Jugador</dt><dd>${escapeHtml(name)}</dd></div><div><dt>Total</dt><dd>${money(quote.total)}</dd></div>${quote.deposit !== null ? `<div><dt>Seña (${quote.deposit_rate}%)</dt><dd>${money(quote.deposit)}</dd></div>` : ''}</dl>`
             if (discountSummary) summary.querySelector('dl')?.insertAdjacentHTML('beforeend', discountSummary)
+            summaryScreen.querySelector('.booking-summary-conditions').textContent = 'El importe y la disponibilidad fueron calculados por el servidor. La reserva se crea únicamente al iniciar el pago.'
             formScreen.hidden = true; summaryScreen.hidden = false; if (aside) aside.hidden = true; if (myBookings) myBookings.hidden = true; summaryError.hidden = true
         } catch (error) { message(formMessage, error.message || 'No pudimos obtener el resumen. Intentá nuevamente.', true) }
         quoteButton.disabled = false; quoteButton.innerHTML = 'Ver resumen <span aria-hidden="true">→</span>'
+    })
+
+    confirmButton.addEventListener('click', event => {
+        event.stopImmediatePropagation()
+        if (!quote) return
+        paymentSummary.innerHTML = summary.innerHTML
+        paymentTerms.checked = false
+        message(paymentError, '')
+        summaryScreen.hidden = true
+        paymentPrepScreen.hidden = false
+        if (aside) aside.hidden = true
+        if (myBookings) myBookings.hidden = true
     })
 
     confirmButton.addEventListener('click', async () => {
@@ -399,10 +422,29 @@
         } catch (error) { confirmButton.disabled = false; confirmButton.textContent = 'Confirmar reserva →'; message(summaryError, error.message || 'No pudimos procesar la reserva. Intentá nuevamente.', true) }
     })
 
-    function showForm() { resultScreen.hidden = true; summaryScreen.hidden = true; formScreen.hidden = false; if (aside) aside.hidden = false; if (myBookings) myBookings.hidden = false }
+    paymentBack.addEventListener('click', () => { paymentPrepScreen.hidden = true; summaryScreen.hidden = false })
+    payButton.addEventListener('click', async () => {
+        if (!quote) return
+        if (!paymentTerms.checked) { message(paymentError, 'Aceptá las normas y condiciones para continuar.', true); return }
+        if (!config.testMode && (!config.publicKeyMp || !window.MercadoPago)) { message(paymentError, 'Mercado Pago todavía no está configurado. La reserva no fue creada.', true); return }
+        payButton.disabled = true; payButton.textContent = 'Preparando tu reserva y el pago…'
+        try {
+            const name = splitName(document.getElementById('booking-name').value)
+            const additional = addQuincho?.checked ? { enabled: true, fecha: date.value, cancha: addonField.value, horarioDesde: addonFrom.value, horarioHasta: addonUntil.value } : null
+            const result = await postJson(config.createUrl, { booking: { fecha: date.value, cancha: selectedField, horarioDesde: from.value, horarioHasta: until.value, nombre: document.getElementById('booking-name').value.trim(), first_name: name.first_name, last_name: name.last_name, telefono: document.getElementById('booking-phone').value.trim(), localidad: document.getElementById('booking-locality').value.trim(), metodoDePago: 'Mercado Pago', additionalQuincho: additional, matchOptions: matchOptions() } })
+            const prefs = result.data || {}
+            pendingPayment = { bookingId: prefs.bookingId || null, preferenceIdParcial: prefs.preferenceIdParcial || null, preferenceIdTotal: prefs.preferenceIdTotal || null, fecha: date.value, cancha: selectedField, horarioDesde: from.value, horarioHasta: until.value, telefono: document.getElementById('booking-phone').value.trim() }
+            paymentPrepScreen.hidden = true; resultScreen.hidden = false; resultScreen.querySelector('#booking-result-title').textContent = 'Reserva pendiente de pago'; resultScreen.querySelector('#booking-result-message').textContent = 'La reserva fue creada y quedó pendiente de confirmación del pago.'; if (aside) aside.hidden = true; if (myBookings) myBookings.hidden = true
+            if (prefs.testMode) { resultScreen.querySelector('#booking-result-title').textContent = 'Reserva confirmada'; resultScreen.querySelector('#booking-result-message').textContent = 'La reserva se confirmó correctamente en modo prueba. No se inició ningún pago.'; payment.hidden = true; return }
+            payment.hidden = false; payment.innerHTML = '<p>Elegí una modalidad de pago:</p><div id="player-mp-partial"></div><div id="player-mp-total"></div>'
+            const mp = new MercadoPago(config.publicKeyMp, { locale: 'es-AR' }); mp.checkout({ preference: { id: prefs.preferenceIdParcial }, render: { container: '#player-mp-partial', label: 'Pagar seña' } }); mp.checkout({ preference: { id: prefs.preferenceIdTotal }, render: { container: '#player-mp-total', label: 'Pagar total' } })
+        } catch (error) { payButton.disabled = false; payButton.textContent = 'Pagar con Mercado Pago'; message(paymentError, error.message || 'No pudimos preparar el pago. Intentá nuevamente.', true) }
+    })
+
+    function showForm() { resultScreen.hidden = true; paymentPrepScreen.hidden = true; summaryScreen.hidden = true; formScreen.hidden = false; if (aside) aside.hidden = false; if (myBookings) myBookings.hidden = false }
     function showBookingsOnly() {
         if (!myBookings || window.location.hash !== '#mis-reservas') return
-        formScreen.hidden = true; summaryScreen.hidden = true; resultScreen.hidden = true
+        formScreen.hidden = true; summaryScreen.hidden = true; paymentPrepScreen.hidden = true; resultScreen.hidden = true
         if (aside) aside.hidden = true
         myBookings.hidden = false
         window.requestAnimationFrame(() => myBookings.scrollIntoView({ behavior: 'smooth', block: 'start' }))

@@ -329,7 +329,18 @@
                         <input type="text" class="form-control" id="bookingEmailConfig" placeholder="Email para reservas" value="<?= isset($bookingEmail) ? $bookingEmail : '' ?>">
                         <label for="bookingEmailConfig">Emails para enviar reservas</label>
                     </div>
-                    <button type="button" class="btn btn-success" id="saveConfigGeneral">Guardar configuracion</button>
+                    <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="bookingEmailSubjectConfig" placeholder="Asunto del email" value="<?= esc($bookingEmailSubject ?? 'Reserva: {cliente}') ?>">
+                        <label for="bookingEmailSubjectConfig">Asunto del email de reservas</label>
+                        <div class="form-text">Podés usar {cliente}, {empresa} y {fecha}. Ejemplo: Reserva: {cliente}</div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <button type="button" class="btn btn-success" id="saveConfigGeneral">Guardar configuracion</button>
+                        <button type="button" class="btn btn-outline-info" id="updateDatabase">
+                            <i class="fa-solid fa-database me-1"></i>Actualizar base de datos
+                        </button>
+                    </div>
+                    <div class="form-text mt-2">Ejecuta únicamente las migraciones pendientes del sistema.</div>
                 </div>
             </div>
         </div>

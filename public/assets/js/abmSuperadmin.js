@@ -53,6 +53,7 @@ const closuresTabList = document.getElementById('closuresTabList')
 const configPanel = document.getElementById('configPanel')
 const closureTextConfig = document.getElementById('closureTextConfig')
 const bookingEmailConfig = document.getElementById('bookingEmailConfig')
+const bookingEmailSubjectConfig = document.getElementById('bookingEmailSubjectConfig')
 const rateHistoryModalElement = document.getElementById('rateHistoryModal')
 const rateHistoryModal = rateHistoryModalElement ? new bootstrap.Modal(rateHistoryModalElement) : null
 const rateHistoryTable = document.getElementById('rateHistoryTable')
@@ -866,10 +867,52 @@ document.addEventListener('click', async (e) => {
             const payload = {
                 textoCierre: closureTextConfig ? closureTextConfig.value : '',
                 emailReservas: bookingEmailConfig ? bookingEmailConfig.value : '',
+                emailReservasAsunto: bookingEmailSubjectConfig ? bookingEmailSubjectConfig.value : '',
             }
             await saveConfigGeneral(payload)
             if (configPanel) {
                 configPanel.classList.add('d-none')
+            }
+        } else if (e.target.id == 'updateDatabase' || e.target.closest('#updateDatabase')) {
+            const updateButton = document.getElementById('updateDatabase')
+            const confirmed = await showStyledConfirm({
+                title: 'Actualizar base de datos',
+                message: '<p class="mb-0">Se ejecutarán las migraciones pendientes del sistema. ¿Querés continuar?</p>',
+                acceptText: 'Actualizar',
+                cancelText: 'Cancelar'
+            })
+            if (!confirmed) return
+
+            if (updateButton) {
+                updateButton.disabled = true
+                updateButton.dataset.originalText = updateButton.innerHTML
+                updateButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Actualizando...'
+            }
+
+            try {
+                const response = await fetch(`${baseUrl}updateDatabase`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                    },
+                    body: JSON.stringify({}),
+                })
+                const responseData = await response.json()
+                if (!response.ok || responseData.error) {
+                    alert(responseData.message || 'No se pudo actualizar la base de datos.')
+                    return
+                }
+                alert(responseData.message || 'La base de datos quedó actualizada correctamente.')
+            } catch (error) {
+                console.error('Error al actualizar la base de datos:', error)
+                alert('No se pudo actualizar la base de datos. Intentá nuevamente.')
+            } finally {
+                if (updateButton) {
+                    updateButton.disabled = false
+                    updateButton.innerHTML = updateButton.dataset.originalText || 'Actualizar base de datos'
+                }
             }
         } else if (e.target.id == 'cancelCancelReservations') {
             if (cancelReservationsResult) {

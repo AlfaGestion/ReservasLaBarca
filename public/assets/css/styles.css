@@ -124,7 +124,8 @@ select {
     cursor: pointer;
 }
 
-.locality-suggestion-item:hover {
+.locality-suggestion-item:hover,
+.locality-suggestion-item.active {
     background: #f1f3f5;
 }
 

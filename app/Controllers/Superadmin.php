@@ -412,6 +412,8 @@ class Superadmin extends BaseController
         }
         $bookingEmailRow = $configModel->where('clave', 'email_reservas')->first();
         $bookingEmail = $bookingEmailRow['valor'] ?? '';
+        $bookingEmailSubjectRow = $configModel->where('clave', 'email_reservas_asunto')->first();
+        $bookingEmailSubject = $bookingEmailSubjectRow['valor'] ?? 'Reserva: {cliente}';
 
         return view('superadmin/index', [
             'bookings' => $bookings,
@@ -425,6 +427,7 @@ class Superadmin extends BaseController
             'localities' => $localities,
             'closureText' => $closureText,
             'bookingEmail' => $bookingEmail,
+            'bookingEmailSubject' => $bookingEmailSubject,
             'services' => $services,
         ]);
     }
@@ -1255,6 +1258,7 @@ class Superadmin extends BaseController
         $data = $this->request->getJSON();
         $textoCierre = $data->textoCierre ?? '';
         $emailReservas = $data->emailReservas ?? '';
+        $emailReservasAsunto = trim((string) ($data->emailReservasAsunto ?? '')) ?: 'Reserva: {cliente}';
 
         $configModel = new ConfigModel();
 
@@ -1273,9 +1277,33 @@ class Superadmin extends BaseController
                 $configModel->insert(['clave' => 'email_reservas', 'valor' => $emailReservas]);
             }
 
+            $existingSubject = $configModel->where('clave', 'email_reservas_asunto')->first();
+            if ($existingSubject) {
+                $configModel->update($existingSubject['id'], ['valor' => $emailReservasAsunto]);
+            } else {
+                $configModel->insert(['clave' => 'email_reservas_asunto', 'valor' => $emailReservasAsunto]);
+            }
+
             return $this->response->setJSON($this->setResponse(null, null, null, 'ConfiguraciÃ³n guardada.'));
         } catch (\Exception $e) {
             return $this->response->setJSON($this->setResponse(500, true, null, $e->getMessage()));
+        }
+    }
+
+    public function updateDatabase()
+    {
+        if (!session()->get('superadmin')) {
+            return $this->response->setJSON($this->setResponse(403, true, null, 'No tenés permisos para actualizar la base de datos.'));
+        }
+
+        try {
+            service('migrations')->latest();
+            log_message('info', 'Migraciones de base ejecutadas desde el panel por el superadmin.');
+
+            return $this->response->setJSON($this->setResponse(null, null, null, 'La base de datos quedó actualizada correctamente.'));
+        } catch (\Throwable $e) {
+            log_message('error', 'Error al ejecutar migraciones desde el panel: ' . $e->getMessage());
+            return $this->response->setJSON($this->setResponse(500, true, null, 'No se pudo actualizar la base de datos. Revisá los registros del sistema.'));
         }
     }
 

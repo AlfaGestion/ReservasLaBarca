@@ -79,7 +79,7 @@ class MercadoPago extends BaseController
         }
     }
 
-    private function bookingEmailHtml(array $booking, string $fieldName, string $serviceColor, string $fecha, string $horario, string $duracion, string $localidad): string
+    private function bookingEmailHtml(array $booking, string $fieldName, string $serviceColor, string $fecha, string $horario, string $duracion, string $localidad, string $title = 'Nueva reserva recibida', string $subtitle = 'Detalle completo de la operación'): string
     {
         $cliente = htmlspecialchars((string)($booking['name'] ?? 'N/D'), ENT_QUOTES, 'UTF-8');
         $telefono = htmlspecialchars((string)($booking['phone'] ?? 'N/D'), ENT_QUOTES, 'UTF-8');
@@ -94,21 +94,39 @@ class MercadoPago extends BaseController
         $detalle = htmlspecialchars((string)($booking['description'] ?? 'Reserva'), ENT_QUOTES, 'UTF-8');
 
         return "
-        <div style=\"margin:0;padding:24px;background:#f3f6fb;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;\">
+        <!doctype html>
+        <html lang=\"es\">
+        <head>
+            <meta charset=\"UTF-8\">
+            <meta name=\"color-scheme\" content=\"light\">
+            <meta name=\"supported-color-schemes\" content=\"light\">
+            <style>
+                :root { color-scheme: light only; }
+                html, body { background-color: #f3f6fb !important; color: #1f2937 !important; -webkit-text-size-adjust: 100%; }
+                @media (prefers-color-scheme: dark) {
+                    html, body { background-color: #f3f6fb !important; color: #1f2937 !important; }
+                    .booking-email-card { background-color: #ffffff !important; color: #1f2937 !important; }
+                    .booking-email-muted { color: #6b7280 !important; }
+                    .booking-email-content, .booking-email-details, .booking-email-details td { background-color: #ffffff !important; color: #1f2937 !important; }
+                }
+            </style>
+        </head>
+        <body style=\"margin:0;padding:0;background-color:#f3f6fb;color:#1f2937;\">
+        <div style=\"margin:0;padding:24px;background-color:#f3f6fb;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;\">
             <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"max-width:680px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;\">
                 <tr>
-                    <td style=\"padding:22px 24px;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#ffffff;\">
-                        <div style=\"font-size:22px;font-weight:700;\">Nueva reserva recibida</div>
-                        <div style=\"font-size:13px;opacity:.9;margin-top:4px;\">Detalle completo de la operación</div>
+                    <td bgcolor=\"#f09424\" style=\"padding:22px 24px;background:#f09424 !important;color:#111827 !important;\">
+                        <div style=\"font-size:22px;font-weight:700;color:#111827 !important;\">{$title}</div>
+                        <div style=\"font-size:13px;margin-top:4px;color:#111827 !important;\">{$subtitle}</div>
                     </td>
                 </tr>
                 <tr>
-                    <td style=\"padding:20px 24px;\">
+                    <td class=\"booking-email-content\" style=\"padding:20px 24px;background-color:#ffffff;color:#1f2937;\">
                         <div style=\"margin-bottom:14px;\">
                             <span style=\"display:inline-block;background:{$serviceColor};color:#fff;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.3px;\">{$tipoReserva}</span>
                         </div>
-                        <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-size:14px;border-collapse:collapse;\">
-                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Cliente</td><td style=\"padding:8px 0;font-weight:600;\">{$cliente}</td></tr>
+                        <table class=\"booking-email-details\" role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-size:14px;border-collapse:collapse;background-color:#ffffff;color:#1f2937;\">
+                            <tr><td class=\"booking-email-muted\" style=\"padding:8px 0;color:#6b7280;\">Cliente</td><td style=\"padding:8px 0;font-weight:600;color:#1f2937;\">{$cliente}</td></tr>
                             <tr><td style=\"padding:8px 0;color:#6b7280;\">Teléfono</td><td style=\"padding:8px 0;font-weight:600;\">{$telefono}</td></tr>
                             <tr><td style=\"padding:8px 0;color:#6b7280;\">Localidad</td><td style=\"padding:8px 0;font-weight:600;\">{$localidadLabel}</td></tr>
                             <tr><td style=\"padding:8px 0;color:#6b7280;\">Fecha</td><td style=\"padding:8px 0;font-weight:600;\">{$fechaLabel}</td></tr>
@@ -122,7 +140,9 @@ class MercadoPago extends BaseController
                     </td>
                 </tr>
             </table>
-        </div>";
+        </div>
+        </body>
+        </html>";
     }
     private function normalizeTime($time): string
     {
@@ -867,11 +887,16 @@ class MercadoPago extends BaseController
                         'name' => $primaryBooking['name'] ?? null,
                         'city' => $primaryBooking['locality'] ?? null,
                     ];
+                    $bookingEmail = filter_var(trim((string) ($primaryBooking['email'] ?? '')), FILTER_VALIDATE_EMAIL);
+                    if ($bookingEmail) {
+                        $customerPayload['email'] = $bookingEmail;
+                    }
 
                     if (!$customer) {
                         $customersModel->insert([
                             'name' => $primaryBooking['name'] ?? null,
                             'phone' => $phone,
+                            'email' => $bookingEmail ?: null,
                             'offer' => 0,
                             'quantity' => 1,
                             'city' => $primaryBooking['locality'] ?? null,
@@ -955,7 +980,7 @@ class MercadoPago extends BaseController
                 'payment_id' => $paymentId,
                 'status' => (string) ($paymentData['status'] ?? 'approved'),
                 'external_reference' => $externalReference !== '' ? $externalReference : null,
-                'payment_type' => $paymentData['payment_type'] ?? null,
+                'payment_type' => (string) ($paymentData['payment_type'] ?? $paymentData['payment_type_id'] ?? 'unknown'),
                 'merchant_order_id' => isset($paymentData['merchant_order_id']) ? (string) $paymentData['merchant_order_id'] : null,
                 'preference_id' => $preferenceId !== '' ? $preferenceId : null,
                 'site_id' => isset($paymentData['site_id']) ? (string) $paymentData['site_id'] : null,
@@ -1024,9 +1049,7 @@ class MercadoPago extends BaseController
             $result['email_sent'] = $isFirstConfirmation;
             (new \App\Libraries\PlayerMatchPublicationService())->publishIfEligible($primaryBookingId);
 
-            if ($isFirstConfirmation) {
-                $this->sendBookingEmail($primaryBookingId);
-            } else {
+            if (!$isFirstConfirmation) {
                 $this->logMercadoPagoEvent('info', 'MP PAYMENT APPROVED duplicado ignorado', [
                     'payment_id' => $paymentId,
                     'booking_id' => $primaryBookingId,
@@ -1131,21 +1154,13 @@ class MercadoPago extends BaseController
         return round($total, 2);
     }
 
-    private function sendBookingEmail($bookingId)
+    private function sendBookingEmail($bookingId, string $subjectSuffix = '')
     {
         $configModel = new ConfigModel();
         $toRow = $configModel->where('clave', 'email_reservas')->first();
         $toEmail = $toRow['valor'] ?? '';
-        if (!is_string($toEmail) || trim($toEmail) === '') {
-            log_message('warning', 'No se envia email de reserva: no hay destinatarios configurados en email_reservas.');
-            return;
-        }
-
-        $toEmails = $this->parseEmailRecipients($toEmail);
-        if ($toEmails === []) {
-            log_message('warning', 'No se envia email de reserva: email_reservas no contiene destinatarios validos.');
-            return;
-        }
+        $toEmails = is_string($toEmail) ? $this->parseEmailRecipients($toEmail) : [];
+        if ($toEmails === []) log_message('warning', 'No hay destinatarios internos válidos para la reserva.');
 
         $bookingsModel = new BookingsModel();
         $fieldsModel = new FieldsModel();
@@ -1171,6 +1186,9 @@ class MercadoPago extends BaseController
         $duracion = minutesToHuman($untilMinutes - $fromMinutes);
         $localidad = $booking['locality'] ?? '';
         $message = $this->bookingEmailHtml($booking, $fieldName, $serviceColor, $fecha, $horario, $duracion, $localidad);
+        $customerTitle = $subjectSuffix !== '' ? 'Tu reserva fue anulada' : 'Tu reserva fue registrada';
+        $customerSubtitle = $subjectSuffix !== '' ? 'La reserva fue anulada y el horario quedó liberado.' : 'Este es el detalle de tu reserva.';
+        $customerMessage = $this->bookingEmailHtml($booking, $fieldName, $serviceColor, $fecha, $horario, $duracion, $localidad, $customerTitle, $customerSubtitle);
 
         $caPath = ROOTPATH . 'cacert.pem';
         if (is_file($caPath)) {
@@ -1186,8 +1204,21 @@ class MercadoPago extends BaseController
         ]);
         $subjectName = trim((string)($booking['name'] ?? 'Cliente'));
         $subjectDate = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'Sin fecha';
-        if (!$this->sendEmailWithFallback($toEmails, "Reserva: {$subjectName} - {$subjectDate}", $message)) {
+        $subjectRow = $configModel->where('clave', 'email_reservas_asunto')->first();
+        $subjectTemplate = trim((string) ($subjectRow['valor'] ?? '')) ?: 'Reserva: {cliente}';
+        $subject = strtr($subjectTemplate, [
+            '{cliente}' => $subjectName,
+            '{empresa}' => 'La Barca',
+            '{fecha}' => $subjectDate,
+        ]);
+        $subject .= $subjectSuffix;
+        if ($toEmails !== [] && !$this->sendEmailWithFallback($toEmails, $subject, $message)) {
             log_message('error', 'No se pudo enviar email de reserva #' . $bookingId . ' con ninguna cuenta SMTP configurada.');
+        }
+        $customerEmail = filter_var(trim((string) ($booking['email'] ?? '')), FILTER_VALIDATE_EMAIL);
+        $customerSubject = $subjectSuffix !== '' ? 'Tu reserva fue anulada - La Barca' : 'Tu reserva fue registrada - La Barca';
+        if ($customerEmail && !in_array($customerEmail, $toEmails, true) && !$this->sendEmailWithFallback([$customerEmail], $customerSubject, $customerMessage)) {
+            log_message('error', 'No se pudo enviar la confirmación al cliente de la reserva #' . $bookingId . '.');
         }
     }
 
@@ -1198,6 +1229,7 @@ class MercadoPago extends BaseController
         $additionalBookingId = null;
         $bookingId = null;
         $createdBookingInThisAttempt = false;
+        $createdCustomerId = null;
         try {
             $testMode = (new PlayerPortalSettings())->isTestMode()
                 && session()->get('player_logged_in')
@@ -1299,6 +1331,32 @@ class MercadoPago extends BaseController
                 return $this->response->setJSON($this->setResponse(409, true, null, $bookingQuote['message'] ?? 'No se pudo calcular el monto de la reserva.'));
             }
 
+            // El portal público también debe conservar el cliente nuevo. El
+            // Portal de Jugadores administra su perfil por separado.
+            if (!session()->get('player_logged_in') && $bookingPhone !== '' && trim((string) ($bookingArr['nombre'] ?? '')) !== '') {
+                $existingCustomer = $customerOfferService->findCustomerByPhone($bookingPhone);
+                if (!$existingCustomer) {
+                    $customersModel = new CustomersModel();
+                    $inserted = $customersModel->insert([
+                        'name' => trim((string) $bookingArr['nombre']),
+                        'phone' => $bookingPhone,
+                        'email' => filter_var(trim((string) ($bookingArr['email'] ?? '')), FILTER_VALIDATE_EMAIL) ?: null,
+                        'offer' => 0,
+                        'city' => trim((string) ($bookingArr['localidad'] ?? '')),
+                    ]);
+                    if (!$inserted) {
+                        return $this->response->setJSON($this->setResponse(500, true, null, 'No se pudo guardar los datos del cliente.'));
+                    }
+                    $createdCustomerId = (int) $customersModel->getInsertID();
+                    $bookingQuote['customer'] = ['id' => $createdCustomerId];
+                } else {
+                    $email = filter_var(trim((string) ($bookingArr['email'] ?? '')), FILTER_VALIDATE_EMAIL);
+                    if ($email && (int) ($existingCustomer['id'] ?? 0) > 0) {
+                        (new CustomersModel())->update((int) $existingCustomer['id'], ['email' => $email]);
+                    }
+                }
+            }
+
             $montoTotal = (float) ($bookingQuote['final_total'] ?? 0);
             if ($montoTotal <= 0) {
                 return $this->response->setJSON($this->setResponse(409, true, null, 'No se pudo calcular el monto de la reserva.'));
@@ -1332,6 +1390,7 @@ class MercadoPago extends BaseController
                 'time_until' => $bookingArr['horarioHasta'] ?? null,
                 'name' => $bookingArr['nombre'] ?? null,
                 'phone' => $bookingArr['telefono'] ?? null,
+                'email' => filter_var(trim((string) ($bookingArr['email'] ?? '')), FILTER_VALIDATE_EMAIL) ?: null,
                 'locality' => $bookingArr['localidad'] ?? null,
                 'id_customer' => !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null,
                 'customer_offer_id' => $bookingArr['customer_offer_id'],
@@ -1387,6 +1446,7 @@ class MercadoPago extends BaseController
                     'time_until' => $this->normalizeTime($additional['horarioHasta']),
                     'name' => $bookingArr['nombre'] ?? null,
                     'phone' => $bookingArr['telefono'] ?? null,
+                    'email' => filter_var(trim((string) ($bookingArr['email'] ?? '')), FILTER_VALIDATE_EMAIL) ?: null,
                     'locality' => $bookingArr['localidad'] ?? null,
                     'id_customer' => !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null,
                     'customer_offer_id' => !empty($additionalOffer['customer_offer_id']) ? (int) $additionalOffer['customer_offer_id'] : $bookingArr['customer_offer_id'],
@@ -1491,6 +1551,10 @@ class MercadoPago extends BaseController
             $bookingArr['preferenceIdTotal'] = $preferenceIdTotal;
             $bookingArr['bookingId'] = $bookingId;
 
+            // El aviso se envía al crear la reserva pendiente. La confirmación
+            // posterior del webhook no vuelve a disparar el mismo email.
+            $this->sendBookingEmail($bookingId);
+
             $intents = session()->get('mp_intents') ?? [];
             $intents[$preferenceIdParcial] = ['booking' => $bookingArr, 'paid_type' => 'parcial'];
             $intents[$preferenceIdTotal] = ['booking' => $bookingArr, 'paid_type' => 'total'];
@@ -1518,6 +1582,9 @@ class MercadoPago extends BaseController
                     }
                     $bookingsModel = $bookingsModel ?? new BookingsModel();
                     $bookingsModel->delete((int)$bookingId);
+                }
+                if (!empty($createdCustomerId)) {
+                    (new CustomersModel())->delete((int) $createdCustomerId);
                 }
             } catch (\Throwable $inner) {
                 log_message('error', 'Error limpiando slot/reserva fallida en setPreference: ' . $inner->getMessage());
@@ -1696,6 +1763,7 @@ class MercadoPago extends BaseController
         try {
             $bookings = [];
             $bookingIds = [];
+            $cancelledBookingIds = [];
             $slotPairs = [];
 
             if ($bookingId) {
@@ -1834,6 +1902,7 @@ class MercadoPago extends BaseController
 
                 foreach ($bookingIds as $currentBookingId) {
                     $this->releaseActiveSlots($bookingSlotsModel, ['booking_id' => $currentBookingId]);
+                    $cancelledBookingIds[] = $currentBookingId;
                 }
             }
 
@@ -1846,6 +1915,12 @@ class MercadoPago extends BaseController
                         'time_until' => $pair['time_until'],
                     ]);
 
+                    $pairBookings = $bookingsModel->where('date', $pair['date'])
+                        ->where('id_field', $pair['id_field'])
+                        ->where('time_from', $pair['time_from'])
+                        ->where('time_until', $pair['time_until'])
+                        ->where('approved !=', 1)
+                        ->findAll();
                     $bookingsModel->where('date', $pair['date'])
                         ->where('id_field', $pair['id_field'])
                         ->where('time_from', $pair['time_from'])
@@ -1853,7 +1928,14 @@ class MercadoPago extends BaseController
                         ->where('approved !=', 1)
                         ->set(['annulled' => 1, 'approved' => 0, 'mp' => 0])
                         ->update();
+                    foreach ($pairBookings as $pairBooking) {
+                        $cancelledBookingIds[] = (int) ($pairBooking['id'] ?? 0);
+                    }
                 }
+            }
+
+            foreach (array_unique(array_filter($cancelledBookingIds)) as $cancelledBookingId) {
+                $this->sendBookingEmail((int) $cancelledBookingId, ' - ANULADA');
             }
 
             $intents = session()->get('mp_intents') ?? [];

@@ -12,6 +12,7 @@ const bookingDiscountStatus = document.getElementById('bookingDiscountStatus')
 const nombre = document.getElementById('nombre')
 const telefono = document.getElementById('telefono')
 const localidad = document.getElementById('localidad')
+const email = document.getElementById('email')
 const pagoReserva = document.getElementById('inputPagoReserva')
 const pagoTotal = document.getElementById('switchPagoTotal')
 const divTime = document.getElementById('div-time')
@@ -195,16 +196,29 @@ function setupLocalityAutocomplete(inputEl, datalistId) {
 
     const box = document.createElement('div')
     box.className = 'locality-suggestions'
+    let visibleItems = []
+    let highlightedIndex = -1
+
+    const highlight = (index) => {
+        highlightedIndex = index
+        Array.from(box.children).forEach((item, itemIndex) => {
+            item.classList.toggle('active', itemIndex === highlightedIndex)
+        })
+        const activeItem = box.children[highlightedIndex]
+        activeItem?.scrollIntoView({ block: 'nearest' })
+    }
 
     parent.appendChild(box)
 
     const render = (items) => {
+        visibleItems = items.slice(0, 8)
+        highlightedIndex = -1
         box.innerHTML = ''
-        if (!items || items.length === 0) {
+        if (visibleItems.length === 0) {
             box.style.display = 'none'
             return
         }
-        items.slice(0, 8).forEach((name) => {
+        visibleItems.forEach((name) => {
             const item = document.createElement('div')
             item.className = 'locality-suggestion-item'
             item.textContent = name
@@ -230,6 +244,40 @@ function setupLocalityAutocomplete(inputEl, datalistId) {
 
     inputEl.addEventListener('input', onInput)
     inputEl.addEventListener('focus', onInput)
+    inputEl.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown' && visibleItems.length > 0) {
+            event.preventDefault()
+            event.stopPropagation()
+            if (box.style.display === 'none') onInput()
+            if (visibleItems.length > 0) {
+                highlight(Math.min(highlightedIndex + 1, visibleItems.length - 1))
+            }
+            return
+        }
+
+        if (event.key === 'ArrowUp' && visibleItems.length > 0) {
+            event.preventDefault()
+            event.stopPropagation()
+            highlight(Math.max(highlightedIndex - 1, 0))
+            return
+        }
+
+        if (event.key === 'Escape') {
+            box.style.display = 'none'
+            highlightedIndex = -1
+            return
+        }
+
+        if (event.key === 'Enter') {
+            event.preventDefault()
+            event.stopPropagation()
+            const selected = visibleItems[highlightedIndex] || visibleItems[0] || inputEl.value.trim()
+            if (selected) inputEl.value = selected
+            box.style.display = 'none'
+            highlightedIndex = -1
+            nombre?.focus()
+        }
+    })
     inputEl.addEventListener('blur', () => {
         setTimeout(() => { box.style.display = 'none' }, 150)
     })
@@ -424,6 +472,7 @@ document.addEventListener('click', async (e) => {
                 horarioHasta: horarioHasta.value,
                 nombre: nombre.value,
                 telefono: normalizedPhone,
+                email: email?.value.trim() || '',
                 localidad: localidad ? localidad.value : '',
                 additionalQuincho: buildAdditionalQuinchoPayload(),
             }
@@ -435,6 +484,7 @@ document.addEventListener('click', async (e) => {
                 horarioHasta: horarioHasta.value,
                 nombre: nombre.value,
                 telefono: normalizedPhone,
+                email: email?.value.trim() || '',
                 localidad: localidad ? localidad.value : '',
                 monto: pagoReserva.value,
                 total: totalAmount,
@@ -465,6 +515,11 @@ document.addEventListener('click', async (e) => {
             if (fecha.value == '' || selectCancha.value == '' || horarioDesde.value == '' || horarioHasta.value == '' || nombre.value == '' || telefono.value == '') {
                 alert('Debe completar todos los campos obligatorios.')
                 return;
+            }
+            if (email?.value.trim() && !email.checkValidity()) {
+                alert('Ingresá un email válido para recibir la confirmación.')
+                email.focus()
+                return
             }
             if (!validateQuinchoAdditional(true)) {
                 return
@@ -539,6 +594,8 @@ document.addEventListener('click', async (e) => {
 
                 const rate = await getRate()
                 const refreshedQuote = await refreshCustomerOfferPreview({ showModal: false })
+                data.email = email?.value.trim() || data.email || ''
+                data.nombre = nombre?.value.trim() || data.nombre || ''
                 const totalAmount = refreshedQuote?.final_total ?? getCurrentTotalAmount()
                 if (totalAmount <= 0) {
                     data.monto = 0
@@ -711,10 +768,21 @@ telefono.addEventListener('input', async () => {
 telefono.addEventListener('keydown', async (event) => {
     if (event.key === 'Enter') {
         event.preventDefault()
+        event.stopPropagation()
         clearTimeout(customerLookupTimer)
         customerLookupTimer = null
         await lookupCustomerNow()
+        localidad?.focus()
     }
+})
+
+nombre?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    event.stopPropagation()
+    const confirmationButton = document.getElementById('confirmarReserva') || document.getElementById('confirmarAdminReserva')
+    confirmationButton?.focus()
+    confirmationButton?.click()
 })
 
 async function deleteRejected() {
@@ -787,7 +855,7 @@ function prepareMercadoPagoStartButton() {
     resetMercadoPagoButtons()
     const partialContainer = document.getElementById('checkout-btn-parcial')
     if (!partialContainer) return
-    partialContainer.innerHTML = '<button type="button" class="btn btn-brand" id="startMercadoPagoButton">Pagar con Mercado Pago</button>'
+    partialContainer.innerHTML = `<button type="button" class="btn btn-brand d-inline-flex align-items-center gap-2" id="startMercadoPagoButton"><img src="${baseUrl}assets/images/mercado-pago-oficial.svg" alt="Mercado Pago" width="30" height="24" style="display:block;object-fit:contain;background:#fff;border-radius:6px;padding:2px">Pagar con Mercado Pago</button>`
     partialContainer.style.display = 'block'
 }
 
@@ -797,7 +865,11 @@ async function setScriptMP(amount) {
     modalSpinner.show()
 
     try {
+        data.email = email?.value.trim() || data.email || ''
+        data.nombre = nombre?.value.trim() || data.nombre || ''
         const refreshedQuote = await refreshCustomerOfferPreview({ showModal: false })
+        data.email = email?.value.trim() || data.email || ''
+        data.nombre = nombre?.value.trim() || data.nombre || ''
         const finalAmount = refreshedQuote?.final_total ?? amount ?? getCurrentTotalAmount()
         data.total = finalAmount
         preference = {
@@ -809,26 +881,25 @@ async function setScriptMP(amount) {
             locale: "es-AR"
         })
         resetMercadoPagoButtons()
+        const sdkContainer = prepareMercadoPagoSdkContainer()
+        const preferenceId = pagoTotal.checked
+            ? preferences.preferenceIdTotal
+            : preferences.preferenceIdParcial
 
         mp.checkout({
             preference: {
-                id: preferences.preferenceIdParcial
+                id: preferenceId
             },
             render: {
-                container: '#checkout-btn-parcial',
+                container: '#mercadoPagoSdkCheckout',
                 label: 'Pagar con Mercado Pago'
             }
         })
 
-        mp.checkout({
-            preference: {
-                id: preferences.preferenceIdTotal
-            },
-            render: {
-                container: '#checkout-btn-total',
-                label: 'Pagar con Mercado Pago'
-            }
-        })
+        // El primer clic crea la reserva y renderiza el botón real de MP.
+        // Se renderiza en un contenedor técnico oculto para que el cliente
+        // vea y use un único botón durante todo el circuito.
+        await openRenderedMercadoPagoCheckout(sdkContainer)
 
         data.preferenceIdParcial = preferences.preferenceIdParcial,
             data.preferenceIdTotal = preferences.preferenceIdTotal
@@ -869,6 +940,56 @@ async function setScriptMP(amount) {
     } finally {
         modalSpinner.hide()
     }
+}
+
+function openRenderedMercadoPagoCheckout(container) {
+    if (!container) return Promise.resolve(false)
+
+    return new Promise((resolve) => {
+        let finished = false
+        let observer = null
+        let timeoutId = null
+
+        const finish = (opened) => {
+            if (finished) return
+            finished = true
+            observer?.disconnect()
+            if (timeoutId) clearTimeout(timeoutId)
+            resolve(opened)
+        }
+
+        const openButton = () => {
+            const button = container.querySelector('button:not(#startMercadoPagoButton), [role="button"]')
+            if (!button) return false
+            button.click()
+            finish(true)
+            return true
+        }
+
+        if (openButton()) return
+
+        observer = new MutationObserver(() => openButton())
+        observer.observe(container, { childList: true, subtree: true })
+        timeoutId = setTimeout(() => finish(false), 5000)
+    })
+}
+
+function prepareMercadoPagoSdkContainer() {
+    let container = document.getElementById('mercadoPagoSdkCheckout')
+    if (!container) {
+        container = document.createElement('div')
+        container.id = 'mercadoPagoSdkCheckout'
+        container.setAttribute('aria-hidden', 'true')
+        container.style.position = 'fixed'
+        container.style.left = '-10000px'
+        container.style.top = '0'
+        container.style.width = '1px'
+        container.style.height = '1px'
+        container.style.overflow = 'hidden'
+        document.body.appendChild(container)
+    }
+    container.innerHTML = ''
+    return container
 }
 
 function normalizeTimeValue(value) {
@@ -1580,6 +1701,7 @@ function renderOfferModal(quote) {
 
 async function refreshCustomerOfferPreview({ showModal = false, lookupSignal = null } = {}) {
     const phone = normalizePhone(telefono?.value || '')
+    const enteredEmail = email?.value.trim() || ''
     const baseItems = await buildBookingBaseItems()
 
     if (baseItems.length === 0) {
@@ -1642,6 +1764,10 @@ async function refreshCustomerOfferPreview({ showModal = false, lookupSignal = n
 
     if (customer) {
         nombre.value = customer.name || ''
+        // Si el cliente histórico todavía no tiene email, conservar el que
+        // acaba de ingresar en esta reserva en vez de borrarlo.
+        if (email && customer.email) email.value = customer.email
+        else if (email && enteredEmail) email.value = enteredEmail
         if (localidad) {
             localidad.value = customer.city || ''
         }
@@ -1649,7 +1775,6 @@ async function refreshCustomerOfferPreview({ showModal = false, lookupSignal = n
         currentCustomer = null
         currentBookingQuote = fallbackQuote
         useOffer = false
-        nombre.value = ''
         nombre.disabled = false
         inputMonto.value = formatPriceAR(baseTotal)
         updateBookingDiscountStatus(currentBookingQuote)
@@ -1903,6 +2028,7 @@ async function fillModal(data) {
 
     const fecha = convertDateFormat(data.data.fecha)
     const localidadValue = data.data.localidad ? `<li><i class="fa-solid fa-location-dot"></i> <b>Localidad:</b> ${data.data.localidad}</li>` : ''
+    const emailValue = data.data.email ? `<li><i class="fa-solid fa-envelope"></i> <b>Email:</b> ${data.data.email}</li>` : ''
     const additional = buildAdditionalQuinchoPayload()
     const duration = timeToMinutes(data.data.horarioHasta) > timeToMinutes(data.data.horarioDesde)
         ? timeToMinutes(data.data.horarioHasta) - timeToMinutes(data.data.horarioDesde)
@@ -1938,6 +2064,7 @@ async function fillModal(data) {
             <li><i class="fa-solid fa-user"></i> <b>Nombre:</b> ${data.data.nombre}</li>
             <li><i class="fa-solid fa-phone"></i> <b>Telefono:</b> ${data.data.telefono}</li>
             ${localidadValue}
+            ${emailValue}
         </ul>
         `;
     } else {
@@ -1953,6 +2080,7 @@ async function fillModal(data) {
             <li><i class="fa-solid fa-user"></i> <b>Nombre:</b> ${data.data.nombre}</li>
             <li><i class="fa-solid fa-phone"></i> <b>Telefono:</b> ${data.data.telefono}</li>
             ${localidadValue}
+            ${emailValue}
         </ul>
         `;
     }

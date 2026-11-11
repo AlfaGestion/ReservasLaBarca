@@ -193,6 +193,11 @@ $mpKeys = $mpKeysModel->first();
                     <label for="nombre">Nombre y apellido</label>
                 </div>
 
+                <div class="form-floating flex-nowrap mb-3">
+                    <input type="email" class="form-control" name="email" id="email" placeholder="nombre@ejemplo.com" aria-label="email" autocomplete="email">
+                    <label for="email">Email para recibir la reserva (opcional)</label>
+                </div>
+
                 <datalist id="localitiesList">
                     <?php if (!empty($localities)) : ?>
                         <?php foreach ($localities as $loc) : ?>

@@ -216,7 +216,8 @@ body.theme-dark .locality-suggestion-item {
     color: #e8f3ff;
 }
 
-body.theme-dark .locality-suggestion-item:hover {
+body.theme-dark .locality-suggestion-item:hover,
+body.theme-dark .locality-suggestion-item.active {
     background: #16314a;
 }
 

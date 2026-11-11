@@ -23,6 +23,28 @@ class Email extends BaseConfig
         $this->SMTPTimeout = max(5, (int) env('player.email.smtpTimeout', 8));
         $this->SMTPCrypto = (string) env('player.email.smtpCrypto', 'tls');
         $this->protocol = (string) env('player.email.protocol', 'smtp');
+
+        for ($index = 1; $index <= 2; $index++) {
+            $prefix = 'player.email.account' . $index . '.';
+            $user = trim((string) env($prefix . 'smtpUser', ''));
+            $password = (string) env($prefix . 'smtpPassword', '');
+            if ($user === '' || $password === '') {
+                continue;
+            }
+
+            $this->accounts[] = [
+                'fromEmail' => trim((string) env($prefix . 'fromEmail', $user)),
+                'fromName' => (string) env($prefix . 'fromName', $this->fromName),
+                'SMTPUser' => $user,
+                'SMTPPass' => $password,
+            ];
+        }
+
+        if ($this->accounts !== []) {
+            $this->fromEmail = $this->accounts[0]['fromEmail'];
+            $this->SMTPUser = $this->accounts[0]['SMTPUser'];
+            $this->SMTPPass = $this->accounts[0]['SMTPPass'];
+        }
     }
 
     /**

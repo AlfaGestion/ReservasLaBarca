@@ -341,7 +341,7 @@ class Bookings extends BaseController
         ];
     }
 
-    private function bookingEmailHtml(array $booking, string $fieldName, string $serviceColor, string $fecha, string $horario, string $duracion, string $localidad): string
+    private function bookingEmailHtml(array $booking, string $fieldName, string $serviceColor, string $fecha, string $horario, string $duracion, string $localidad, string $title = 'Nueva reserva recibida', string $subtitle = 'Detalle completo de la operación'): string
     {
         $cliente = htmlspecialchars((string)($booking['name'] ?? 'N/D'), ENT_QUOTES, 'UTF-8');
         $telefono = htmlspecialchars((string)($booking['phone'] ?? 'N/D'), ENT_QUOTES, 'UTF-8');
@@ -356,21 +356,39 @@ class Bookings extends BaseController
         $detalle = htmlspecialchars((string)($booking['description'] ?? 'Reserva'), ENT_QUOTES, 'UTF-8');
 
         return "
-        <div style=\"margin:0;padding:24px;background:#f3f6fb;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;\">
+        <!doctype html>
+        <html lang=\"es\">
+        <head>
+            <meta charset=\"UTF-8\">
+            <meta name=\"color-scheme\" content=\"light\">
+            <meta name=\"supported-color-schemes\" content=\"light\">
+            <style>
+                :root { color-scheme: light only; }
+                html, body { background-color: #f3f6fb !important; color: #1f2937 !important; -webkit-text-size-adjust: 100%; }
+                @media (prefers-color-scheme: dark) {
+                    html, body { background-color: #f3f6fb !important; color: #1f2937 !important; }
+                    .booking-email-card { background-color: #ffffff !important; color: #1f2937 !important; }
+                    .booking-email-muted { color: #6b7280 !important; }
+                    .booking-email-content, .booking-email-details, .booking-email-details td { background-color: #ffffff !important; color: #1f2937 !important; }
+                }
+            </style>
+        </head>
+        <body style=\"margin:0;padding:0;background-color:#f3f6fb;color:#1f2937;\">
+        <div style=\"margin:0;padding:24px;background-color:#f3f6fb;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;\">
             <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"max-width:680px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;\">
                 <tr>
-                    <td style=\"padding:22px 24px;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#ffffff;\">
-                        <div style=\"font-size:22px;font-weight:700;\">Nueva reserva recibida</div>
-                        <div style=\"font-size:13px;opacity:.9;margin-top:4px;\">Detalle completo de la operación</div>
+                    <td bgcolor=\"#f09424\" style=\"padding:22px 24px;background:#f09424 !important;color:#111827 !important;\">
+                        <div style=\"font-size:22px;font-weight:700;color:#111827 !important;\">{$title}</div>
+                        <div style=\"font-size:13px;margin-top:4px;color:#111827 !important;\">{$subtitle}</div>
                     </td>
                 </tr>
                 <tr>
-                    <td style=\"padding:20px 24px;\">
+                    <td class=\"booking-email-content\" style=\"padding:20px 24px;background-color:#ffffff;color:#1f2937;\">
                         <div style=\"margin-bottom:14px;\">
                             <span style=\"display:inline-block;background:{$serviceColor};color:#fff;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.3px;\">{$tipoReserva}</span>
                         </div>
-                        <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-size:14px;border-collapse:collapse;\">
-                            <tr><td style=\"padding:8px 0;color:#6b7280;\">Cliente</td><td style=\"padding:8px 0;font-weight:600;\">{$cliente}</td></tr>
+                        <table class=\"booking-email-details\" role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-size:14px;border-collapse:collapse;background-color:#ffffff;color:#1f2937;\">
+                            <tr><td class=\"booking-email-muted\" style=\"padding:8px 0;color:#6b7280;\">Cliente</td><td style=\"padding:8px 0;font-weight:600;color:#1f2937;\">{$cliente}</td></tr>
                             <tr><td style=\"padding:8px 0;color:#6b7280;\">Teléfono</td><td style=\"padding:8px 0;font-weight:600;\">{$telefono}</td></tr>
                             <tr><td style=\"padding:8px 0;color:#6b7280;\">Localidad</td><td style=\"padding:8px 0;font-weight:600;\">{$localidadLabel}</td></tr>
                             <tr><td style=\"padding:8px 0;color:#6b7280;\">Fecha</td><td style=\"padding:8px 0;font-weight:600;\">{$fechaLabel}</td></tr>
@@ -384,7 +402,9 @@ class Bookings extends BaseController
                     </td>
                 </tr>
             </table>
-        </div>";
+        </div>
+        </body>
+        </html>";
     }
 
     private function logAdminAction(string $action, string $entityType, $entityId, $oldData = null, $newData = null): void
@@ -644,21 +664,13 @@ class Bookings extends BaseController
         return false;
     }
 
-    private function sendBookingEmail($bookingId)
+    private function sendBookingEmail($bookingId, string $subjectSuffix = '')
     {
         $configModel = new ConfigModel();
         $toRow = $configModel->where('clave', 'email_reservas')->first();
         $toEmail = $toRow['valor'] ?? '';
-        if (!is_string($toEmail) || trim($toEmail) === '') {
-            log_message('warning', 'No se envia email de reserva: no hay destinatarios configurados en email_reservas.');
-            return;
-        }
-
-        $toEmails = $this->parseEmailRecipients($toEmail);
-        if ($toEmails === []) {
-            log_message('warning', 'No se envia email de reserva: email_reservas no contiene destinatarios validos.');
-            return;
-        }
+        $toEmails = is_string($toEmail) ? $this->parseEmailRecipients($toEmail) : [];
+        if ($toEmails === []) log_message('warning', 'No hay destinatarios internos válidos para la reserva.');
 
         $bookingsModel = new BookingsModel();
         $fieldsModel = new FieldsModel();
@@ -684,6 +696,9 @@ class Bookings extends BaseController
         $duracion = minutesToHuman($untilMinutes - $fromMinutes);
         $localidad = $booking['locality'] ?? '';
         $message = $this->bookingEmailHtml($booking, $fieldName, $serviceColor, $fecha, $horario, $duracion, $localidad);
+        $customerTitle = $subjectSuffix !== '' ? 'Tu reserva fue anulada' : 'Tu reserva fue registrada';
+        $customerSubtitle = $subjectSuffix !== '' ? 'La reserva fue anulada y el horario quedó liberado.' : 'Este es el detalle de tu reserva.';
+        $customerMessage = $this->bookingEmailHtml($booking, $fieldName, $serviceColor, $fecha, $horario, $duracion, $localidad, $customerTitle, $customerSubtitle);
 
         $caPath = ROOTPATH . 'cacert.pem';
         if (is_file($caPath)) {
@@ -699,8 +714,21 @@ class Bookings extends BaseController
         ]);
         $subjectName = trim((string)($booking['name'] ?? 'Cliente'));
         $subjectDate = $booking['date'] ? date('d/m/Y', strtotime($booking['date'])) : 'Sin fecha';
-        if (!$this->sendEmailWithFallback($toEmails, "Reserva: {$subjectName} - {$subjectDate}", $message)) {
+        $subjectRow = $configModel->where('clave', 'email_reservas_asunto')->first();
+        $subjectTemplate = trim((string) ($subjectRow['valor'] ?? '')) ?: 'Reserva: {cliente}';
+        $subject = strtr($subjectTemplate, [
+            '{cliente}' => $subjectName,
+            '{empresa}' => 'La Barca',
+            '{fecha}' => $subjectDate,
+        ]);
+        $subject .= $subjectSuffix;
+        if ($toEmails !== [] && !$this->sendEmailWithFallback($toEmails, $subject, $message)) {
             log_message('error', 'No se pudo enviar email de reserva #' . $bookingId . ' con ninguna cuenta SMTP configurada.');
+        }
+        $customerEmail = filter_var(trim((string) ($booking['email'] ?? '')), FILTER_VALIDATE_EMAIL);
+        $customerSubject = $subjectSuffix !== '' ? 'Tu reserva fue anulada - La Barca' : 'Tu reserva fue registrada - La Barca';
+        if ($customerEmail && !in_array($customerEmail, $toEmails, true) && !$this->sendEmailWithFallback([$customerEmail], $customerSubject, $customerMessage)) {
+            log_message('error', 'No se pudo enviar la confirmación al cliente de la reserva #' . $bookingId . '.');
         }
     }
 
@@ -743,6 +771,7 @@ class Bookings extends BaseController
         $reservationAmount = round((float) ($data->reservacion ?? 0), 2);
         $customerId = !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null;
         $customerOfferId = !empty($bookingQuote['customer_offer_id']) ? (int) $bookingQuote['customer_offer_id'] : null;
+        $bookingEmail = filter_var(trim((string) ($data->email ?? '')), FILTER_VALIDATE_EMAIL) ?: null;
 
         $queryBooking = [
             'date'                  => $data->fecha,
@@ -751,6 +780,7 @@ class Bookings extends BaseController
             'time_until'            => $this->normalizeTime($data->horarioHasta),
             'name'                  => $data->nombre,
             'phone'                 => $data->telefono,
+            'email'                 => $bookingEmail,
             'locality'              => $data->localidad ?? null,
             'id_customer'           => $customerId,
             'customer_offer_id'     => $customerOfferId,
@@ -780,6 +810,7 @@ class Bookings extends BaseController
         $queryCustomer = [
             'name'  => $data->nombre,
             'phone' => $data->telefono,
+            'email' => $bookingEmail,
             'offer' => 0,
             'city'  => $data->localidad ?? null,
         ];
@@ -796,6 +827,9 @@ class Bookings extends BaseController
                         'name' => $data->nombre,
                         'city' => $data->localidad ?? null,
                     ];
+                    if ($bookingEmail) {
+                        $updateCustomer['email'] = $bookingEmail;
+                    }
 
                     if ($data->oferta == 1) {
                         $updateCustomer['offer'] = 0;
@@ -1209,6 +1243,9 @@ class Bookings extends BaseController
                 ->set(['active' => 0, 'status' => 'cancelled'])
                 ->update();
             $this->logAdminAction('cancel_booking', 'booking', $idBooking, $oldBooking, ['annulled' => 1]);
+            if ($oldBooking) {
+                $this->sendBookingEmail($idBooking, ' - ANULADA');
+            }
 
             return  $this->response->setJSON($this->setResponse(null, null, null, 'Respuesta exitosa'));
         } catch (\Exception $e) {
@@ -1397,6 +1434,7 @@ class Bookings extends BaseController
             : null;
         $customerId = !empty($bookingQuote['customer']['id']) ? (int) $bookingQuote['customer']['id'] : null;
         $customerOfferId = !empty($bookingQuote['customer_offer_id']) ? (int) $bookingQuote['customer_offer_id'] : null;
+        $bookingEmail = filter_var(trim((string) ($data->email ?? '')), FILTER_VALIDATE_EMAIL) ?: null;
 
         $queryBooking = [
             'date'            => $data->fecha,
@@ -1405,6 +1443,7 @@ class Bookings extends BaseController
             'time_until'      => $this->normalizeTime($data->horarioHasta),
             'name'            => $data->nombre,
             'phone'           => $data->telefono,
+            'email'           => $bookingEmail,
             'locality'        => $data->localidad ?? null,
             'id_customer'     => $customerId,
             'customer_offer_id' => $customerOfferId,
@@ -1483,6 +1522,7 @@ class Bookings extends BaseController
                 $customerPayload = [
                     'name' => $data->nombre,
                     'phone' => $data->telefono,
+                    'email' => $bookingEmail,
                     'offer' => 0,
                     'city' => $data->localidad ?? null,
                 ];
@@ -1491,6 +1531,7 @@ class Bookings extends BaseController
                     $customersModel->update($existingCustomer['id'], [
                         'name' => $data->nombre,
                         'city' => $data->localidad ?? null,
+                        'email' => $bookingEmail ?: ($existingCustomer['email'] ?? null),
                     ]);
                 } else {
                     $customersModel->insert($customerPayload);

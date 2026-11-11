@@ -170,6 +170,7 @@ $routes->group('', ['filter' => 'auth'], function ($routes) {
     $routes->post('getCancelReservations', 'Superadmin::getCancelReservations');
     $routes->post('deleteCancelReservation', 'Superadmin::deleteCancelReservation');
     $routes->post('saveConfigGeneral', 'Superadmin::saveConfigGeneral');
+    $routes->post('updateDatabase', 'Superadmin::updateDatabase', ['filter' => 'csrf']);
     $routes->post('getAdminLogs', 'Superadmin::getAdminLogs');
     $routes->post('deleteUser/(:any)', 'Superadmin::deleteUser/$1');
 
