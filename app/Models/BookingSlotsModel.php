@@ -159,12 +159,11 @@ class BookingSlotsModel extends Model
             }
 
             // Reutilizar un registro huérfano evita chocar con instalaciones
-            // que tienen un índice único sobre fecha/cancha/horario/cliente.
+            // que tienen un índice único sobre fecha/cancha/horario/estado.
             $orphan = $this->where('date', $date)
                 ->where('id_field', $fieldId)
                 ->where('time_from', $slotData['time_from'])
                 ->where('time_until', $slotData['time_until'])
-                ->where('booking_id', null)
                 ->orderBy('id', 'ASC')
                 ->first();
 
@@ -173,10 +172,23 @@ class BookingSlotsModel extends Model
                     && !empty($orphan['expires_at'])
                     && strtotime($orphan['expires_at']) >= time();
 
-                if ($pendingIsActive) {
+                $bookingIsActive = false;
+                if (!empty($orphan['booking_id'])) {
+                    $booking = $this->db->table('bookings')
+                        ->select('id, annulled')
+                        ->where('id', (int) $orphan['booking_id'])
+                        ->get()
+                        ->getRowArray();
+                    $bookingIsActive = $booking && (int) ($booking['annulled'] ?? 0) !== 1;
+                }
+
+                if ($pendingIsActive || $bookingIsActive) {
                     return false;
                 }
 
+                // El booking_id anterior puede apuntar a una reserva borrada
+                // o anulada; dejarlo en NULL permite asignar el nuevo booking.
+                $slotData['booking_id'] = null;
                 $this->update((int) $orphan['id'], $slotData);
                 return (int) $orphan['id'];
             }
