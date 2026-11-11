@@ -124,10 +124,9 @@ class BookingSlotsModel extends Model
             }
 
             if (($slot['status'] ?? '') !== 'pending' && (empty($slot['booking_id']) || !$booking || (int) ($booking['annulled'] ?? 0) === 1)) {
-                $this->update((int) ($slot['id'] ?? 0), [
-                    'active' => 0,
-                    'status' => 'cancelled',
-                ]);
+                // No modificarlo durante esta consulta: algunas instalaciones
+                // tienen un índice único que también contempla los slots
+                // inactivos y la actualización puede provocar otro conflicto.
                 continue;
             }
 
@@ -157,6 +156,29 @@ class BookingSlotsModel extends Model
         try {
             if ($this->hasActiveOverlap($date, $fieldId, $slotData['time_from'], $slotData['time_until'], $ignoreBookingId)) {
                 return false;
+            }
+
+            // Reutilizar un registro huérfano evita chocar con instalaciones
+            // que tienen un índice único sobre fecha/cancha/horario/cliente.
+            $orphan = $this->where('date', $date)
+                ->where('id_field', $fieldId)
+                ->where('time_from', $slotData['time_from'])
+                ->where('time_until', $slotData['time_until'])
+                ->where('booking_id', null)
+                ->orderBy('id', 'ASC')
+                ->first();
+
+            if ($orphan) {
+                $pendingIsActive = ($orphan['status'] ?? '') === 'pending'
+                    && !empty($orphan['expires_at'])
+                    && strtotime($orphan['expires_at']) >= time();
+
+                if ($pendingIsActive) {
+                    return false;
+                }
+
+                $this->update((int) $orphan['id'], $slotData);
+                return (int) $orphan['id'];
             }
 
             try {
