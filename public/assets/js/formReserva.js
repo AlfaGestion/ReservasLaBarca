@@ -1070,6 +1070,11 @@ function getCurrentBlockMinutes() {
 
 function getCurrentSlotIntervalMinutes() {
     const selected = getFieldById(selectCancha?.value) || getFieldsByService(getSelectedServiceType())[0]
+    const duration = Number(selected?.duration_minutes || selected?.block_minutes || 0)
+    // La duración del turno puede ser de 90 minutos, pero los horarios se
+    // ofrecen cada media hora para que el cliente pueda elegir 18:00, 18:30,
+    // 19:00, etc. La hora de finalización se calcula con la duración real.
+    if (duration === 90) return 30
     if (selected?.slot_interval_minutes) return Number(selected.slot_interval_minutes)
     if (selected?.booking_interval_minutes) return Number(selected.booking_interval_minutes)
     return getCurrentBlockMinutes()
