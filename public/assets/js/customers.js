@@ -16,6 +16,8 @@ const customersNextPage = document.getElementById('customersNextPage')
 const exportCustomersButton = document.getElementById('exportCustomersButton')
 const customerSearchLabel = document.querySelector('label[for="searchCustomerInput"]')
 if (customerSearchLabel) customerSearchLabel.textContent = 'Buscar por nombre, DNI, teléfono o localidad'
+const customerSearchInput = document.getElementById('searchCustomerInput')
+const customerSearchButton = document.getElementById('searchCustomerButton')
 const customersState = {
     page: 1,
     totalPages: 1,
@@ -228,6 +230,12 @@ exportCustomersButton?.addEventListener('click', async () => {
         console.error('Error exportando clientes:', error)
         alert('No se pudo exportar el listado de clientes.')
     }
+})
+
+customerSearchInput?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    customerSearchButton?.click()
 })
 
 async function refreshCustomersList() {
