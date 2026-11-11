@@ -112,6 +112,16 @@ class BookingSlotsModel extends Model
         }
 
         foreach ($builder->findAll() as $slot) {
+            // Un slot confirmado sin reserva asociada quedó huérfano por un
+            // fallo durante el alta. No debe bloquear nuevas reservas.
+            if (empty($slot['booking_id']) && ($slot['status'] ?? '') !== 'pending') {
+                $this->update((int) ($slot['id'] ?? 0), [
+                    'active' => 0,
+                    'status' => 'cancelled',
+                ]);
+                continue;
+            }
+
             if ($this->rangesOverlap($timeFrom, $timeUntil, $slot['time_from'], $slot['time_until'])) {
                 return true;
             }
