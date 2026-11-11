@@ -770,7 +770,7 @@ class Bookings extends BaseController
             'id_preference_total'   => $data->preferenceIdTotal ?? '',
             'use_offer'             => $customerOfferId ? 1 : 0,
             'booking_time'          => date("Y-m-d H:i:s"),
-            'mp'                    => 0,
+            'mp'                    => $freeBooking ? 1 : 0,
             'annulled'              => 0, // Aseguramos que este nuevo registro no esté anulado
             'created_by_type'       => 'CLIENTE',
             'created_by_name'       => 'CLIENTE',
