@@ -1142,7 +1142,7 @@ function buildStartTimes(blockMinutes, stepMinutes = blockMinutes) {
             const start = timeToMinutes(window.start_time)
             const end = timeToMinutes(window.end_time)
             const windowDuration = Number(window.duration_minutes || field?.duration_minutes || blockMinutes)
-            const windowStep = Number(window.slot_interval_minutes || (windowDuration === 90 ? 30 : windowDuration))
+            const windowStep = Number(window.slot_interval_minutes || windowDuration)
             for (let current = start; current + windowDuration <= end; current += windowStep) {
                 values.push(minutesToTime(current))
             }
