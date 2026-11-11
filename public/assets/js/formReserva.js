@@ -550,14 +550,16 @@ document.addEventListener('click', async (e) => {
                     await saveBooking(data)
                     return
                 }
-                const mpReady = await setScriptMP(totalAmount)
-                if (!mpReady) {
-                    return
-                }
                 modalIngresarPago.show()
                 pagoReserva.value = formatPriceAR(totalAmount * rate / 100)
+                prepareMercadoPagoStartButton()
             }
 
+        } else if (e.target.id == 'startMercadoPagoButton') {
+            const button = e.target
+            button.disabled = true
+            button.textContent = 'Preparando tu reserva y el pago…'
+            await setScriptMP(getCurrentTotalAmount())
         } else if (e.target.id == 'confirmBooking') {
             const amount = document.getElementById('adminBookingAmount')
             const paymentMethod = document.getElementById('adminPaymentMethod')
@@ -779,6 +781,14 @@ async function saveAdminBooking(data) {
         console.error('Error:', error);
         throw error;
     }
+}
+
+function prepareMercadoPagoStartButton() {
+    resetMercadoPagoButtons()
+    const partialContainer = document.getElementById('checkout-btn-parcial')
+    if (!partialContainer) return
+    partialContainer.innerHTML = '<button type="button" class="btn btn-brand" id="startMercadoPagoButton">Pagar con Mercado Pago</button>'
+    partialContainer.style.display = 'block'
 }
 
 async function setScriptMP(amount) {
@@ -1253,9 +1263,11 @@ async function cancelPendingMpReservation() {
         }
 
         const hasIdentifiers = cancelPayload.bookingId || cancelPayload.preferenceIdParcial || cancelPayload.preferenceIdTotal
-        const hasSlotData = cancelPayload.fecha && cancelPayload.cancha && cancelPayload.horarioDesde && cancelPayload.horarioHasta
-        if (!hasIdentifiers && !hasSlotData) {
-            return false
+        // Antes de iniciar Mercado Pago todavía no existe una reserva del
+        // circuito público. Volver en ese punto solo debe cerrar el modal;
+        // nunca cancelar otra reserva usando únicamente fecha y horario.
+        if (!hasIdentifiers) {
+            return true
         }
 
         const response = await fetch(`${baseUrl}cancelPendingMpReservation`, {
