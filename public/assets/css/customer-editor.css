@@ -23,9 +23,31 @@ body.customer-editor-page.customer-editor-frame footer {
     display: none !important;
 }
 
+/* El panel principal ya tiene su propio selector de tema; no duplicarlo dentro del frame. */
+body.customer-editor-page.customer-editor-frame .theme-toggle-global {
+    display: none !important;
+}
+
 body.customer-editor-page.customer-editor-frame .customer-editor-wrap {
     width: 100%;
     padding: 12px 10px 16px;
+}
+
+/* El modal del panel ya tiene título; el contenido embebido no debe repetirlo. */
+body.customer-editor-page.customer-editor-frame .customer-editor-header {
+    display: none;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-editor-shell {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-editor-body {
+    padding: 0;
 }
 
 body.customer-editor-page .customer-editor-shell {
@@ -136,6 +158,161 @@ body.customer-editor-page .customer-editor-note {
 
 body.customer-editor-page .customer-editor-body {
     padding: 28px;
+}
+body.customer-editor-page .customer-editor-form {
+    display: flex;
+    flex-direction: column;
+}
+body.customer-editor-page .customer-editor-form .customer-editor-actions {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    order: -2;
+    padding: 0 0 12px;
+    margin: 0 0 16px;
+    border-bottom: 1px solid rgba(18, 57, 95, 0.14);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(10px);
+}
+body.customer-editor-page .customer-editor-form > [id$="Feedback"] {
+    position: sticky;
+    top: 62px;
+    z-index: 19;
+    order: -1;
+    margin-bottom: 16px;
+}
+body.customer-editor-page .customer-editor-form > [id$="Feedback"]:empty {
+    display: none;
+}
+
+/* Dentro del modal del panel, el encabezado externo ya identifica la acción. */
+body.customer-editor-page.customer-editor-admin .customer-editor-wrap {
+    width: 100%;
+    padding: 0;
+}
+
+body.customer-editor-page.customer-editor-admin .customer-editor-shell {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+body.customer-editor-page.customer-editor-admin .customer-editor-header {
+    display: none;
+}
+
+body.customer-editor-page.customer-editor-admin .customer-editor-body {
+    padding: 0;
+}
+
+body.customer-editor-page.customer-editor-admin .customer-editor-card {
+    margin-bottom: 16px;
+    border-radius: 14px;
+    box-shadow: none;
+}
+
+/* En frames se conserva el logo, pero se evita repetir el título y la bajada del modal. */
+body.customer-editor-page.customer-editor-frame .customer-editor-header,
+body.customer-editor-page.customer-editor-admin.customer-editor-frame .customer-editor-header {
+    display: flex;
+    justify-content: flex-start;
+    padding: 16px 22px;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-editor-header__brand > div,
+body.customer-editor-page.customer-editor-frame .customer-editor-header__meta {
+    display: none;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-editor-header__brand {
+    gap: 0;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-editor-logo img {
+    width: min(170px, 42vw);
+}
+
+body.customer-editor-page.customer-editor-frame .customer-editor-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: rgba(255, 255, 255, 0.98);
+    border-bottom: 1px solid rgba(18, 57, 95, 0.14);
+    box-shadow: 0 8px 18px rgba(16, 52, 90, 0.08);
+}
+
+body.customer-editor-page.customer-editor-frame .customer-frame-copy {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-frame-copy strong {
+    color: #243447;
+    font-size: 1.1rem;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-frame-copy span {
+    color: #68798a;
+    font-size: 0.9rem;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-frame-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+body.customer-editor-page.customer-editor-frame .customer-frame-feedback {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin: 0;
+}
+
+body.theme-dark.customer-editor-page.customer-editor-frame .customer-frame-copy strong {
+    color: #eff7ff;
+}
+
+body.theme-dark.customer-editor-page.customer-editor-frame .customer-frame-copy span {
+    color: #b1c6db;
+}
+
+body.theme-dark.customer-editor-page.customer-editor-frame .customer-editor-header {
+    background: rgba(16, 33, 52, 0.98);
+    border-bottom-color: rgba(177, 212, 240, 0.14);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+/* El encabezado administrativo ocupa menos espacio que el registro público. */
+body.customer-editor-page.customer-editor-admin.customer-editor-frame .customer-editor-header {
+    gap: 10px;
+    padding: 9px 14px;
+}
+
+body.customer-editor-page.customer-editor-admin.customer-editor-frame .customer-editor-logo img {
+    width: min(120px, 28vw);
+}
+
+body.customer-editor-page.customer-editor-admin.customer-editor-frame .customer-frame-copy strong {
+    font-size: 0.96rem;
+}
+
+body.customer-editor-page.customer-editor-admin.customer-editor-frame .customer-frame-copy span {
+    font-size: 0.78rem;
+}
+
+body.customer-editor-page.customer-editor-admin.customer-editor-frame .customer-frame-actions .customer-editor-btn {
+    min-height: 38px;
+    padding: 0.5rem 0.8rem;
+    border-radius: 10px;
+    font-size: 0.86rem;
 }
 
 body.customer-editor-page .customer-editor-card {
@@ -558,6 +735,11 @@ body.theme-dark.customer-editor-page .customer-editor-shell {
     border-color: rgba(177, 212, 240, 0.18);
     background: rgba(16, 33, 52, 0.96);
     box-shadow: 0 26px 60px rgba(0, 0, 0, 0.45);
+}
+
+body.theme-dark.customer-editor-page .customer-editor-form .customer-editor-actions {
+    background: rgba(16, 33, 52, 0.96);
+    border-bottom-color: rgba(177, 212, 240, 0.14);
 }
 
 body.theme-dark.customer-editor-page .customer-editor-header {

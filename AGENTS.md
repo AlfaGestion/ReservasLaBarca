@@ -20,3 +20,4 @@
 - Antes de finalizar cualquier tarea visual se deben comprobar ambos temas, al menos un celular, una tablet y un escritorio. Si no es posible abrir el navegador, debe documentarse la limitación.
 - No se considera terminado un desarrollo visual que solamente funcione en un tema o resolución.
 - La referencia visual y los tokens obligatorios están definidos en `docs/PLAYER_PORTAL_DESIGN_SYSTEM.md`; el procedimiento de validación está en `docs/PLAYER_PORTAL_VISUAL_QA.md`.
+- En formularios largos dentro de modales o frames, los mensajes de validacion, error, carga y exito deben mostrarse arriba y permanecer fijos durante el desplazamiento. Las acciones principales (Guardar, Confirmar, Cancelar) deben quedar tambien en una barra superior fija y visible.

@@ -52,6 +52,7 @@ $routes->group('app', function ($routes) {
         $routes->post('reservas/cotizar', 'PlayerBookings::quote', ['filter' => 'csrf']);
         $routes->post('reservas/crear', 'MercadoPago::setPreference', ['filter' => 'csrf']);
         $routes->get('reservas/detalle/(:num)', 'PlayerBookings::detail/$1');
+        $routes->get('reservas/detalle/(:num)/descargar', 'PlayerBookings::downloadPdf/$1');
         $routes->get('partidos', 'PlayerMatches::index');
         $routes->get('partidos/crear', 'PlayerMatches::create');
         $routes->get('partidos/detalle/(:num)', 'PlayerMatches::detail/$1');
@@ -67,6 +68,8 @@ $routes->group('app', function ($routes) {
         $routes->post('partidos/(:num)/(:alpha)', 'PlayerMatches::close/$1/$2', ['filter' => 'csrf']);
         $routes->post('partidos/(:num)/retirarse', 'PlayerMatches::leave/$1', ['filter' => 'csrf']);
     });
+    // Enlace público firmado para compartir el PDF del organizador.
+    $routes->get('reservas/compartir/(:num)/(:segment)', 'PlayerBookings::sharedPdf/$1/$2');
 });
 $routes->post('formInfo', 'Home::infoReserva');
 $routes->post('checkClosure', 'Home::checkClosure');
@@ -168,6 +171,12 @@ $routes->group('', ['filter' => 'auth'], function ($routes) {
     $routes->post('saveConfigGeneral', 'Superadmin::saveConfigGeneral');
     $routes->post('getAdminLogs', 'Superadmin::getAdminLogs');
     $routes->post('deleteUser/(:any)', 'Superadmin::deleteUser/$1');
+
+    // Rutas exclusivas del administrador para cargar y editar clientes.
+    $routes->get('admin/clientes/nuevo', 'Customers::adminRegisterWindow');
+    $routes->post('admin/clientes/nuevo', 'Customers::adminRegisterAjax');
+    $routes->get('admin/clientes/(:num)/editar', 'Customers::adminEditWindow/$1');
+    $routes->post('admin/clientes/(:num)/editar', 'Customers::adminEditAjax/$1');
 
     $routes->post('saveTime', 'Time::saveTime');
     $routes->get('getTime', 'Time::getTime');

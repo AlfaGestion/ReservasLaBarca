@@ -29,6 +29,7 @@
         alert.appendChild(small)
         alert.appendChild(closeButton)
         feedbackBox.appendChild(alert)
+        feedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
 
     async function handleSubmit(event) {

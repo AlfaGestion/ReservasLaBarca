@@ -1,9 +1,12 @@
 <div id="generalButtons" class="mt-3">
-    <button type="button" class="btn btn-success mt-2 mb-2 js-open-customer-register" data-register-url="<?= base_url('customers/registerWindow') ?>">
-        <i class="fa-solid fa-user-plus me-1"></i>Ingresar cliente
+    <button type="button" class="btn btn-success mt-2 mb-2 js-open-customer-register" data-register-url="<?= base_url('admin/clientes/nuevo') ?>">
+        <i class="fa-solid fa-user-plus me-1"></i>Nuevo cliente
     </button>
     <button type="button" id="setOfferTrue" class="btn btn-warning mt-2 mb-2" id=""><i class="fa-solid fa-tags me-1"></i>Oferta global legacy</button>
     <button type="button" id="setOfferFalse" class="btn btn-danger mt-2 mb-2" id=""><i class="fa-solid fa-tag me-1"></i>Quitar legacy</button>
+    <button type="button" class="btn btn-success mt-2 mb-2" id="exportCustomersButton">
+        <i class="fa-solid fa-file-excel me-1"></i>Exportar Excel
+    </button>
 
 
     <div class="form-check form-switch mt-3">
@@ -13,7 +16,7 @@
 
     <div class="d-flex justify-content-center align-items-center flex-row">
         <div class="form-floating mb-3">
-            <input type="search" class="form-control" id="searchCustomerInput" placeholder="">
+            <input type="search" class="form-control" id="searchCustomerInput" placeholder="Nombre, DNI, teléfono o localidad" aria-label="Buscar por nombre, DNI, teléfono o localidad">
             <label for="searchCustomerInput">Télefono</label>
         </div>
         <button class="btn btn-primary ms-2" id="searchCustomerButton">Buscar</button>
@@ -21,12 +24,19 @@
 
 </div>
 
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3" id="customersPagination" aria-live="polite">
+    <small class="text-muted" id="customersPaginationSummary"></small>
+    <div class="btn-group" role="group" aria-label="Paginación de clientes">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="customersPreviousPage">Anterior</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="customersNextPage">Siguiente</button>
+    </div>
+</div>
+
 <div class="table-responsive-sm" id="tableCustomers">
     <table class="table align-middle table-striped-columns mt-2">
         <thead>
             <tr>
                 <th scope="col">Nombre</th>
-                <th scope="col">Apellido</th>
                 <th scope="col">DNI</th>
                 <th scope="col">Teléfono</th>
                 <th scope="col">Localidad</th>
@@ -46,9 +56,11 @@
     .customer-edit-modal .modal-dialog {
         width: min(96vw, 1120px);
         max-width: none;
+        max-height: 94vh;
     }
 
     .customer-edit-modal .modal-content {
+        max-height: 94vh;
         overflow: hidden;
         border: 1px solid #d8e6f4;
         border-radius: 16px;
@@ -69,7 +81,10 @@
     }
 
     .customer-edit-modal .modal-body {
+        min-height: 0;
+        overflow: hidden;
         background: #f8fbff;
+        padding: 0;
     }
 
     .customer-edit-frame {
@@ -110,7 +125,7 @@
 </style>
 
 <div class="modal fade customer-edit-modal" id="customerEditModal" tabindex="-1" aria-labelledby="customerEditModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="customerEditModalLabel">Editar cliente</h5>

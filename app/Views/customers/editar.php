@@ -46,15 +46,17 @@ $customerOfferEditorVersion = is_file($customerOfferEditorPath) ? filemtime($cus
 $customerOfferCssPath = FCPATH . 'assets/css/customer-editor.css';
 $customerOfferCssVersion = is_file($customerOfferCssPath) ? filemtime($customerOfferCssPath) : time();
 $embedded = ! empty($embedded);
+$adminMode = ! empty($adminMode);
+$newCustomer = ! empty($newCustomer);
 ?>
 <?php echo $this->extend('templates/dashboard_panel') ?>
 
 <?php echo $this->section('title') ?>
-<title>Editar cliente</title>
+<title><?= $newCustomer ? 'Nuevo cliente' : ($adminMode ? 'Editar cliente desde administración' : 'Editar cliente') ?></title>
 <?php echo $this->endSection() ?>
 
 <?php echo $this->section('bodyClass') ?>
-customer-editor-page<?= $embedded ? ' customer-editor-frame' : '' ?>
+customer-editor-page<?= $embedded ? ' customer-editor-frame' : '' ?><?= $adminMode ? ' customer-editor-admin' : '' ?>
 <?php echo $this->endSection() ?>
 
 <?php echo $this->section('styles') ?>
@@ -71,7 +73,7 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame' : '' ?>
                 </a>
                 <div>
                     <p class="customer-editor-kicker">Administración de clientes</p>
-                    <h1 class="customer-editor-title">Editar cliente</h1>
+                    <h1 class="customer-editor-title"><?= $newCustomer ? 'Nuevo cliente' : 'Editar cliente' ?></h1>
                     <p class="customer-editor-subtitle">
                         Editá los datos del cliente y su oferta personalizada sin salir del panel. La navegación del admin se mantiene visible arriba y abajo.
                     </p>
@@ -85,10 +87,25 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame' : '' ?>
                     Esta configuración se guarda por cliente y se aplica después en reservas y Mercado Pago.
                 </p>
             </div>
+            <?php if ($embedded) : ?>
+            <div class="customer-frame-copy">
+                <strong><?= $newCustomer ? 'Nuevo cliente' : 'Editar cliente' ?></strong>
+                <span>Completá los datos y configurá las opciones antes de guardar.</span>
+            </div>
+            <div class="customer-frame-actions">
+                <?php if ($embedded) : ?>
+                    <button type="button" class="customer-editor-btn customer-editor-btn--secondary" id="customerEditorCloseFrameHeader">Volver al panel</button>
+                <?php else : ?>
+                    <a href="<?= base_url('abmAdmin') ?>" class="customer-editor-btn customer-editor-btn--secondary">Volver al panel</a>
+                <?php endif; ?>
+                <button type="submit" form="customerOfferForm" class="customer-editor-btn customer-editor-btn--primary"><?= $newCustomer ? 'Guardar cliente' : 'Guardar' ?></button>
+            </div>
+            <div id="customerOfferFeedback" class="customer-frame-feedback"></div>
+            <?php endif; ?>
         </header>
 
         <main class="customer-editor-body">
-            <form action="<?= base_url($embedded ? 'customers/editCustomerAjax' : 'customers/editCustomer') ?>" method="POST" id="customerOfferForm">
+            <form action="<?= base_url($newCustomer ? 'admin/clientes/nuevo' : ($adminMode ? 'admin/clientes/' . (int) ($customer['id'] ?? 0) . '/editar' : ($embedded ? 'customers/editCustomerAjax' : 'customers/editCustomer'))) ?>" method="POST" id="customerOfferForm" class="customer-editor-form">
                 <?php if (session('msg')) : ?>
                     <div class="alert alert-<?= session('msg.type') ?> alert-dismissible fade show" role="alert">
                         <small><?= esc(session('msg.body')) ?></small>
@@ -96,7 +113,6 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame' : '' ?>
                     </div>
                 <?php endif; ?>
 
-                <div id="customerOfferFeedback" class="mb-3"></div>
                 <input type="hidden" value="<?= esc((string) ($customer['id'] ?? '')) ?>" name="idCustomer">
                 <input type="hidden" id="customer_offer_fields_json" name="customer_offer_fields_json" value="<?= esc(json_encode($selectedFieldIds, JSON_UNESCAPED_UNICODE)) ?>">
                 <input type="hidden" id="customer_offer_services_json" name="customer_offer_services_json" value="<?= esc(json_encode($selectedServiceCodes, JSON_UNESCAPED_UNICODE)) ?>">
@@ -110,14 +126,21 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame' : '' ?>
                     </div>
                     <div class="customer-editor-card__body">
                         <div class="customer-editor-grid customer-editor-grid--client">
-                            <div class="customer-editor-field">
-                                <label for="customer_name">Nombre</label>
-                                <input type="text" id="customer_name" name="name" class="form-control" placeholder="Nombre" value="<?= esc((string) ($customer['name'] ?? '')) ?>">
-                            </div>
-                            <div class="customer-editor-field">
-                                <label for="customer_last_name">Apellido</label>
-                                <input type="text" id="customer_last_name" name="last_name" class="form-control" placeholder="Apellido" value="<?= esc((string) ($customer['last_name'] ?? '')) ?>">
-                            </div>
+                            <?php if ($adminMode) : ?>
+                                <div class="customer-editor-field">
+                                    <label for="customer_full_name">Nombre y apellido</label>
+                                    <input type="text" id="customer_full_name" name="full_name" class="form-control" placeholder="Nombre y apellido" value="<?= esc(trim((string) ($customer['name'] ?? '') . ' ' . (string) ($customer['last_name'] ?? ''))) ?>">
+                                </div>
+                            <?php else : ?>
+                                <div class="customer-editor-field">
+                                    <label for="customer_name">Nombre</label>
+                                    <input type="text" id="customer_name" name="name" class="form-control" placeholder="Nombre" value="<?= esc((string) ($customer['name'] ?? '')) ?>">
+                                </div>
+                                <div class="customer-editor-field">
+                                    <label for="customer_last_name">Apellido</label>
+                                    <input type="text" id="customer_last_name" name="last_name" class="form-control" placeholder="Apellido" value="<?= esc((string) ($customer['last_name'] ?? '')) ?>">
+                                </div>
+                            <?php endif; ?>
                             <div class="customer-editor-field">
                                 <label for="customer_dni">DNI</label>
                                 <input type="text" id="customer_dni" name="dni" class="form-control" placeholder="DNI" value="<?= esc((string) ($customer['dni'] ?? '')) ?>">
@@ -254,10 +277,6 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame' : '' ?>
                     </div>
                 </section>
 
-                <div class="customer-editor-actions">
-                    <a href="<?= base_url('abmAdmin') ?>" class="customer-editor-btn customer-editor-btn--secondary">Volver al panel</a>
-                    <button type="submit" class="customer-editor-btn customer-editor-btn--primary">Guardar</button>
-                </div>
             </form>
         </main>
     </div>

@@ -1,5 +1,6 @@
 <?php
 $embedded = ! empty($embedded);
+$adminMode = ! empty($adminMode);
 $customerRegisterEditorPath = FCPATH . 'assets/js/customerRegisterEditor.js';
 $customerRegisterEditorVersion = is_file($customerRegisterEditorPath) ? filemtime($customerRegisterEditorPath) : time();
 $customerRegisterCssPath = FCPATH . 'assets/css/customer-editor.css';
@@ -8,11 +9,11 @@ $customerRegisterCssVersion = is_file($customerRegisterCssPath) ? filemtime($cus
 <?php echo $this->extend('templates/dashboard_panel') ?>
 
 <?php echo $this->section('title') ?>
-<title>Ingresar cliente</title>
+<title><?= $adminMode ? 'Ingresar cliente desde administración' : 'Ingresar cliente' ?></title>
 <?php echo $this->endSection() ?>
 
 <?php echo $this->section('bodyClass') ?>
-customer-editor-page<?= $embedded ? ' customer-editor-frame customer-register-frame' : '' ?>
+customer-editor-page<?= $embedded ? ' customer-editor-frame customer-register-frame' : '' ?><?= $adminMode ? ' customer-editor-admin' : '' ?>
 <?php echo $this->endSection() ?>
 
 <?php echo $this->section('styles') ?>
@@ -29,7 +30,7 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame customer-register-fr
                 </a>
                 <div>
                     <p class="customer-editor-kicker">Administracion de clientes</p>
-                    <h1 class="customer-editor-title">Ingresar cliente</h1>
+                    <h1 class="customer-editor-title"><?= $adminMode ? 'Nuevo cliente' : 'Ingresar cliente' ?></h1>
                     <p class="customer-editor-subtitle">
                         Cargá un nuevo cliente sin salir del panel. El alta se procesa en segundo plano y la grilla se refresca al instante.
                     </p>
@@ -37,18 +38,26 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame customer-register-fr
             </div>
             <div class="customer-editor-header__meta">
                 <span class="customer-status-badge customer-status-badge--secondary" id="customerRegisterStatusBadge">
-                    Nuevo registro
+                    <?= $adminMode ? 'Nuevo cliente' : 'Nuevo registro' ?>
                 </span>
                 <p class="customer-editor-note">
                     El formulario mantiene el mismo estilo del panel y se adapta al modo oscuro.
                 </p>
             </div>
+            <?php if ($embedded) : ?>
+            <div class="customer-frame-copy">
+                <strong><?= $adminMode ? 'Nuevo cliente' : 'Registro de clientes' ?></strong>
+                <span>Completá los datos para cargar el cliente.</span>
+            </div>
+            <div class="customer-frame-actions">
+                <button type="submit" form="customerRegisterForm" class="customer-editor-btn customer-editor-btn--primary"><?= $adminMode ? 'Guardar cliente' : 'Registrar' ?></button>
+            </div>
+            <div id="customerRegisterFeedback" class="customer-frame-feedback"></div>
+            <?php endif; ?>
         </header>
 
         <main class="customer-editor-body">
-            <form action="<?= base_url($embedded ? 'customers/registerAjax' : 'customers/register') ?>" method="POST" id="customerRegisterForm">
-                <div id="customerRegisterFeedback" class="mb-3"></div>
-
+            <form action="<?= base_url($adminMode ? 'admin/clientes/nuevo' : ($embedded ? 'customers/registerAjax' : 'customers/register')) ?>" method="POST" id="customerRegisterForm" class="customer-editor-form">
                 <section class="customer-editor-card">
                     <div class="customer-editor-card__header">
                         <div>
@@ -90,9 +99,6 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame customer-register-fr
                     </div>
                 </section>
 
-                <div class="customer-editor-actions">
-                    <button type="submit" class="customer-editor-btn customer-editor-btn--primary">Registrar</button>
-                </div>
             </form>
         </main>
     </div>

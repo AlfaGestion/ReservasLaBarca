@@ -27,6 +27,13 @@
     const valueInput = document.getElementById('customer_offer_value')
     const expirationInput = document.getElementById('customer_offer_expiration_date')
     const submitButton = form.querySelector('button[type="submit"]')
+    const closeFrameButtons = document.querySelectorAll('#customerEditorCloseFrame, #customerEditorCloseFrameHeader')
+
+    closeFrameButtons.forEach((closeFrameButton) => closeFrameButton.addEventListener('click', () => {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'customer-frame-close' }, window.location.origin)
+        }
+    }))
 
     function showFeedback(type, message) {
         if (!feedbackBox) return
@@ -49,6 +56,7 @@
         alert.appendChild(small)
         alert.appendChild(closeButton)
         feedbackBox.appendChild(alert)
+        feedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
 
     function parseNumber(value) {

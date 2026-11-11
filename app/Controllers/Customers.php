@@ -103,7 +103,7 @@ class Customers extends BaseController
         return $customer;
     }
 
-    private function getDistinctCustomers(?int $limit = null, ?int $offer = null): array
+    private function getDistinctCustomers(?int $limit = null, ?int $offer = null, int $offset = 0, string $search = ''): array
     {
         $db = \Config\Database::connect();
 
@@ -117,7 +117,23 @@ class Customers extends BaseController
             ->join("($latestIdsSql) latest", 'latest.id = c.id', 'inner')
             ->orderBy('c.id', 'DESC');
 
-        if ($limit !== null && $limit > 0) {
+        $search = trim($search);
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('c.name', $search)
+                ->orLike('c.last_name', $search)
+                ->orLike('c.dni', $search)
+                ->orLike('c.phone', $search)
+                ->orLike('c.city', $search)
+                ->orLike('c.quantity', $search)
+                ->orLike('c.offer', $search)
+                ->groupEnd();
+        }
+
+        if ($limit !== null && $limit > 0 && $offer === null) {
+            if ($offset > 0) {
+                $builder->offset($offset);
+            }
             $builder->limit($limit);
         }
 
@@ -131,15 +147,55 @@ class Customers extends BaseController
 
         if ($offer !== null) {
             $customers = array_values(array_filter($customers, static fn (array $customer) => (int) ($customer['offer'] ?? 0) === $offer));
+            if ($limit !== null && $limit > 0) {
+                $customers = array_slice($customers, $offset, $limit);
+            }
         }
 
         return $customers;
+    }
+
+    private function countDistinctCustomers(string $search = '', ?int $offer = null): int
+    {
+        $db = \Config\Database::connect();
+        $latestIdsSql = $db->table('customers')
+            ->select('MAX(id) AS id')
+            ->groupBy('phone')
+            ->getCompiledSelect();
+
+        $builder = $db->table('customers c')
+            ->join("($latestIdsSql) latest", 'latest.id = c.id', 'inner');
+
+        $search = trim($search);
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('c.name', $search)
+                ->orLike('c.last_name', $search)
+                ->orLike('c.dni', $search)
+                ->orLike('c.phone', $search)
+                ->orLike('c.city', $search)
+                ->orLike('c.quantity', $search)
+                ->orLike('c.offer', $search)
+                ->groupEnd();
+        }
+
+        $customers = $builder->select('c.*')->get()->getResultArray();
+        if ($offer === null) {
+            return count($customers);
+        }
+
+        $offerService = $this->getCustomerOfferService();
+        return count(array_filter($customers, function (array $customer) use ($offerService, $offer): bool {
+            $enriched = $this->enrichCustomerWithOffer($customer, $offerService);
+            return (int) ($enriched['offer'] ?? 0) === $offer;
+        }));
     }
 
     public function register()
     {
         return view('customers/register_window', [
             'embedded' => false,
+            'adminMode' => false,
             'suppressPublicRegisterModal' => true,
         ]);
     }
@@ -150,8 +206,14 @@ class Customers extends BaseController
 
         return view('customers/register_window', [
             'embedded' => $embedded,
+            'adminMode' => false,
             'suppressPublicRegisterModal' => true,
         ]);
+    }
+
+    public function adminRegisterWindow()
+    {
+        return $this->renderEditWindow(null, true, true);
     }
 
     private function handleRegisterSubmission(bool $asJson = false)
@@ -163,6 +225,12 @@ class Customers extends BaseController
         $phone = $this->getCustomerOfferService()->normalizePhone($areaCode . $phoneInput);
         $name = trim((string) $this->request->getVar('name'));
         $lastName = trim((string) $this->request->getVar('last_name'));
+        $fullName = trim((string) $this->request->getVar('full_name'));
+        if ($fullName !== '') {
+            $nameParts = preg_split('/\s+/', $fullName, 2);
+            $name = trim((string) ($nameParts[0] ?? ''));
+            $lastName = trim((string) ($nameParts[1] ?? ''));
+        }
         $dni = trim((string) $this->request->getVar('dni'));
         $city = trim((string) $this->request->getVar('city'));
 
@@ -230,6 +298,75 @@ class Customers extends BaseController
         return $this->handleRegisterSubmission(true);
     }
 
+    public function adminRegisterAjax()
+    {
+        $modelCustomers = new CustomersModel();
+        $areaCode = trim((string) $this->request->getVar('areaCode'));
+        $phoneInput = trim((string) $this->request->getVar('phone'));
+        $phone = $this->getCustomerOfferService()->normalizePhone($areaCode . $phoneInput);
+        $name = trim((string) $this->request->getVar('name'));
+        $lastName = trim((string) $this->request->getVar('last_name'));
+        $fullName = trim((string) $this->request->getVar('full_name'));
+        if ($fullName !== '') {
+            $nameParts = preg_split('/\s+/', $fullName, 2);
+            $name = trim((string) ($nameParts[0] ?? ''));
+            $lastName = trim((string) ($nameParts[1] ?? ''));
+        }
+        $dni = trim((string) $this->request->getVar('dni'));
+        $city = trim((string) $this->request->getVar('city'));
+
+        if ($phone === '' || $name === '' || $lastName === '' || $dni === '') {
+            return $this->response->setStatusCode(422)->setJSON([
+                'error' => true,
+                'code' => 422,
+                'data' => null,
+                'message' => 'Debe completar todos los campos obligatorios',
+            ]);
+        }
+
+        $this->ensureLocalityExists($city);
+
+        if ($this->findCustomerByPhoneVariants($phone)) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'error' => true,
+                'code' => 422,
+                'data' => null,
+                'message' => 'El teléfono coincide con un cliente ya registrado',
+            ]);
+        }
+
+        try {
+            $modelCustomers->insert([
+                'name' => $name,
+                'last_name' => $lastName,
+                'dni' => $dni,
+                'phone' => $phone,
+                'offer' => 0,
+                'city' => $city,
+            ]);
+            $customerId = (int) $modelCustomers->getInsertID();
+
+            // Reutiliza toda la validación y persistencia de ofertas de la edición.
+            $postData = $this->request->getPost();
+            $postData['idCustomer'] = $customerId;
+            $postData['phone'] = $phone;
+            $this->request->setGlobal('post', $postData);
+
+            $result = $this->editAjax();
+            if ($result->getStatusCode() >= 400) {
+                $modelCustomers->delete($customerId);
+            }
+            return $result;
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'error' => true,
+                'code' => 500,
+                'data' => null,
+                'message' => 'No se pudo guardar el cliente',
+            ]);
+        }
+    }
+
     public function createOffer()
     {
         return view('customers/createOffer');
@@ -249,9 +386,20 @@ class Customers extends BaseController
 
     public function editWindow($id)
     {
+        return $this->renderEditWindow($id, false);
+    }
+
+    public function adminEditWindow($id)
+    {
+        return $this->renderEditWindow($id, true);
+    }
+
+    private function renderEditWindow($id, bool $adminMode = false, bool $newCustomer = false)
+    {
         $customersModel = new CustomersModel();
         $customer = $customersModel->find($id);
         $customer = $customer ? $this->enrichCustomerWithOffer($customer, $this->getCustomerOfferService()) : null;
+        $customer = $customer ?: [];
         $embedded = filter_var($this->request->getGet('iframe'), FILTER_VALIDATE_BOOLEAN);
 
         $fieldsModel = new FieldsModel();
@@ -264,6 +412,8 @@ class Customers extends BaseController
             'services' => $servicesModel->getServices(),
             'customerOffer' => $customer['customer_offer'] ?? null,
             'embedded' => $embedded,
+            'adminMode' => $adminMode,
+            'newCustomer' => $newCustomer,
             'suppressPublicRegisterModal' => true,
         ]);
     }
@@ -283,6 +433,12 @@ class Customers extends BaseController
         $phone = trim((string) $this->request->getVar('phone'));
         $name = trim((string) $this->request->getVar('name'));
         $lastName = trim((string) $this->request->getVar('last_name'));
+        $fullName = trim((string) $this->request->getVar('full_name'));
+        if ($fullName !== '') {
+            $nameParts = preg_split('/\s+/', $fullName, 2);
+            $name = trim((string) ($nameParts[0] ?? ''));
+            $lastName = trim((string) ($nameParts[1] ?? ''));
+        }
         $dni = trim((string) $this->request->getVar('dni'));
         $city = trim((string) $this->request->getVar('city'));
         $activeSwitch = $this->request->getVar('customer_offer_active') ? 1 : 0;
@@ -431,6 +587,11 @@ class Customers extends BaseController
         }
     }
 
+    public function adminEditAjax($id = null)
+    {
+        return $this->editAjax();
+    }
+
     public function editAjax()
     {
         $customersModel = new CustomersModel();
@@ -446,6 +607,12 @@ class Customers extends BaseController
         $phone = trim((string) $this->request->getVar('phone'));
         $name = trim((string) $this->request->getVar('name'));
         $lastName = trim((string) $this->request->getVar('last_name'));
+        $fullName = trim((string) $this->request->getVar('full_name'));
+        if ($fullName !== '') {
+            $nameParts = preg_split('/\s+/', $fullName, 2);
+            $name = trim((string) ($nameParts[0] ?? ''));
+            $lastName = trim((string) ($nameParts[1] ?? ''));
+        }
         $dni = trim((string) $this->request->getVar('dni'));
         $city = trim((string) $this->request->getVar('city'));
         $activeSwitch = $this->request->getVar('customer_offer_active') ? 1 : 0;
@@ -598,7 +765,7 @@ class Customers extends BaseController
                 'data' => [
                     'customer_id' => $id,
                 ],
-                'message' => 'Cliente editado exitosamente',
+                'message' => 'Cliente guardado exitosamente',
             ]);
         } catch (\Throwable $e) {
             if ($db->transStatus() === false) {
@@ -667,17 +834,32 @@ class Customers extends BaseController
 
     public function getCustomers()
     {
-        $limitParam = $this->request->getGet('limit');
-        $limit = is_numeric($limitParam) ? (int) $limitParam : 0;
-        if ($limit > 0) {
-            $limit = min($limit, 200);
-            $customers = $this->getDistinctCustomers($limit);
-        } else {
-            $customers = $this->getDistinctCustomers();
+        $search = trim((string) $this->request->getGet('search'));
+        $export = filter_var($this->request->getGet('export'), FILTER_VALIDATE_BOOLEAN);
+        $offer = $this->request->getGet('offer') === '1' ? 1 : null;
+        $perPage = $export ? 10000 : max(1, min(100, (int) ($this->request->getGet('per_page') ?: 25)));
+        $page = max(1, (int) ($this->request->getGet('page') ?: 1));
+        $offset = $export ? 0 : ($page - 1) * $perPage;
+        $total = $this->countDistinctCustomers($search, $offer);
+        $customers = $this->getDistinctCustomers($perPage, $offer, $offset, $search);
+
+        if ($export) {
+            return $this->response->setJSON($this->setResponse(null, null, $customers, 'Respuesta exitosa'));
         }
 
         try {
-            return $this->response->setJSON($this->setResponse(null, null, $customers, 'Respuesta exitosa'));
+            return $this->response->setJSON([
+                'error' => false,
+                'code' => null,
+                'data' => $customers,
+                'message' => 'Respuesta exitosa',
+                'pagination' => [
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                    'total_pages' => max(1, (int) ceil($total / $perPage)),
+                ],
+            ]);
         } catch (\Exception $e) {
             return $this->response->setJSON($this->setResponse(404, true, null, $e->getMessage()));
         }
@@ -685,10 +867,30 @@ class Customers extends BaseController
 
     public function getCustomersWithOffer()
     {
-        $customers = $this->getDistinctCustomers(null, 1);
+        $export = filter_var($this->request->getGet('export'), FILTER_VALIDATE_BOOLEAN);
+        $page = max(1, (int) ($this->request->getGet('page') ?: 1));
+        $perPage = $export ? 10000 : max(1, min(100, (int) ($this->request->getGet('per_page') ?: 25)));
+        $search = trim((string) $this->request->getGet('search'));
+        $total = $this->countDistinctCustomers($search, 1);
+        $customers = $this->getDistinctCustomers($perPage, 1, $export ? 0 : ($page - 1) * $perPage, $search);
+
+        if ($export) {
+            return $this->response->setJSON($this->setResponse(null, null, $customers, 'Respuesta exitosa'));
+        }
 
         try {
-            return $this->response->setJSON($this->setResponse(null, null, $customers, 'Respuesta exitosa'));
+            return $this->response->setJSON([
+                'error' => false,
+                'code' => null,
+                'data' => $customers,
+                'message' => 'Respuesta exitosa',
+                'pagination' => [
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                    'total_pages' => max(1, (int) ceil($total / $perPage)),
+                ],
+            ]);
         } catch (\Exception $e) {
             return $this->response->setJSON($this->setResponse(404, true, null, $e->getMessage()));
         }
