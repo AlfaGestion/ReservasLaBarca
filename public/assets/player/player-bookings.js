@@ -51,7 +51,7 @@
     const confirmButton = document.getElementById('booking-confirm')
     const payment = document.getElementById('booking-payment')
     const resultEditButton = document.getElementById('booking-result-edit')
-    const cancelUrl = config.cancelUrl || (config.createUrl ? new URL('../../mercado-pago/cancelar-pendiente', config.createUrl).toString() : '')
+    const cancelUrl = config.cancelUrl || (config.createUrl ? new URL('../../cancelPendingMpReservation', config.createUrl).toString() : '')
     if (resultEditButton) resultEditButton.textContent = 'Cancelar reserva y volver'
     let csrf = document.querySelector('meta[name="csrf-token"]')?.content || ''
     const addonSection = document.getElementById('addon-section')
