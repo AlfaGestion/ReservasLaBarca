@@ -793,6 +793,34 @@ class Superadmin extends BaseController
         }
     }
 
+    public function getPendingBookingSlots()
+    {
+        $data = $this->request->getJSON(true) ?? [];
+        $from = trim((string) ($data['fechaDesde'] ?? date('Y-m-d')));
+        $until = trim((string) ($data['fechaHasta'] ?? $from));
+        $now = date('Y-m-d H:i:s');
+
+        $slotsModel = new BookingSlotsModel();
+        $fieldsModel = new FieldsModel();
+        $slots = $slotsModel->where('date >=', $from)->where('date <=', $until)
+            ->where('active', 1)->where('status', 'pending')->where('expires_at >=', $now)
+            ->orderBy('date', 'ASC')->orderBy('time_from', 'ASC')->findAll();
+
+        $result = array_map(static function (array $slot) use ($fieldsModel): array {
+            $field = $fieldsModel->getField($slot['id_field'] ?? 0) ?: [];
+            return [
+                'id' => (int) ($slot['id'] ?? 0),
+                'fecha' => $slot['date'] ?? '',
+                'cancha' => $field['name'] ?? 'N/D',
+                'horario' => substr((string) ($slot['time_from'] ?? ''), 0, 5) . ' a ' . substr((string) ($slot['time_until'] ?? ''), 0, 5),
+                'booking_id' => !empty($slot['booking_id']) ? (int) $slot['booking_id'] : null,
+                'vence_en' => $slot['expires_at'] ?? '',
+            ];
+        }, $slots);
+
+        return $this->response->setJSON($this->setResponse(null, false, $result, 'Bloqueos temporales obtenidos.'));
+    }
+
     public function getAnnulledBookings()
     {
         $fieldsModel = new FieldsModel();

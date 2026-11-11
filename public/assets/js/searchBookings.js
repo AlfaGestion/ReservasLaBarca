@@ -16,6 +16,8 @@ const bookingAuditContent = document.getElementById('bookingAuditContent')
 const bookingAuditSubtitle = document.getElementById('bookingAuditSubtitle')
 const toggleBookingAlertsButton = document.getElementById('toggleBookingAlerts')
 const bookingAlertsStatus = document.getElementById('bookingAlertsStatus')
+const pendingBookingSlotsBody = document.getElementById('pendingBookingSlotsBody')
+const pendingBookingSlotsCount = document.getElementById('pendingBookingSlotsCount')
 
 function formatPriceAR(value) {
     return '$ ' + new Intl.NumberFormat('es-AR', {
@@ -71,6 +73,7 @@ document.addEventListener('DOMContentLoaded', async (e) => {
     }
 
     getActiveBookings(bookingData, { notifyNew: false })
+    getPendingBookingSlots(bookingData)
     startBookingsPolling()
     refreshAlertsUi()
 })
@@ -109,6 +112,7 @@ document.addEventListener('click', async (e) => {
             }
 
             getActiveBookings(bookingData)
+            getPendingBookingSlots(bookingData)
         } else if (e.target.id == 'searchAnnulledBooking') {
             bookingData = {
                 fechaDesde: inputDesdeBooking.value,
@@ -186,6 +190,33 @@ async function getActiveBookings(data) {
     } catch (error) {
         console.error('Error:', error);
         throw error;
+    }
+}
+
+async function getPendingBookingSlots(data) {
+    if (!pendingBookingSlotsBody) return
+    try {
+        const response = await fetch(`${baseUrl}getPendingBookingSlots`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        const responseData = await response.json()
+        const slots = Array.isArray(responseData.data) ? responseData.data : []
+        if (pendingBookingSlotsCount) pendingBookingSlotsCount.textContent = String(slots.length)
+        pendingBookingSlotsBody.innerHTML = slots.length === 0
+            ? '<tr><td colspan="5" class="text-muted">No hay bloqueos temporales vigentes.</td></tr>'
+            : slots.map(slot => `
+                <tr>
+                    <td>${escapeHtml(formatDateTime(slot.fecha))}</td>
+                    <td>${escapeHtml(slot.cancha || 'N/D')}</td>
+                    <td>${escapeHtml(slot.horario || '')}</td>
+                    <td>${slot.booking_id ? `#${escapeHtml(slot.booking_id)}` : '<span class="text-warning">Sin reserva asociada</span>'}</td>
+                    <td>${escapeHtml(formatDateTime(slot.vence_en))}</td>
+                </tr>
+            `).join('')
+    } catch (error) {
+        console.error('No se pudieron cargar los bloqueos temporales:', error)
     }
 }
 
@@ -640,6 +671,7 @@ function startBookingsPolling() {
     bookingsPollTimer = setInterval(() => {
         if (!bookingData?.fechaDesde || !bookingData?.fechaHasta) return
         getActiveBookings(bookingData).catch(() => {})
+        getPendingBookingSlots(bookingData).catch(() => {})
     }, 20000)
 }
 

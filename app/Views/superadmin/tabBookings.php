@@ -209,6 +209,24 @@
 </div>
 
 
+<div class="card mt-4 mb-4 border-warning" id="pendingBookingSlotsCard">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h6 class="mb-1">Bloqueos temporales</h6>
+                <small class="text-muted">Horarios reservados provisoriamente mientras se confirma el pago. Se liberan al vencer.</small>
+            </div>
+            <span class="badge text-bg-warning" id="pendingBookingSlotsCount">0</span>
+        </div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Fecha</th><th>Cancha</th><th>Horario</th><th>Reserva</th><th>Vence</th></tr></thead>
+                <tbody id="pendingBookingSlotsBody"><tr><td colspan="5" class="text-muted">No hay bloqueos temporales vigentes.</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div class="table-responsive">
     <table class="table align-middle table-striped-columns mt-2">
         <thead>
