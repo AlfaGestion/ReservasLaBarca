@@ -1251,6 +1251,9 @@ class MercadoPago extends BaseController
             $rateModel = new RateModel();
             $rateRow = $rateModel->first();
             $bookingsModel = new BookingsModel();
+            $db = \Config\Database::connect();
+            $bookingsHasEmail = $db->fieldExists('email', 'bookings');
+            $customersHasEmail = $db->fieldExists('email', 'customers');
             $data = $this->request->getJSON();
             $booking = $data->booking ?? null;
             $montoTotal = 0;
@@ -1351,13 +1354,15 @@ class MercadoPago extends BaseController
                 $existingCustomer = $customerOfferService->findCustomerByPhone($bookingPhone);
                 if (!$existingCustomer) {
                     $customersModel = new CustomersModel();
-                    $inserted = $customersModel->insert([
+                    $customerPayload = [
                         'name' => trim((string) $bookingArr['nombre']),
                         'phone' => $bookingPhone,
                         'email' => filter_var(trim((string) ($bookingArr['email'] ?? '')), FILTER_VALIDATE_EMAIL) ?: null,
                         'offer' => 0,
                         'city' => trim((string) ($bookingArr['localidad'] ?? '')),
-                    ]);
+                    ];
+                    if (! $customersHasEmail) unset($customerPayload['email']);
+                    $inserted = $customersModel->insert($customerPayload);
                     if (!$inserted) {
                         return $this->response->setJSON($this->setResponse(500, true, null, 'No se pudo guardar los datos del cliente.'));
                     }
@@ -1366,7 +1371,7 @@ class MercadoPago extends BaseController
                 } else {
                     $email = filter_var(trim((string) ($bookingArr['email'] ?? '')), FILTER_VALIDATE_EMAIL);
                     if ($email && (int) ($existingCustomer['id'] ?? 0) > 0) {
-                        (new CustomersModel())->update((int) $existingCustomer['id'], ['email' => $email]);
+                        if ($customersHasEmail) (new CustomersModel())->update((int) $existingCustomer['id'], ['email' => $email]);
                     }
                 }
             }
@@ -1397,7 +1402,7 @@ class MercadoPago extends BaseController
                 return $this->response->setJSON($this->setResponse(409, true, null, 'El horario ya fue tomado por otra reserva. Actualiza e intenta nuevamente.'));
             }
 
-            $bookingsModel->insert([
+            $primaryBookingPayload = [
                 'date' => $bookingArr['fecha'] ?? null,
                 'id_field' => $bookingArr['cancha'] ?? null,
                 'time_from' => $bookingArr['horarioDesde'] ?? null,
@@ -1429,7 +1434,9 @@ class MercadoPago extends BaseController
                 'created_by_type' => 'CLIENTE',
                 'created_by_name' => 'CLIENTE',
                 'created_by_user_id' => null,
-            ]);
+            ];
+            if (! $bookingsHasEmail) unset($primaryBookingPayload['email']);
+            $bookingsModel->insert($primaryBookingPayload);
 
             $bookingId = $bookingsModel->getInsertID();
             $createdBookingInThisAttempt = !empty($bookingId);
@@ -1453,7 +1460,7 @@ class MercadoPago extends BaseController
                 }
 
                 $additionalOffer = $additionalQuote['offer'] ?? [];
-                $bookingsModel->insert([
+                $additionalBookingPayload = [
                     'date' => $additional['fecha'],
                     'id_field' => $additional['cancha'],
                     'time_from' => $this->normalizeTime($additional['horarioDesde']),
@@ -1486,7 +1493,9 @@ class MercadoPago extends BaseController
                     'created_by_type' => 'CLIENTE',
                     'created_by_name' => 'CLIENTE',
                     'created_by_user_id' => null,
-                ]);
+                ];
+                if (! $bookingsHasEmail) unset($additionalBookingPayload['email']);
+                $bookingsModel->insert($additionalBookingPayload);
                 $additionalBookingId = $bookingsModel->getInsertID();
                 if (!$additionalBookingId) {
                     $this->releaseBookingSlot($bookingSlotsModel, (int) $additionalSlotId);

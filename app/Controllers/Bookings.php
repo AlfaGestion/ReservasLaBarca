@@ -769,6 +769,8 @@ class Bookings extends BaseController
 
         $data = $this->request->getJSON();
         $db = \Config\Database::connect();
+        $bookingsHasEmail = $db->fieldExists('email', 'bookings');
+        $customersHasEmail = $db->fieldExists('email', 'customers');
         $this->ensureLocalityExists($data->localidad ?? null);
         $items = $this->extractBookingItems($data);
         $availabilityError = $this->validateItemsAvailability($items, $bookingsModel, $bookingSlotsModel, null, true);
@@ -843,6 +845,8 @@ class Bookings extends BaseController
             'offer' => 0,
             'city'  => $data->localidad ?? null,
         ];
+        if (! $bookingsHasEmail) unset($queryBooking['email']);
+        if (! $customersHasEmail) unset($queryCustomer['email']);
 
         $existingCustomer = $customersModel->findAll();
         $exist = true;
@@ -857,7 +861,7 @@ class Bookings extends BaseController
                         'city' => $data->localidad ?? null,
                     ];
                     if ($bookingEmail) {
-                        $updateCustomer['email'] = $bookingEmail;
+                        if ($customersHasEmail) $updateCustomer['email'] = $bookingEmail;
                     }
 
                     if ($data->oferta == 1) {
@@ -1433,6 +1437,8 @@ class Bookings extends BaseController
         $customersModel = new CustomersModel();
         $data = $this->request->getJSON();
         $db = \Config\Database::connect();
+        $bookingsHasEmail = $db->fieldExists('email', 'bookings');
+        $customersHasEmail = $db->fieldExists('email', 'customers');
         $this->ensureLocalityExists($data->localidad ?? null);
         $items = $this->extractBookingItems($data);
         $availabilityError = $this->validateItemsAvailability($items, $bookingsModel, $bookingSlotsModel, null, false);
@@ -1494,6 +1500,7 @@ class Bookings extends BaseController
             'created_by_name' => session()->get('name') ?? session()->get('user'),
             'created_by_user_id' => session()->get('id_user'),
         ];
+        if (! $bookingsHasEmail) unset($queryBooking['email']);
 
         try {
             $db->transBegin();
@@ -1555,13 +1562,15 @@ class Bookings extends BaseController
                     'offer' => 0,
                     'city' => $data->localidad ?? null,
                 ];
+                if (! $customersHasEmail) unset($customerPayload['email']);
 
                 if ($existingCustomer) {
-                    $customersModel->update($existingCustomer['id'], [
+                    $customerUpdate = [
                         'name' => $data->nombre,
                         'city' => $data->localidad ?? null,
-                        'email' => $bookingEmail ?: ($existingCustomer['email'] ?? null),
-                    ]);
+                    ];
+                    if ($customersHasEmail) $customerUpdate['email'] = $bookingEmail ?: ($existingCustomer['email'] ?? null);
+                    $customersModel->update($existingCustomer['id'], $customerUpdate);
                 } else {
                     $customersModel->insert($customerPayload);
                 }
