@@ -727,7 +727,10 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
         anular = ''
         state = ''
 
-        if (reserva.mp == 0) {
+        const isFreeBooking = String(reserva.metodo_pago || '').toLowerCase() === 'sin cargo'
+            || Number(reserva.total_reserva || 0) <= 0
+
+        if (reserva.mp == 0 && !isFreeBooking) {
             if (existPending == false) {
                 existPending = true
                 alert('Hay pagos pendientes de Mercado Pago para confirmar.')
@@ -735,7 +738,7 @@ async function fillTableBookings(data, targetSelector = '.divBookings') {
         }
 
         reserva.anulada == 1 ? state = 'Anulada' : state = 'Activa'
-        reserva.mp == 0 ? stateMP = 'Pendiente' : stateMP = 'Confirmado'
+        stateMP = isFreeBooking ? 'Sin cargo' : (reserva.mp == 0 ? 'Pendiente' : 'Confirmado')
 
         if (sessionUserSuperadmin == 1) {
             edit = `
