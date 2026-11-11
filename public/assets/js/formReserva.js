@@ -1496,7 +1496,7 @@ function renderOfferModal(quote) {
         const label = escapeHtml(item.label || 'Item')
         const original = formatPriceAR(item.original_amount || item.baseAmount || 0)
         const discount = Number(item.discount_amount || 0)
-        const finalAmount = formatPriceAR(item.final_amount || item.original_amount || item.baseAmount || 0)
+        const finalAmount = formatPriceAR(item.final_amount ?? item.original_amount ?? item.baseAmount ?? 0)
         const discountHtml = discount > 0
             ? `<span class="text-success fw-semibold">- ${formatPriceAR(discount)}</span>`
             : '<span class="text-muted">Sin descuento</span>'
@@ -1658,7 +1658,7 @@ async function refreshCustomerOfferPreview({ showModal = false, lookupSignal = n
     })
 
     const discountTotal = quoteItems.reduce((sum, item) => sum + Number(item.discount_amount || 0), 0)
-    const finalTotal = quoteItems.reduce((sum, item) => sum + Number(item.final_amount || item.original_amount || 0), 0)
+    const finalTotal = quoteItems.reduce((sum, item) => sum + Number(item.final_amount ?? item.original_amount ?? 0), 0)
 
     currentBookingQuote = {
         applicable: discountTotal > 0,
