@@ -11,11 +11,22 @@ class Email extends BaseConfig
     public string $recipients = '';
     public array $accounts = [];
 
+    private function normalizeFromName(string $name): string
+    {
+        $name = trim($name);
+        // Evita que un valor del .env mal escapado llegue visible al
+        // encabezado From del correo.
+        $name = preg_replace('/\$q\s*$/i', '', $name) ?? $name;
+        $name = trim($name, " \t\n\r\0\x0B\"'");
+
+        return $name !== '' ? $name : 'La Barca Centro Deportivo';
+    }
+
     public function __construct()
     {
         parent::__construct();
         $this->fromEmail = trim((string) env('player.email.fromEmail', ''));
-        $this->fromName = (string) env('player.email.fromName', 'La Barca Centro Deportivo');
+        $this->fromName = $this->normalizeFromName((string) env('player.email.fromName', 'La Barca Centro Deportivo'));
         $this->SMTPHost = trim((string) env('player.email.smtpHost', ''));
         $this->SMTPUser = trim((string) env('player.email.smtpUser', ''));
         $this->SMTPPass = (string) env('player.email.smtpPassword', '');
@@ -34,7 +45,7 @@ class Email extends BaseConfig
 
             $this->accounts[] = [
                 'fromEmail' => trim((string) env($prefix . 'fromEmail', $user)),
-                'fromName' => (string) env($prefix . 'fromName', $this->fromName),
+                'fromName' => $this->normalizeFromName((string) env($prefix . 'fromName', $this->fromName)),
                 'SMTPUser' => $user,
                 'SMTPPass' => $password,
             ];
