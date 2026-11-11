@@ -275,6 +275,7 @@ document.addEventListener('DOMContentLoaded', async (e) => {
 
     await refreshFieldsFromApi()
     updateServiceOptions()
+    divMonto?.classList.remove('d-none')
     await checkClosureStatus()
 
     if (closureWelcomeNotice) {
@@ -362,9 +363,7 @@ document.addEventListener('change', async (e) => {
             await getAmount(selectCancha.value)
 
         } else if (e.target.id == 'cancha') {
-            if (!sessionUserLogued) {
-                divMonto.classList.remove('d-none')
-            }
+            divMonto.classList.remove('d-none')
 
             updateTimeOptions()
             await getTimeFromBookings()
@@ -1884,6 +1883,10 @@ async function fillModal(data) {
     const additionalText = additional ? `<li><i class="fa-solid fa-plus"></i> <b>Adicional:</b> Quincho de ${additional.horarioDesde} a ${additional.horarioHasta} (${minutesToHuman(additionalDuration)})</li>` : ''
 
     if (sessionUserLogued) {
+        const quote = currentBookingQuote || {}
+        const discountText = Number(quote.discount_total || 0) > 0
+            ? `<li><i class="fa-solid fa-tag"></i> <b>Descuento aplicado:</b> -${formatPriceAR(quote.discount_total)}</li>`
+            : ''
         info =
             `
         <ul id="bookingDetail">
@@ -1892,6 +1895,8 @@ async function fillModal(data) {
             <li><i class="fa-solid fa-clock"></i> <b>Horario:</b> ${normalizeTimeValue(data.data.horarioDesde)} a ${normalizeTimeValue(data.data.horarioHasta)}</li>
             <li><i class="fa-regular fa-hourglass-half"></i> <b>Duración:</b> ${minutesToHuman(duration)}</li>
             ${additionalText}
+            <li><i class="fa-regular fa-money-bill-1"></i> <b>Monto final:</b> ${amount}</li>
+            ${discountText}
             <li><i class="fa-solid fa-user"></i> <b>Nombre:</b> ${data.data.nombre}</li>
             <li><i class="fa-solid fa-phone"></i> <b>Telefono:</b> ${data.data.telefono}</li>
             ${localidadValue}
