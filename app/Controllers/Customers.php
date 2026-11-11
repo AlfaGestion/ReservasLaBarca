@@ -39,37 +39,26 @@ class Customers extends BaseController
     private function findCustomerByPhoneVariants(string $phone, ?int $ignoreId = null): ?array
     {
         $service = $this->getCustomerOfferService();
-        $variants = [$service->normalizePhone($phone)];
-        if ($variants[0] !== '') {
-            $withoutLeadingZero = ltrim($variants[0], '0');
-            if ($withoutLeadingZero !== '') {
-                $variants[] = $withoutLeadingZero;
-                $variants[] = '0' . $withoutLeadingZero;
-            }
-        }
-        $variants = array_values(array_unique(array_filter($variants, static fn ($value) => $value !== '')));
-
-        if ($variants === []) {
+        $normalizedPhone = $service->normalizePhone($phone);
+        if ($normalizedPhone === '') {
             return null;
         }
 
         $model = new CustomersModel();
-        $builder = $model;
-        $first = true;
-        foreach ($variants as $variant) {
-            if ($first) {
-                $builder = $builder->where('phone', $variant);
-                $first = false;
-            } else {
-                $builder = $builder->orWhere('phone', $variant);
+        $canonicalPhone = ltrim($normalizedPhone, '0');
+
+        foreach ($model->findAll() as $customer) {
+            if ($ignoreId !== null && (int) ($customer['id'] ?? 0) === $ignoreId) {
+                continue;
+            }
+
+            $candidatePhone = $service->normalizePhone($customer['phone'] ?? '');
+            if ($candidatePhone !== '' && ltrim($candidatePhone, '0') === $canonicalPhone) {
+                return $customer;
             }
         }
 
-        if ($ignoreId !== null) {
-            $builder->where('id !=', $ignoreId);
-        }
-
-        return $builder->first();
+        return null;
     }
 
     private function isValidDate(?string $value): bool
@@ -315,7 +304,7 @@ class Customers extends BaseController
         $dni = trim((string) $this->request->getVar('dni'));
         $city = trim((string) $this->request->getVar('city'));
 
-        if ($phone === '' || $name === '' || $lastName === '' || $dni === '') {
+        if ($phone === '' || $name === '' || $lastName === '') {
             return $this->response->setStatusCode(422)->setJSON([
                 'error' => true,
                 'code' => 422,
@@ -452,7 +441,7 @@ class Customers extends BaseController
 
         $this->ensureLocalityExists($city);
 
-        if ($id <= 0 || $phone === '' || $name === '' || $lastName === '' || $dni === '') {
+        if ($id <= 0 || $phone === '' || $name === '' || $lastName === '') {
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'Debe completar todos los campos obligatorios']);
         }
 
@@ -469,7 +458,10 @@ class Customers extends BaseController
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'El cliente no existe']);
         }
 
-        $phoneConflict = $this->findCustomerByPhoneVariants($phone, $id);
+        $currentPhone = $this->getCustomerOfferService()->normalizePhone($existingCustomer['phone'] ?? '');
+        $phoneConflict = $currentPhone !== '' && ltrim($currentPhone, '0') === ltrim($phone, '0')
+            ? null
+            : $this->findCustomerByPhoneVariants($phone, $id);
         if ($phoneConflict) {
             return redirect()->to('abmAdmin')->with('msg', ['type' => 'danger', 'body' => 'El teléfono ya pertenece a otro cliente']);
         }
@@ -639,7 +631,7 @@ class Customers extends BaseController
             ]);
         };
 
-        if ($id <= 0 || $phone === '' || $name === '' || $lastName === '' || $dni === '') {
+        if ($id <= 0 || $phone === '' || $name === '' || $lastName === '') {
             return $fail('Debe completar todos los campos obligatorios');
         }
 
@@ -656,7 +648,10 @@ class Customers extends BaseController
             return $fail('El cliente no existe');
         }
 
-        $phoneConflict = $this->findCustomerByPhoneVariants($phone, $id);
+        $currentPhone = $this->getCustomerOfferService()->normalizePhone($existingCustomer['phone'] ?? '');
+        $phoneConflict = $currentPhone !== '' && ltrim($currentPhone, '0') === ltrim($phone, '0')
+            ? null
+            : $this->findCustomerByPhoneVariants($phone, $id);
         if ($phoneConflict) {
             return $fail('El teléfono ya pertenece a otro cliente');
         }
