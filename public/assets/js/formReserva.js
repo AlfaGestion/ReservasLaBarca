@@ -644,7 +644,6 @@ async function lookupCustomerNow() {
     const timeoutId = setTimeout(() => controller.abort(), CUSTOMER_LOOKUP_TIMEOUT)
 
     setCustomerLookupStatus('Buscando cliente...')
-    modalSpinner.show()
     try {
         const quote = await refreshCustomerOfferPreview({ showModal: true, lookupSignal: controller.signal })
         if (sequence !== customerLookupSequence) return
@@ -666,7 +665,6 @@ async function lookupCustomerNow() {
         clearTimeout(timeoutId)
         if (sequence === customerLookupSequence) {
             customerLookupAbortController = null
-            modalSpinner.hide()
         }
     }
 }
