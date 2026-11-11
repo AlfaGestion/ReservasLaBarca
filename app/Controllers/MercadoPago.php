@@ -1170,6 +1170,20 @@ class MercadoPago extends BaseController
             return;
         }
 
+        // Los emails deben mostrar el nombre completo del cliente. Algunas
+        // reservas históricas conservan solo el nombre en bookings, pero la
+        // ficha de customers tiene también el apellido.
+        $customer = !empty($booking['id_customer'])
+            ? (new CustomersModel())->find((int) $booking['id_customer'])
+            : null;
+        if (!$customer && !empty($booking['phone'])) {
+            $customer = (new CustomersModel())->where('phone', $booking['phone'])->first();
+        }
+        $fullCustomerName = trim((string) ($customer['name'] ?? '') . ' ' . (string) ($customer['last_name'] ?? ''));
+        if ($fullCustomerName !== '') {
+            $booking['name'] = $fullCustomerName;
+        }
+
         $field = $fieldsModel->getField($booking['id_field']);
         $fieldName = $field['name'] ?? 'N/D';
         $serviceType = (string)($field['service_type'] ?? 'football');
