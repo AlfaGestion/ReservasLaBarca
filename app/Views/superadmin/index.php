@@ -120,6 +120,227 @@
         color: #9fc6ea;
         margin-bottom: 10px;
     }
+    #fieldFormModal .field-editor-dialog {
+        width: min(760px, calc(100vw - 2rem));
+        max-width: none;
+        margin: 1rem auto;
+    }
+    #fieldFormModal .field-editor-content {
+        max-height: calc(100vh - 2rem);
+        border: 0;
+        overflow: hidden;
+    }
+    #fieldFormModal .field-editor-body {
+        padding: 1.25rem;
+    }
+    .field-editor-form {
+        display: grid;
+        gap: 1rem;
+    }
+    .field-editor-section {
+        padding: 1rem;
+        border: 1px solid #d8e6f4;
+        border-radius: 12px;
+        background: #f8fbfe;
+    }
+    .field-editor-section--main {
+        background: #ffffff;
+    }
+    .field-editor-section--prices {
+        background: #fffaf2;
+        border-color: #f2d5a6;
+    }
+    .field-editor-section-heading {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: .9rem;
+    }
+    .field-editor-section-heading h6 {
+        margin: .15rem 0 0;
+        color: #1f4467;
+        font-size: 1rem;
+    }
+    .field-editor-eyebrow {
+        color: #6b8aa5;
+        font-size: .7rem;
+        font-weight: 800;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+    }
+    .field-editor-helper {
+        color: #6b7f91;
+        font-size: .8rem;
+        text-align: right;
+    }
+    .field-editor-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .85rem;
+    }
+    .field-editor-grid--identity {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .field-editor-field,
+    .field-editor-price {
+        display: grid;
+        gap: .35rem;
+        margin: 0;
+        color: #385773;
+        font-size: .82rem;
+        font-weight: 700;
+    }
+    .field-editor-field small,
+    .field-editor-price small {
+        font-weight: 400;
+        color: #71879a;
+    }
+    .field-editor-field .form-control,
+    .field-editor-price .form-control {
+        min-height: 42px;
+    }
+    .field-editor-service-types {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .field-editor-service-types .service-type-option {
+        min-height: 42px;
+        padding: 8px 10px;
+        font-size: .85rem;
+    }
+    .field-editor-switch,
+    .field-editor-check {
+        display: inline-flex;
+        align-items: center;
+        gap: .55rem;
+        margin: 0;
+        color: #385773;
+        font-size: .85rem;
+        font-weight: 700;
+    }
+    .field-editor-switch .form-check-input,
+    .field-editor-check .form-check-input {
+        margin: 0;
+    }
+    .field-editor-price-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .85rem;
+    }
+    .field-editor-price {
+        padding: .85rem;
+        border: 1px solid #efc77f;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #6b4818;
+    }
+    .field-editor-price-input {
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        border: 1px solid #ced4da;
+        border-radius: 7px;
+        background: #ffffff;
+    }
+    .field-editor-price-input b {
+        padding: 0 .75rem;
+        color: #a36815;
+    }
+    .field-editor-price-input .form-control {
+        border: 0;
+        box-shadow: none;
+    }
+    .field-editor-actions {
+        position: sticky;
+        top: -1.25rem;
+        order: -1;
+        z-index: 2;
+        display: flex;
+        justify-content: flex-end;
+        gap: .65rem;
+        padding: .15rem 0 1rem;
+        border-bottom: 1px solid #d8e6f4;
+        background: #ffffff;
+    }
+    #fieldFormModal #fieldFormMessage {
+        position: sticky;
+        top: -1.25rem;
+        z-index: 3;
+        margin: 0 0 1rem;
+    }
+    .service-config-form .service-form-message {
+        position: sticky;
+        top: -1.25rem;
+        z-index: 3;
+        margin: 0;
+    }
+    .service-config-form {
+        width: 100%;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+    .service-config-form > .service-editor-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: start;
+        gap: 1rem;
+    }
+    .service-config-form > .service-editor-main > .col-lg-5:first-child {
+        grid-column: 1;
+        width: auto !important;
+        padding: 0 !important;
+    }
+    .service-config-form > .service-editor-main > .col-lg-2 {
+        grid-column: 2;
+        width: auto !important;
+        padding: 0 !important;
+    }
+    .service-config-form > .service-editor-main > .col-lg-5:last-child {
+        grid-column: 1 / -1;
+        width: auto !important;
+        padding: 0 !important;
+    }
+    .service-config-form > .service-editor-main .service-config-section {
+        height: auto !important;
+    }
+    .service-config-form > .service-editor-main .row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .75rem;
+    }
+    .service-config-form > .service-editor-main .row > * {
+        width: auto;
+        padding: 0;
+    }
+    .service-config-form .service-config-section,
+    .service-config-form .field-editor-section {
+        min-width: 0;
+    }
+    .service-state-option {
+        min-height: 112px;
+        padding: .75rem;
+        border: 1px solid #d8e6f4;
+        border-radius: 10px;
+        background: #ffffff;
+    }
+    .service-state-option .form-check-input {
+        float: none;
+        margin: 0 .45rem 0 0;
+        vertical-align: middle;
+    }
+    .service-state-option .form-check-label {
+        display: inline;
+        font-weight: 700;
+    }
+    .service-state-option .small {
+        display: block;
+        margin-top: .45rem;
+        line-height: 1.35;
+    }
     .admin-history-list {
         display: grid;
         gap: 8px;
@@ -240,6 +461,120 @@
         border-color: #3a6d95;
         background: rgba(22, 48, 74, .45);
     }
+    body.theme-dark #fieldFormModal .field-editor-section,
+    body.theme-dark #fieldFormModal .field-editor-section--main {
+        background: #1b344b;
+        border-color: #3a6d95;
+    }
+    body.theme-dark #serviceFormModal .service-config-form .field-editor-actions {
+        color: #dbe9f8;
+        border-bottom-color: #33506e;
+        background: #182d42;
+    }
+    body.theme-dark #serviceFormModal .service-config-form .field-editor-section,
+    body.theme-dark #serviceFormModal .service-config-form .service-config-section {
+        background: #1b344b;
+        border-color: #3a6d95;
+        color: #dbe9f8;
+    }
+    body.theme-dark #serviceFormModal .service-config-form .form-label,
+    body.theme-dark #serviceFormModal .service-config-form .form-check-label,
+    body.theme-dark #serviceFormModal .service-config-form h5,
+    body.theme-dark #serviceFormModal .service-config-form h6,
+    body.theme-dark #serviceFormModal .service-config-form .text-muted,
+    body.theme-dark #serviceFormModal .service-config-form .small {
+        color: #dbe9f8 !important;
+    }
+    body.theme-dark #serviceFormModal .service-config-form .service-duration-preview,
+    body.theme-dark #serviceFormModal .service-config-form .service-offer-preview {
+        background: #21374d;
+        color: #dbe9f8;
+    }
+    body.theme-dark #serviceFormModal .service-state-option {
+        background: #21374d;
+        border-color: #3a6d95;
+    }
+    body.theme-dark #fieldFormModal .field-editor-section--prices {
+        background: #3a3021;
+        border-color: #8c6834;
+    }
+    body.theme-dark #fieldFormModal .field-editor-section-heading h6,
+    body.theme-dark #fieldFormModal .field-editor-field,
+    body.theme-dark #fieldFormModal .field-editor-switch,
+    body.theme-dark #fieldFormModal .field-editor-check {
+        color: #dbe9f8;
+    }
+    body.theme-dark #fieldFormModal .field-editor-eyebrow,
+    body.theme-dark #fieldFormModal .field-editor-helper,
+    body.theme-dark #fieldFormModal .field-editor-field small,
+    body.theme-dark #fieldFormModal .field-editor-price small {
+        color: #a9c3da;
+    }
+    body.theme-dark #fieldFormModal .field-editor-price {
+        background: #263e53;
+        border-color: #8c6834;
+        color: #ffe2a8;
+    }
+    body.theme-dark #fieldFormModal .field-editor-price-input {
+        background: #193047;
+        border-color: #356fbf;
+    }
+    body.theme-dark #fieldFormModal .field-editor-price-input b {
+        color: #ffd98b;
+    }
+    body.theme-dark #fieldFormModal .field-editor-actions {
+        border-bottom-color: #33506e;
+        background: #182d42;
+    }
+    body.theme-dark #fieldFormModal #fieldFormMessage {
+        box-shadow: 0 8px 16px rgba(0, 0, 0, .18);
+    }
+    body.theme-dark .service-config-form .service-form-message {
+        box-shadow: 0 8px 16px rgba(0, 0, 0, .18);
+    }
+
+    @media (max-width: 640px) {
+        #fieldFormModal .field-editor-dialog {
+            width: 100%;
+            margin: 0;
+        }
+        #fieldFormModal .field-editor-content {
+            max-height: 100vh;
+            border-radius: 0;
+        }
+        #fieldFormModal .field-editor-body {
+            padding: .85rem;
+        }
+        .field-editor-section-heading,
+        .field-editor-price-grid {
+            grid-template-columns: 1fr;
+            display: grid;
+        }
+        .field-editor-helper {
+            text-align: left;
+        }
+        .field-editor-grid,
+        .field-editor-service-types {
+            grid-template-columns: 1fr;
+        }
+        .field-editor-actions {
+            justify-content: stretch;
+        }
+        .field-editor-actions .btn {
+            flex: 1;
+        }
+        .service-config-form > .service-editor-main {
+            grid-template-columns: 1fr;
+        }
+        .service-config-form > .service-editor-main > .col-lg-5:first-child,
+        .service-config-form > .service-editor-main > .col-lg-2,
+        .service-config-form > .service-editor-main > .col-lg-5:last-child {
+            grid-column: 1;
+        }
+        .service-config-form > .service-editor-main .row {
+            grid-template-columns: 1fr;
+        }
+    }
     body.theme-dark .edit-field-frame-title {
         color: #b5d7f5;
     }
@@ -341,6 +676,7 @@
             <nav>
                 <div class="nav nav-tabs mt-3" id="nav-tab" role="tablist">
                     <button class="nav-link active" id="nav-bookings-tab" data-bs-toggle="tab" data-bs-target="#nav-bookings" type="button" role="tab" aria-controls="nav-bookings" aria-selected="false"><i class="fa-regular fa-calendar-days"></i> Reservas</button>
+                    <button class="nav-link" id="nav-booking-issues-tab" data-bs-toggle="tab" data-bs-target="#nav-booking-issues" type="button" role="tab" aria-controls="nav-booking-issues" aria-selected="false"><i class="fa-solid fa-triangle-exclamation"></i> Pendientes y bloqueos</button>
                     <button class="nav-link" id="nav-general-tab" data-bs-toggle="tab" data-bs-target="#nav-general" type="button" role="tab" aria-controls="nav-general" aria-selected="false"><i class="fa-solid fa-gear"></i> General</button>
                     <button class="nav-link" id="nav-reports-tab" data-bs-toggle="tab" data-bs-target="#nav-reports" type="button" role="tab" aria-controls="nav-reports" aria-selected="true"><i class="fa-solid fa-file-lines"></i> Reportes de cobro</button>
 
@@ -357,6 +693,10 @@
 
                 <div class="tab-pane fade  show active" id="nav-bookings" role="tabpanel" aria-labelledby="nav-bookings-tab" tabindex="0">
                     <?= view('superadmin/tabBookings', ['bookings' => $bookings, 'localities' => $localities]) ?>
+                </div>
+
+                <div class="tab-pane fade" id="nav-booking-issues" role="tabpanel" aria-labelledby="nav-booking-issues-tab" tabindex="0">
+                    <?= view('superadmin/tabBookingIssues') ?>
                 </div>
 
                 <div class="tab-pane fade" id="nav-general" role="tabpanel" aria-labelledby="nav-general-tab" tabindex="0">
