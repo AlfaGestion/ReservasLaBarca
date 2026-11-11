@@ -390,7 +390,7 @@ class Customers extends BaseController
     private function renderEditWindow($id, bool $adminMode = false, bool $newCustomer = false)
     {
         $customersModel = new CustomersModel();
-        $customer = $customersModel->find($id);
+        $customer = $newCustomer ? null : $customersModel->find($id);
         $customer = $customer ? $this->enrichCustomerWithOffer($customer, $this->getCustomerOfferService()) : null;
         $customer = $customer ?: [];
         $embedded = filter_var($this->request->getGet('iframe'), FILTER_VALIDATE_BOOLEAN);
