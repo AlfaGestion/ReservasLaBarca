@@ -1063,6 +1063,10 @@ function isNocturnalBooking(nocturnalTime) {
 
 function getCurrentBlockMinutes() {
     const selected = getFieldById(selectCancha?.value)
+    const startMinutes = horarioDesde?.value ? timeToMinutes(horarioDesde.value) : null
+    if (selected && startMinutes !== null) {
+        return getFieldDurationForStart(selected, startMinutes)
+    }
     if (selected?.duration_minutes) return Number(selected.duration_minutes)
     if (selected?.block_minutes) return Number(selected.block_minutes)
     return 60
@@ -1102,7 +1106,21 @@ function fillTimeSelect(select, values, placeholder = 'Seleccionar') {
 }
 
 function getFieldAvailabilityWindows(field) {
+        if (!field?.variable_duration_by_schedule) return []
     return Array.isArray(field?.availability_windows) ? field.availability_windows : []
+}
+
+function getFieldAvailabilityWindowForStart(field, startMinutes) {
+    return getFieldAvailabilityWindows(field).find(window => {
+        const from = timeToMinutes(window.start_time)
+        const until = timeToMinutes(window.end_time)
+        return startMinutes >= from && startMinutes < until
+    }) || null
+}
+
+function getFieldDurationForStart(field, startMinutes) {
+    const window = getFieldAvailabilityWindowForStart(field, startMinutes)
+    return Number(window?.duration_minutes || field?.duration_minutes || field?.block_minutes || 60)
 }
 
 function isStartInsideFieldAvailability(field, startMinutes, blockMinutes) {
@@ -1123,7 +1141,9 @@ function buildStartTimes(blockMinutes, stepMinutes = blockMinutes) {
         windows.forEach(window => {
             const start = timeToMinutes(window.start_time)
             const end = timeToMinutes(window.end_time)
-            for (let current = start; current + blockMinutes <= end; current += stepMinutes) {
+            const windowDuration = Number(window.duration_minutes || field?.duration_minutes || blockMinutes)
+            const windowStep = Number(window.slot_interval_minutes || (windowDuration === 90 ? 30 : windowDuration))
+            for (let current = start; current + windowDuration <= end; current += windowStep) {
                 values.push(minutesToTime(current))
             }
         })
@@ -1144,10 +1164,17 @@ function updateTimeOptions() {
     const selectedFieldId = selectCancha?.value || ''
     const selectedField = getFieldById(selectedFieldId)
     const availableStarts = selectedFieldId
-        ? starts.filter(start => isStartInsideFieldAvailability(selectedField, timeToMinutes(start), block) && isSlotAvailable(selectedFieldId, start, minutesToTime(timeToMinutes(start) + block)))
+        ? starts.filter(start => {
+            const startMinutes = timeToMinutes(start)
+            const duration = getFieldDurationForStart(selectedField, startMinutes)
+            return isStartInsideFieldAvailability(selectedField, startMinutes, duration) && isSlotAvailable(selectedFieldId, start, minutesToTime(startMinutes + duration))
+        })
         : starts
     fillTimeSelect(horarioDesde, availableStarts)
-    fillTimeSelect(horarioHasta, availableStarts.map(t => minutesToTime(timeToMinutes(t) + block)))
+    const untilOptions = selectedFieldId
+        ? availableStarts.map(start => minutesToTime(timeToMinutes(start) + getFieldDurationForStart(selectedField, timeToMinutes(start))))
+        : availableStarts.map(start => minutesToTime(timeToMinutes(start) + block))
+    fillTimeSelect(horarioHasta, [...new Set(untilOptions)])
     ensureHorarioHastaSelected()
     if (quinchoDesde && quinchoHasta) {
         const hourlyStarts = buildStartTimes(60)
@@ -1223,7 +1250,7 @@ function updateServiceOptions() {
         option.dataset.slotIntervalMinutes = field.slot_interval_minutes || field.booking_interval_minutes || field.duration_minutes || field.block_minutes || 60
         option.dataset.openingTime = field.opening_time || ''
         option.dataset.closingTime = field.closing_time || ''
-        option.textContent = `${field.name} - ${minutesToHuman(field.duration_minutes || field.block_minutes || 60)}`
+        option.textContent = `${field.name} - ${field.variable_duration_by_schedule ? 'Duración variable' : minutesToHuman(field.duration_minutes || field.block_minutes || 60)}`
         selectCancha.appendChild(option)
     })
     if (selected && Array.from(selectCancha.options).some(opt => opt.value === selected)) {
@@ -2377,7 +2404,14 @@ async function getFieldForTimeBookings(timeBookings) {
     if (horarioDesde.value && horarioHasta.value) {
         Array.from(selectCancha.options).forEach((option) => {
             if (!option.value) return
-            if (!isSlotAvailable(option.value, horarioDesde.value, horarioHasta.value)) {
+            const field = getFieldById(option.value)
+            const startMinutes = timeToMinutes(horarioDesde.value)
+            const endMinutes = timeToMinutes(horarioHasta.value)
+            const duration = endMinutes > startMinutes
+                ? endMinutes - startMinutes
+                : endMinutes + 1440 - startMinutes
+            const fitsAvailability = !field || isStartInsideFieldAvailability(field, startMinutes, duration)
+            if (!fitsAvailability || !isSlotAvailable(option.value, horarioDesde.value, horarioHasta.value)) {
                 option.remove()
             }
         })
@@ -2473,10 +2507,14 @@ async function buildSingleItemBaseQuote(fieldId, from, until, isAdditional = fal
 
     const nocturnalTime = await getNocturnalTime()
     const isNight = isNocturnalBooking(nocturnalTime)
-    const basePrice = Number(selectedField.value ?? selectedField.price ?? selectedField.amount ?? 0)
+    const activeWindow = getFieldAvailabilityWindowForStart(selectedField, timeToMinutes(from))
+    const windowPrice = Number(activeWindow?.price || 0)
+    const basePrice = windowPrice > 0
+        ? windowPrice
+        : Number(selectedField.value ?? selectedField.price ?? selectedField.amount ?? 0)
     const nightPrice = Number(selectedField.ilumination_value ?? selectedField.night_value ?? selectedField.price_light ?? 0)
-    const perBlockAmount = isNight && nightPrice > 0 ? nightPrice : basePrice
-    const blockMinutes = Number(selectedField.duration_minutes || selectedField.block_minutes || selectedField.slot_interval_minutes || selectedField.booking_interval_minutes || 60)
+    const perBlockAmount = windowPrice > 0 ? windowPrice : (isNight && nightPrice > 0 ? nightPrice : basePrice)
+    const blockMinutes = Number(activeWindow?.duration_minutes || selectedField.duration_minutes || selectedField.block_minutes || selectedField.slot_interval_minutes || selectedField.booking_interval_minutes || 60)
     const baseAmount = calculateSingleItemAmount(from, until, perBlockAmount, blockMinutes)
 
     return {

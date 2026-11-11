@@ -114,6 +114,7 @@ class FieldsModel extends Model
         $durationMinutes = (int)($service['duration_minutes'] ?? $service['minimum_duration_minutes'] ?? $field['block_minutes'] ?? 60);
         $intervalMinutes = (int)($service['slot_interval_minutes'] ?? $service['booking_interval_minutes'] ?? $durationMinutes);
         $field['duration_minutes'] = $durationMinutes;
+        $field['variable_duration_by_schedule'] = (int)($service['variable_duration_by_schedule'] ?? 0);
         $field['slot_interval_minutes'] = $intervalMinutes;
         $field['block_minutes'] = $durationMinutes;
         $field['booking_interval_minutes'] = $intervalMinutes;

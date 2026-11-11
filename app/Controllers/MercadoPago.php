@@ -310,7 +310,18 @@ class MercadoPago extends BaseController
             return;
         }
 
-        $bookingSlotsModel->update($slotId, ['active' => 0, 'status' => 'cancelled']);
+        try {
+            $bookingSlotsModel->update($slotId, ['active' => 0, 'status' => 'cancelled']);
+        } catch (\Throwable $e) {
+            // Una limpieza fallida no debe conservar el bloqueo temporal.
+            // Si la estructura tiene un índice histórico particular, retirar
+            // directamente el slot permite que el intento pueda reintentarse.
+            try {
+                $bookingSlotsModel->delete($slotId);
+            } catch (\Throwable $deleteError) {
+                log_message('error', 'No se pudo liberar el slot fallido: ' . $deleteError->getMessage());
+            }
+        }
     }
 
     private function releaseActiveSlots(BookingSlotsModel $bookingSlotsModel, array $conditions): void
@@ -1309,12 +1320,33 @@ class MercadoPago extends BaseController
                     $until += 24 * 60;
                 }
                 $duration = $until - $from;
-                $blockMinutes = (int)($field['duration_minutes'] ?? $field['block_minutes'] ?? $field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? 60);
+                $activeWindow = null;
+                $fieldAvailabilityWindows = !empty($field['variable_duration_by_schedule']) ? ($field['availability_windows'] ?? []) : [];
+                foreach ($fieldAvailabilityWindows as $window) {
+                    $windowFrom = $bookingSlotsModel->timeToMinutes($window['start_time'] ?? '00:00');
+                    $windowUntil = $bookingSlotsModel->timeToMinutes($window['end_time'] ?? '00:00');
+                    if ($from >= $windowFrom && $from < $windowUntil) {
+                        $activeWindow = $window;
+                        break;
+                    }
+                }
+                $blockMinutes = (int)($activeWindow['duration_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? $field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? 60);
                 if ($duration <= 0 || $duration !== max(1, $blockMinutes)) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'La duración seleccionada no es válida para el servicio.'));
                 }
                 if (AvailabilityService::isReservationInPast($item['fecha'], $item['horarioDesde'])) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'No se puede reservar en una fecha u horario ya pasados.'));
+                }
+                $availabilityError = (new AvailabilityService())->availabilityError(
+                    (int) $item['cancha'],
+                    $item['fecha'],
+                    $item['horarioDesde'],
+                    $item['horarioHasta'],
+                    null,
+                    true
+                );
+                if ($availabilityError !== null && strpos($availabilityError, 'franja') !== false) {
+                    return $this->response->setJSON($this->setResponse(409, true, null, $availabilityError));
                 }
                 if ($this->isClosedForDateField($item['fecha'], $item['cancha'])) {
                     return $this->response->setJSON($this->setResponse(409, true, null, 'No se puede reservar: hay un cierre informado para esa fecha.'));

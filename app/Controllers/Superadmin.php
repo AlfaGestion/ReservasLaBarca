@@ -25,7 +25,47 @@ class Superadmin extends BaseController
     private function syncFieldAvailabilityWindows(int $fieldId): void
     {
         $db = \Config\Database::connect();
-        if ($fieldId <= 0 || ! $db->tableExists('field_availability_windows')) {
+        if ($fieldId <= 0) {
+            return;
+        }
+
+        if (! $db->tableExists('field_availability_windows')) {
+            try {
+                $forge = \Config\Database::forge();
+                $forge->addField([
+                    'id' => ['type' => 'BIGINT', 'unsigned' => true, 'auto_increment' => true],
+                    'field_id' => ['type' => 'INT', 'unsigned' => true],
+                    'start_time' => ['type' => 'TIME'],
+                    'end_time' => ['type' => 'TIME'],
+                    'duration_minutes' => ['type' => 'INT', 'null' => true],
+                    'price' => ['type' => 'DECIMAL', 'constraint' => '12,2', 'null' => true],
+                    'active' => ['type' => 'TINYINT', 'constraint' => 1, 'default' => 1],
+                    'created_at' => ['type' => 'DATETIME', 'null' => true],
+                    'updated_at' => ['type' => 'DATETIME', 'null' => true],
+                ]);
+                $forge->addKey('id', true);
+                $forge->addKey(['field_id', 'active']);
+                $forge->createTable('field_availability_windows', true);
+            } catch (\Throwable $e) {
+                log_message('error', 'No se pudo preparar la tabla de franjas horarias: ' . $e->getMessage());
+                return;
+            }
+        }
+
+        try {
+            $forge = \Config\Database::forge();
+            if (! $db->fieldExists('duration_minutes', 'field_availability_windows')) {
+                $forge->addColumn('field_availability_windows', [
+                    'duration_minutes' => ['type' => 'INT', 'null' => true],
+                ]);
+            }
+            if (! $db->fieldExists('price', 'field_availability_windows')) {
+                $forge->addColumn('field_availability_windows', [
+                    'price' => ['type' => 'DECIMAL', 'constraint' => '12,2', 'null' => true],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'No se pudo preparar precio y duración de franjas: ' . $e->getMessage());
             return;
         }
 
@@ -34,11 +74,18 @@ class Superadmin extends BaseController
         foreach (is_array($rows) ? $rows : [] as $row) {
             $start = substr(trim((string) ($row['start'] ?? '')), 0, 5);
             $end = substr(trim((string) ($row['end'] ?? '')), 0, 5);
+            $duration = (int) ($row['duration'] ?? 0);
+            $price = parse_price_ar($row['price'] ?? 0);
             if (! preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) || ! preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $end)) continue;
             [$sh, $sm] = array_map('intval', explode(':', $start));
             [$eh, $em] = array_map('intval', explode(':', $end));
             if (($sh * 60 + $sm) >= ($eh * 60 + $em)) continue;
-            $valid[] = ['start_time' => $start . ':00', 'end_time' => $end . ':00'];
+            $valid[] = [
+                'start_time' => $start . ':00',
+                'end_time' => $end . ':00',
+                'duration_minutes' => $duration > 0 ? $duration : null,
+                'price' => $price > 0 ? $price : null,
+            ];
         }
 
         $db->table('field_availability_windows')->where('field_id', $fieldId)->update(['active' => 0, 'updated_at' => date('Y-m-d H:i:s')]);
@@ -476,7 +523,10 @@ class Superadmin extends BaseController
         $tipoCancha = $this->request->getVar('tipoCancha');
         $serviceType = $this->request->getVar('serviceType') ?: 'football';
         $service = (new ServicesModel())->getByCode($serviceType);
-        $blockMinutes = (int)($service['duration_minutes'] ?? $this->request->getVar('blockMinutes') ?? 60);
+        $requestedBlockMinutes = (int) $this->request->getVar('blockMinutes');
+        $blockMinutes = $requestedBlockMinutes > 0
+            ? $requestedBlockMinutes
+            : (int)($service['duration_minutes'] ?? 60);
         $priceUnitLabel = $blockMinutes === 60 ? 'por hora' : 'por bloque de ' . minutesToHuman($blockMinutes);
         $valor = parse_price_ar($this->request->getVar('valor'));
         $valorIluminacion = parse_price_ar($this->request->getVar('valorIluminacion'));
@@ -551,7 +601,10 @@ class Superadmin extends BaseController
         $tipoCancha = $this->request->getVar('tipoCancha');
         $serviceType = $this->request->getVar('serviceType') ?: 'football';
         $service = (new ServicesModel())->getByCode($serviceType);
-        $blockMinutes = (int)($service['duration_minutes'] ?? $this->request->getVar('blockMinutes') ?? 60);
+        $requestedBlockMinutes = (int) $this->request->getVar('blockMinutes');
+        $blockMinutes = $requestedBlockMinutes > 0
+            ? $requestedBlockMinutes
+            : (int)($service['duration_minutes'] ?? 60);
         $priceUnitLabel = $blockMinutes === 60 ? 'por hora' : 'por bloque de ' . minutesToHuman($blockMinutes);
         $valor = parse_price_ar($this->request->getVar('valor'));
         $valorIluminacion = parse_price_ar($this->request->getVar('valorIluminacion'));
@@ -655,6 +708,7 @@ class Superadmin extends BaseController
             'opening_time' => $this->request->getVar('opening_time') ?: '07:00',
             'closing_time' => $this->request->getVar('closing_time') ?: '23:00',
             'duration_minutes' => $durationMinutes,
+            'variable_duration_by_schedule' => $this->request->getVar('variable_duration_by_schedule') ? 1 : 0,
             'slot_interval_minutes' => $intervalMinutes,
             'minimum_duration_minutes' => $durationMinutes,
             'booking_interval_minutes' => $intervalMinutes,
@@ -716,6 +770,7 @@ class Superadmin extends BaseController
             'opening_time' => $this->request->getVar('opening_time') ?: '07:00',
             'closing_time' => $this->request->getVar('closing_time') ?: '23:00',
             'duration_minutes' => $durationMinutes,
+            'variable_duration_by_schedule' => $this->request->getVar('variable_duration_by_schedule') ? 1 : 0,
             'slot_interval_minutes' => $intervalMinutes,
             'minimum_duration_minutes' => $durationMinutes,
             'booking_interval_minutes' => $intervalMinutes,
@@ -1379,7 +1434,7 @@ class Superadmin extends BaseController
             if ($value === null || $value === '') {
                 return '';
             }
-            $boolFields = ['disabled', 'ilumination', 'roofed', 'active', 'online_available', 'allows_quincho_addon', 'offer_active'];
+            $boolFields = ['disabled', 'ilumination', 'roofed', 'active', 'online_available', 'allows_quincho_addon', 'offer_active', 'variable_duration_by_schedule'];
             if (in_array((string)$field, $boolFields, true)) {
                 $normalized = strtolower(trim((string)$value));
                 return in_array($normalized, ['1', 'true', 'yes', 'si', 'on'], true) ? '1' : '0';
@@ -1393,7 +1448,7 @@ class Superadmin extends BaseController
         $allowedFieldsByEntity = [
             'field' => ['name', 'service_type', 'block_minutes', 'floor_type', 'field_type', 'sizes', 'value', 'ilumination_value', 'disabled'],
             'service_price' => ['base_price', 'deposit_price', 'charge_type', 'active'],
-            'service' => ['name', 'opening_time', 'closing_time', 'duration_minutes', 'active', 'online_available', 'allows_quincho_addon', 'color', 'offer_active', 'offer_text', 'discount_type', 'discount_value'],
+            'service' => ['name', 'opening_time', 'closing_time', 'duration_minutes', 'variable_duration_by_schedule', 'active', 'online_available', 'allows_quincho_addon', 'color', 'offer_active', 'offer_text', 'discount_type', 'discount_value'],
             'booking' => ['date', 'id_field', 'time_from', 'time_until', 'payment', 'total', 'diference', 'payment_method', 'approved', 'mp', 'annulled', 'name', 'phone', 'locality', 'created_by_name', 'edited_by_name', 'edited_at', 'payment_delta'],
         ];
         $alwaysIncludeFieldsByEntity = [

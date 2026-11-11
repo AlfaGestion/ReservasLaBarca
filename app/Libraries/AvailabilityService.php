@@ -122,7 +122,17 @@ class AvailabilityService
         }
         $duration = $toMinutes - $fromMinutes;
 
-        $minimum = (int)($service['duration_minutes'] ?? $service['minimum_duration_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? 60);
+        $activeWindow = null;
+        $fieldAvailabilityWindows = !empty($field['variable_duration_by_schedule']) ? ($field['availability_windows'] ?? []) : [];
+        foreach ($fieldAvailabilityWindows as $window) {
+            $windowFrom = $this->slots->timeToMinutes($window['start_time'] ?? '00:00');
+            $windowUntil = $this->slots->timeToMinutes($window['end_time'] ?? '00:00');
+            if ($fromMinutes >= $windowFrom && $fromMinutes < $windowUntil) {
+                $activeWindow = $window;
+                break;
+            }
+        }
+        $minimum = (int)($activeWindow['duration_minutes'] ?? $service['duration_minutes'] ?? $service['minimum_duration_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? 60);
         $interval = (int)($service['slot_interval_minutes'] ?? $service['booking_interval_minutes'] ?? $field['slot_interval_minutes'] ?? $field['block_minutes'] ?? 60);
         if ($minimum <= 0 || $interval <= 0) {
             return 'La configuracion de duracion del servicio no es valida.';
@@ -137,7 +147,7 @@ class AvailabilityService
             return 'El horario seleccionado esta fuera del horario configurado para el servicio.';
         }
 
-        $windows = $field['availability_windows'] ?? [];
+        $windows = $fieldAvailabilityWindows;
         if ($windows !== [] && ! $this->isInsideFieldAvailability($from, $to, $windows)) {
             return 'El horario seleccionado esta fuera de la franja disponible para la cancha.';
         }

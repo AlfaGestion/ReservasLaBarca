@@ -275,6 +275,15 @@ class CustomerOfferService
 
     private function servicePriceForBlock(array $field, string $date, int $minutesFromStart, float $fallback): float
     {
+        $fieldAvailabilityWindows = !empty($field['variable_duration_by_schedule']) ? ($field['availability_windows'] ?? []) : [];
+        foreach ($fieldAvailabilityWindows as $window) {
+            $windowFrom = $this->bookingSlotsModel->timeToMinutes($window['start_time'] ?? '00:00');
+            $windowUntil = $this->bookingSlotsModel->timeToMinutes($window['end_time'] ?? '00:00');
+            if ($minutesFromStart >= $windowFrom && $minutesFromStart < $windowUntil && (float) ($window['price'] ?? 0) > 0) {
+                return (float) $window['price'];
+            }
+        }
+
         return $fallback;
     }
 
@@ -310,13 +319,26 @@ class CustomerOfferService
         }
 
         $durationMinutes = $untilMinutes - $fromMinutes;
-        $blockMinutes = (int) ($field['duration_minutes'] ?? $field['block_minutes'] ?? $field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? 60);
+        $activeWindow = null;
+        $fieldAvailabilityWindows = !empty($field['variable_duration_by_schedule']) ? ($field['availability_windows'] ?? []) : [];
+        foreach ($fieldAvailabilityWindows as $window) {
+            $windowFrom = $this->bookingSlotsModel->timeToMinutes($window['start_time'] ?? '00:00');
+            $windowUntil = $this->bookingSlotsModel->timeToMinutes($window['end_time'] ?? '00:00');
+            if ($fromMinutes >= $windowFrom && $fromMinutes < $windowUntil) {
+                $activeWindow = $window;
+                break;
+            }
+        }
+        $blockMinutes = (int) ($activeWindow['duration_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? $field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? 60);
         $units = $durationMinutes / max(1, $blockMinutes);
         $basePrice = (float) ($field['value'] ?? 0);
         $nightPrice = (float) ($field['ilumination_value'] ?? 0);
-        $perBlockAmount = $this->isNocturnalSlot($normalizedFrom, $normalizedUntil) && $nightPrice > 0
+        $windowPrice = (float) ($activeWindow['price'] ?? 0);
+        $perBlockAmount = $windowPrice > 0
+            ? $windowPrice
+            : ($this->isNocturnalSlot($normalizedFrom, $normalizedUntil) && $nightPrice > 0
             ? $nightPrice
-            : $basePrice;
+            : $basePrice);
 
         $date = (string) ($item['fecha'] ?? $item['date'] ?? date('Y-m-d'));
         $fullBlocks = (int) floor($units);

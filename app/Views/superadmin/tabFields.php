@@ -70,6 +70,13 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                                 <div class="small text-muted">Después de reservar este servicio, ofrece agregar quincho si está disponible.</div>
                             </div>
                         </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch service-state-option">
+                                <input class="form-check-input" type="checkbox" id="variableDuration<?= esc($code) ?>" name="variable_duration_by_schedule" <?= !empty($service['variable_duration_by_schedule']) ? 'checked' : '' ?>>
+                                <label class="form-check-label fw-semibold" for="variableDuration<?= esc($code) ?>">Duración variable por horario</label>
+                                <div class="small text-muted">Permite que cada franja horaria use una duración distinta para este servicio.</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -312,11 +319,12 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                 <div id="fieldFormMessage" class="alert d-none"></div>
 
                 <div class="enterFields d-none" id="enterFields">
-                    <form action="<?= base_url('saveField') ?>" method="POST" class="field-ajax-form field-editor-form">
-                        <div class="input-group mt-3 mb-3">
-                            <span class="input-group-text">Nombre servicio</span>
-                            <input type="text" class="form-control" name="nombre" placeholder="Ingrese el nombre del servicio" aria-label="Nombre servicio">
-                        </div>
+                    <form action="<?= base_url('saveField') ?>" method="POST" class="field-ajax-form field-editor-form field-editor-form--create">
+                        <section class="field-editor-section field-editor-section--main">
+                            <div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Configuración</span><h6>Datos principales</h6></div></div>
+                            <div class="field-editor-grid field-editor-grid--identity">
+                                <label class="field-editor-field field-editor-field--wide"><span>Nombre de la cancha o espacio</span><input type="text" class="form-control" name="nombre" placeholder="Ej.: Cancha 1" aria-label="Nombre de la cancha o espacio" required></label>
+                            </div>
 
                         <div class="mb-3">
                             <label class="form-label d-block mb-2">Tipo de reserva</label>
@@ -333,43 +341,31 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                                 <?php endforeach; ?>
                             </div>
                         </div>
+                        </section>
 
-                        <div class="input-group mb-3">
-                            <span class="input-group-text">Duraci&oacute;n del bloque</span>
-                            <input type="number" class="form-control" id="createBlockMinutes" name="blockMinutes" value="<?= esc($defaultService['duration_minutes'] ?? 60) ?>" min="30" step="30" aria-label="Duracion del bloque">
-                        </div>
+                        <section class="field-editor-section">
+                            <div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Información</span><h6>Características del recurso</h6></div></div>
+                            <div class="field-editor-grid">
+                                <label class="field-editor-field"><span>Duración del servicio <small>(minutos)</small></span><input type="number" class="form-control" id="createBlockMinutes" name="blockMinutes" value="<?= esc($defaultService['duration_minutes'] ?? 60) ?>" min="30" step="30" aria-label="Duración del servicio" required></label>
 
-                        <div class="input-group mb-3">
-                            <span class="input-group-text">Medidas</span>
-                            <input type="text" class="form-control" name="medidas" placeholder="Opcional" aria-label="Medidas">
-                        </div>
+                                <label class="field-editor-field"><span>Medidas</span><input type="text" class="form-control" name="medidas" placeholder="Ej.: 40 x 20 m" aria-label="Medidas"></label>
 
-                        <div class="input-group mb-3">
-                            <span class="input-group-text">Tipo de piso</span>
-                            <input type="text" class="form-control" name="tipoPiso" placeholder="Opcional" aria-label="Tipo piso">
-                        </div>
+                                <label class="field-editor-field"><span>Tipo de piso</span><input type="text" class="form-control" name="tipoPiso" placeholder="Ej.: Sintético" aria-label="Tipo de piso"></label>
 
-                        <div class="input-group mb-3">
-                            <span class="input-group-text">Detalle</span>
-                            <input type="text" class="form-control" name="tipoCancha" placeholder="Detalle opcional" aria-label="Detalle">
-                        </div>
+                                <label class="field-editor-field"><span>Detalle <small>(opcional)</small></span><input type="text" class="form-control" name="tipoCancha" placeholder="Ej.: Con iluminación" aria-label="Detalle"></label>
 
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="tipoTecho" role="switch" id="tipoTecho">
-                            <label class="form-check-label" for="tipoTecho">Es techada</label>
-                        </div>
+                            <label class="field-editor-check"><input class="form-check-input" type="checkbox" name="tipoTecho" role="switch" id="tipoTecho"><span>Cancha techada</span></label>
+                            </div>
+                        </section>
 
-                        <div class="input-group mb-1">
-                            <span class="input-group-text">Precio base</span>
-                            <input type="text" class="form-control" name="valor" placeholder="Ej: 40,00" inputmode="decimal" aria-label="Valor">
-                        </div>
-                        <small class="text-muted d-block mb-3">Acepta formato con punto o coma: `40`, `40,5`, `40.500,75`.</small>
+                        <section class="field-editor-section field-editor-section--prices">
+                            <div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Tarifas</span><h6>Precios del servicio</h6></div><span class="field-editor-helper">Valores en pesos argentinos.</span></div>
+                            <div class="field-editor-price-grid">
+                                <label class="field-editor-price"><span>Precio base</span><div class="field-editor-price-input"><b>$</b><input type="text" class="form-control" name="valor" placeholder="0,00" inputmode="decimal" aria-label="Precio base" required></div><small>Se aplica durante el horario normal.</small></label>
 
-                        <div class="input-group mb-1">
-                            <span class="input-group-text">Precio nocturno</span>
-                            <input type="text" class="form-control" name="valorIluminacion" placeholder="Ej: 50,00 (opcional)" inputmode="decimal" aria-label="Valor nocturno">
-                        </div>
-                        <small class="text-muted d-block mb-3">Si queda vacío o en `0`, se usará automáticamente el precio base.</small>
+                                <label class="field-editor-price"><span>Precio nocturno</span><div class="field-editor-price-input"><b>$</b><input type="text" class="form-control" name="valorIluminacion" placeholder="0,00 (opcional)" inputmode="decimal" aria-label="Precio nocturno"></div><small>Si queda vacío, usa el precio base.</small></label>
+                            </div>
+                        </section>
 
                         <section class="field-editor-section mt-3">
                             <div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Disponibilidad</span><h6>Franja horaria de la cancha</h6></div><span class="field-editor-helper">Opcional. Sin franja se usa el horario general.</span></div>
@@ -379,14 +375,17 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                                     <input type="time" class="form-control" data-availability-start aria-label="Desde">
                                     <span class="text-muted">a</span>
                                     <input type="time" class="form-control" data-availability-end aria-label="Hasta">
+                                    <input type="number" class="form-control" data-availability-duration min="15" step="15" value="<?= esc($defaultService['duration_minutes'] ?? 60) ?>" aria-label="Duración de la franja" placeholder="Minutos">
+                                    <input type="text" class="form-control" data-availability-price aria-label="Precio de la franja" placeholder="Precio">
                                     <button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>
+                                    <small class="field-availability-hint text-muted w-100"></small>
                                 </div>
                             </div>
+                            <small class="text-muted d-block mb-2">La hora final es el cierre de la franja. El último inicio permitido se calcula descontando la duración del turno.</small>
                             <button type="button" class="btn btn-sm btn-outline-primary field-availability-add"><i class="fa-solid fa-plus me-1"></i>Agregar franja</button>
                         </section>
 
-                        <button type="submit" class="btn btn-success">Guardar</button>
-                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancelar</button>
+                        <div class="field-editor-actions"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar precio</button></div>
                     </form>
                 </div>
 

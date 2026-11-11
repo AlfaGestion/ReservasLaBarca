@@ -1730,7 +1730,10 @@ function fillDiv(field) {
                             <input type="time" class="form-control" data-availability-start value="${escapeHtml(String(window.start_time || '').slice(0, 5))}" aria-label="Desde">
                             <span class="text-muted">a</span>
                             <input type="time" class="form-control" data-availability-end value="${escapeHtml(String(window.end_time || '').slice(0, 5))}" aria-label="Hasta">
+                            <input type="number" class="form-control" data-availability-duration min="15" step="15" value="${escapeHtml(String(window.duration_minutes || field.duration_minutes || field.block_minutes || 60))}" aria-label="Duración de la franja" placeholder="Minutos">
+                            <input type="text" class="form-control" data-availability-price value="${escapeHtml(window.price || '')}" aria-label="Precio de la franja" placeholder="Precio">
                             <button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>
+                            <small class="field-availability-hint text-muted w-100"></small>
                         </div>`).join('')
 
     const div = `
@@ -1784,6 +1787,7 @@ function fillDiv(field) {
         `
 
     editFieldDiv.innerHTML = div
+    refreshAvailabilityHints(editFieldDiv)
     hydrateHistoryContainers(editFieldDiv).catch(() => {})
 }
 
@@ -1793,18 +1797,67 @@ function syncFieldAvailability(form) {
     const rows = Array.from(form.querySelectorAll('.field-availability-row')).map(row => ({
         start: row.querySelector('[data-availability-start]')?.value || '',
         end: row.querySelector('[data-availability-end]')?.value || '',
+        duration: row.querySelector('[data-availability-duration]')?.value || '',
+        price: row.querySelector('[data-availability-price]')?.value || '',
     })).filter(row => row.start && row.end)
     target.value = JSON.stringify(rows)
 }
+
+function availabilityTimeToMinutes(value) {
+    const parts = String(value || '').split(':').map(Number)
+    return parts.length === 2 && parts.every(Number.isFinite) ? (parts[0] * 60) + parts[1] : null
+}
+
+function availabilityMinutesToTime(value) {
+    const normalized = ((value % 1440) + 1440) % 1440
+    return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`
+}
+
+function refreshAvailabilityHints(root) {
+    const form = root?.closest?.('form') || root
+    if (!form) return
+    form.querySelectorAll('.field-availability-row').forEach(row => {
+        const durationInput = row.querySelector('[data-availability-duration]') || form.querySelector('input[name="blockMinutes"]')
+        const duration = Math.max(15, Number(durationInput?.value || 60))
+        const start = availabilityTimeToMinutes(row.querySelector('[data-availability-start]')?.value)
+        const end = availabilityTimeToMinutes(row.querySelector('[data-availability-end]')?.value)
+        const hint = row.querySelector('.field-availability-hint')
+        if (!hint) return
+        if (start === null || end === null) {
+            hint.textContent = ''
+            return
+        }
+        const latestStart = end - duration
+        if (latestStart < start) {
+            hint.textContent = 'La franja no alcanza para completar un turno de ' + duration + ' minutos.'
+            hint.className = 'field-availability-hint text-danger w-100'
+            return
+        }
+        hint.textContent = `Inicios permitidos: ${availabilityMinutesToTime(start)} a ${availabilityMinutesToTime(latestStart)} · el turno termina como máximo a las ${availabilityMinutesToTime(end)}`
+        hint.className = 'field-availability-hint text-muted w-100'
+    })
+}
+
+function updateAvailabilityFieldState(event) {
+    const input = event.target.closest?.('.field-editor-form [data-availability-start], .field-editor-form [data-availability-end], .field-editor-form [data-availability-duration], .field-editor-form [data-availability-price], .field-editor-form input[name="blockMinutes"]')
+    if (!input) return
+    const form = input.closest('.field-editor-form')
+    refreshAvailabilityHints(input)
+    syncFieldAvailability(form)
+}
+
+document.addEventListener('input', updateAvailabilityFieldState)
+document.addEventListener('change', updateAvailabilityFieldState)
 
 document.addEventListener('click', (event) => {
     const add = event.target.closest?.('.field-availability-add')
     if (add) {
         const container = add.parentElement.querySelector('[data-availability-rows]')
         if (!container) return
+        const defaultDuration = container.closest('form')?.querySelector('input[name="blockMinutes"]')?.value || 60
         const row = document.createElement('div')
         row.className = 'field-availability-row d-flex gap-2 align-items-center mb-2'
-        row.innerHTML = '<input type="time" class="form-control" data-availability-start aria-label="Desde"><span class="text-muted">a</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>'
+        row.innerHTML = `<input type="time" class="form-control" data-availability-start aria-label="Desde"><span class="text-muted">a</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"><input type="number" class="form-control" data-availability-duration min="15" step="15" value="${escapeHtml(String(defaultDuration))}" aria-label="Duración de la franja" placeholder="Minutos"><input type="text" class="form-control" data-availability-price aria-label="Precio de la franja" placeholder="Precio"><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button><small class="field-availability-hint text-muted w-100"></small>`
         container.appendChild(row)
         return
     }
@@ -1816,7 +1869,7 @@ document.addEventListener('click', (event) => {
         if (container && !container.querySelector('.field-availability-row')) {
             const empty = document.createElement('div')
             empty.className = 'field-availability-row d-flex gap-2 align-items-center mb-2'
-            empty.innerHTML = '<input type="time" class="form-control" data-availability-start aria-label="Desde"><span class="text-muted">a</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>'
+            empty.innerHTML = '<input type="time" class="form-control" data-availability-start aria-label="Desde"><span class="text-muted">a</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"><input type="number" class="form-control" data-availability-duration min="15" step="15" value="60" aria-label="Duración de la franja" placeholder="Minutos"><input type="text" class="form-control" data-availability-price aria-label="Precio de la franja" placeholder="Precio"><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button><small class="field-availability-hint text-muted w-100"></small>'
             container.appendChild(empty)
         }
     }

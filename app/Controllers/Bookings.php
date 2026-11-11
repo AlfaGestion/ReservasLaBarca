@@ -533,11 +533,21 @@ class Bookings extends BaseController
                 $until += 24 * 60;
             }
             $duration = $until - $from;
-            $blockMinutes = (int)($field['duration_minutes'] ?? $field['block_minutes'] ?? $field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? 60);
+            $activeWindow = null;
+            $fieldAvailabilityWindows = !empty($field['variable_duration_by_schedule']) ? ($field['availability_windows'] ?? []) : [];
+            foreach ($fieldAvailabilityWindows as $window) {
+                $windowFrom = $bookingSlotsModel->timeToMinutes($window['start_time'] ?? '00:00');
+                $windowUntil = $bookingSlotsModel->timeToMinutes($window['end_time'] ?? '00:00');
+                if ($from >= $windowFrom && $from < $windowUntil) {
+                    $activeWindow = $window;
+                    break;
+                }
+            }
+            $blockMinutes = (int)($activeWindow['duration_minutes'] ?? $field['duration_minutes'] ?? $field['block_minutes'] ?? $field['slot_interval_minutes'] ?? $field['booking_interval_minutes'] ?? 60);
             if ($duration <= 0 || $duration !== max(1, $blockMinutes)) {
                 return 'La duración seleccionada no es válida para el servicio.';
             }
-            $availabilityWindows = $field['availability_windows'] ?? [];
+            $availabilityWindows = $fieldAvailabilityWindows;
             if ($availabilityWindows !== []) {
                 $insideWindow = false;
                 foreach ($availabilityWindows as $window) {
