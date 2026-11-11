@@ -394,7 +394,10 @@ document.addEventListener('change', async (e) => {
             horarioDesde.selectedIndex = 0
             horarioHasta.selectedIndex = 0
 
+            currentOccupiedSlots = []
+            updateServiceOptions()
             await checkClosureStatus()
+            await getTimeFromBookings()
             await getAmount(selectCancha.value)
 
         } else if (e.target.id == 'horarioDesde') {
