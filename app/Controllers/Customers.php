@@ -589,6 +589,12 @@ class Customers extends BaseController
 
     public function adminEditAjax($id = null)
     {
+        if ((int) $this->request->getVar('idCustomer') <= 0 && (int) $id > 0) {
+            $postData = $this->request->getPost();
+            $postData['idCustomer'] = (int) $id;
+            $this->request->setGlobal('post', $postData);
+        }
+
         return $this->editAjax();
     }
 
