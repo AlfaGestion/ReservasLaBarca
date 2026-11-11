@@ -8,6 +8,7 @@ const horarioDesde = document.getElementById('horarioDesde')
 const horarioHasta = document.getElementById('horarioHasta')
 const inputMonto = document.getElementById('inputMonto')
 const divMonto = document.getElementById('div-monto')
+const bookingDiscountStatus = document.getElementById('bookingDiscountStatus')
 const nombre = document.getElementById('nombre')
 const telefono = document.getElementById('telefono')
 const localidad = document.getElementById('localidad')
@@ -74,6 +75,12 @@ let closureLoadNoticeShown = false
 let closureInfo = { closed: false, scope: 'none', label: '', fecha: '', closedAll: false, closedFields: [] }
 let currentOccupiedSlots = []
 let timeBookingsRequestId = 0
+let customerLookupTimer = null
+let customerLookupAbortController = null
+let customerLookupSequence = 0
+
+const CUSTOMER_LOOKUP_DELAY = 1500
+const CUSTOMER_LOOKUP_TIMEOUT = 8000
 
 function renderServiceTypeOptions() {
     if (!serviceTypeSelect || bookingServices.length === 0) return
@@ -349,14 +356,10 @@ document.addEventListener('change', async (e) => {
             ensureHorarioHastaSelected(true)
             syncQuinchoSuggestion()
             inputMonto.value = 0
-            getAmount(selectCancha.value)
-            getTimeFromBookings()
-                .then(() => {
-                    ensureHorarioHastaSelected(true)
-                    syncQuinchoSuggestion()
-                    getAmount(selectCancha.value)
-                })
-                .catch(() => { })
+            await getTimeFromBookings()
+            ensureHorarioHastaSelected(true)
+            syncQuinchoSuggestion()
+            await getAmount(selectCancha.value)
 
         } else if (e.target.id == 'cancha') {
             if (!sessionUserLogued) {
@@ -364,10 +367,11 @@ document.addEventListener('change', async (e) => {
             }
 
             updateTimeOptions()
-            getAmount(selectCancha.value)
             await getTimeFromBookings()
             await checkClosureStatus()
             updateAdditionalQuinchoVisibility()
+            ensureHorarioHastaSelected(true)
+            await getAmount(selectCancha.value)
 
         } else if (e.target.id == 'horarioHasta') {
             inputMonto.value = 0
@@ -604,23 +608,103 @@ function checkSunday() {
 }
 
 
+function setCustomerLookupStatus(message = '', type = '') {
+    const status = document.getElementById('customerLookupStatus')
+    if (!status) return
+    status.textContent = message
+    status.className = `form-text customer-lookup-status${type ? ` text-${type}` : ''}`
+}
+
+function resetCustomerLookup() {
+    clearTimeout(customerLookupTimer)
+    customerLookupTimer = null
+    if (customerLookupAbortController) {
+        customerLookupAbortController.abort()
+        customerLookupAbortController = null
+    }
+    customerLookupSequence++
+    currentCustomer = null
+    currentBookingQuote = null
+    useOffer = false
+    if (nombre) {
+        nombre.value = ''
+        nombre.disabled = true
+    }
+    setCustomerLookupStatus('')
+}
+
+async function lookupCustomerNow() {
+    const phone = normalizePhone(telefono.value)
+    if (phone.length < 10 || phone.length > 11) return
+
+    if (customerLookupAbortController) customerLookupAbortController.abort()
+    const sequence = ++customerLookupSequence
+    const controller = new AbortController()
+    customerLookupAbortController = controller
+    const timeoutId = setTimeout(() => controller.abort(), CUSTOMER_LOOKUP_TIMEOUT)
+
+    setCustomerLookupStatus('Buscando cliente...')
+    modalSpinner.show()
+    try {
+        const quote = await refreshCustomerOfferPreview({ showModal: true, lookupSignal: controller.signal })
+        if (sequence !== customerLookupSequence) return
+        if (quote?.customer) {
+            nombre.disabled = true
+            setCustomerLookupStatus('Cliente encontrado.', 'success')
+        } else {
+            nombre.disabled = false
+            setCustomerLookupStatus('No encontramos el cliente. Completá el nombre para continuar.', 'warning')
+            nombre.focus()
+        }
+    } catch (error) {
+        if (controller.signal.aborted && sequence !== customerLookupSequence) return
+        console.error('Error al buscar cliente:', error)
+        if (sequence !== customerLookupSequence) return
+        nombre.disabled = false
+        setCustomerLookupStatus('No pudimos buscar el cliente. Completá el nombre para continuar.', 'warning')
+    } finally {
+        clearTimeout(timeoutId)
+        if (sequence === customerLookupSequence) {
+            customerLookupAbortController = null
+            modalSpinner.hide()
+        }
+    }
+}
+
+function scheduleCustomerLookup(immediate = false) {
+    clearTimeout(customerLookupTimer)
+    if (customerLookupAbortController) {
+        customerLookupAbortController.abort()
+        customerLookupAbortController = null
+    }
+    customerLookupSequence++
+
+    const phone = normalizePhone(telefono.value)
+    if (phone.length < 10 || phone.length > 11) {
+        resetCustomerLookup()
+        return
+    }
+
+    setCustomerLookupStatus(immediate ? 'Buscando cliente...' : 'Esperando que termines de escribir...')
+    customerLookupTimer = setTimeout(lookupCustomerNow, immediate ? 0 : CUSTOMER_LOOKUP_DELAY)
+}
+
 telefono.addEventListener('input', async () => {
+    resetCustomerLookup()
     const phone = normalizePhone(telefono.value)
     if (phone.length >= 10 && phone.length <= 11) {
-        modalSpinner.show()
-        try {
-            await refreshCustomerOfferPreview({ showModal: true })
-        } catch (error) {
-            console.error('Error al validar telefono:', error)
-            await refreshCustomerOfferPreview({ showModal: false })
-        } finally {
-            setTimeout(() => { modalSpinner.hide() }, 300);
-        }
+        scheduleCustomerLookup()
     } else {
-        currentCustomer = null
-        currentBookingQuote = null
-        useOffer = false
         await refreshCustomerOfferPreview({ showModal: false })
+    }
+})
+
+telefono.addEventListener('keydown', async (event) => {
+    if (event.key === 'Enter') {
+        event.preventDefault()
+        clearTimeout(customerLookupTimer)
+        customerLookupTimer = null
+        await lookupCustomerNow()
     }
 })
 
@@ -1278,6 +1362,7 @@ async function getAmount(field = "1") {
                 final_total: 0
             }
             useOffer = false
+            updateBookingDiscountStatus(currentBookingQuote)
             await syncPagoReservaInput(0)
             return
         }
@@ -1286,6 +1371,7 @@ async function getAmount(field = "1") {
     } catch (error) {
         console.error('Error:', error);
         inputMonto.value = 0
+        updateBookingDiscountStatus({ original_total: 0, discount_total: 0, final_total: 0 })
     }
 }
 
@@ -1362,6 +1448,25 @@ function getCurrentTotalAmount() {
     }
 
     return parsePriceAR(inputMonto.value || 0)
+}
+
+function updateBookingDiscountStatus(quote) {
+    if (!bookingDiscountStatus) return
+
+    const original = Number(quote?.original_total || 0)
+    const discount = Number(quote?.discount_total || 0)
+    const finalAmount = Number(quote?.final_total || 0)
+
+    bookingDiscountStatus.className = 'form-text booking-discount-status'
+    if (discount > 0) {
+        bookingDiscountStatus.classList.add('text-success')
+        bookingDiscountStatus.textContent = `Descuento aplicado: -${formatPriceAR(discount)} · Total final: ${formatPriceAR(finalAmount)}`
+    } else if (original > 0) {
+        bookingDiscountStatus.classList.add('text-muted')
+        bookingDiscountStatus.textContent = 'Sin descuento aplicado'
+    } else {
+        bookingDiscountStatus.textContent = ''
+    }
 }
 
 async function syncPagoReservaInput(totalAmount) {
@@ -1454,7 +1559,7 @@ function renderOfferModal(quote) {
     ofertaModal.show()
 }
 
-async function refreshCustomerOfferPreview({ showModal = false } = {}) {
+async function refreshCustomerOfferPreview({ showModal = false, lookupSignal = null } = {}) {
     const phone = normalizePhone(telefono?.value || '')
     const baseItems = await buildBookingBaseItems()
 
@@ -1471,6 +1576,7 @@ async function refreshCustomerOfferPreview({ showModal = false } = {}) {
         }
         useOffer = false
         inputMonto.value = 0
+        updateBookingDiscountStatus(currentBookingQuote)
         await syncPagoReservaInput(0)
         lastOfferModalKey = ''
         return currentBookingQuote
@@ -1503,6 +1609,7 @@ async function refreshCustomerOfferPreview({ showModal = false } = {}) {
         currentBookingQuote = fallbackQuote
         useOffer = false
         inputMonto.value = formatPriceAR(baseTotal)
+        updateBookingDiscountStatus(currentBookingQuote)
         await syncPagoReservaInput(baseTotal)
         lastOfferModalKey = ''
         return currentBookingQuote
@@ -1510,7 +1617,7 @@ async function refreshCustomerOfferPreview({ showModal = false } = {}) {
 
     let customer = currentCustomer
     if (!customer || normalizePhone(customer.phone || '') !== phone) {
-        customer = await getCustomer(phone)
+        customer = await getCustomer(phone, lookupSignal)
         currentCustomer = customer
     }
 
@@ -1523,7 +1630,10 @@ async function refreshCustomerOfferPreview({ showModal = false } = {}) {
         currentCustomer = null
         currentBookingQuote = fallbackQuote
         useOffer = false
+        nombre.value = ''
+        nombre.disabled = false
         inputMonto.value = formatPriceAR(baseTotal)
+        updateBookingDiscountStatus(currentBookingQuote)
         await syncPagoReservaInput(baseTotal)
         lastOfferModalKey = ''
         return currentBookingQuote
@@ -1564,6 +1674,7 @@ async function refreshCustomerOfferPreview({ showModal = false } = {}) {
     }
     useOffer = discountTotal > 0
     inputMonto.value = formatPriceAR(finalTotal)
+    updateBookingDiscountStatus(currentBookingQuote)
     await syncPagoReservaInput(finalTotal)
 
     if (showModal && discountTotal > 0) {
@@ -1598,6 +1709,7 @@ async function getNocturnalTime() {
         }
     } catch (error) {
         console.error('Error:', error);
+        if (signal?.aborted) throw error
         return null
     }
 }
@@ -1724,9 +1836,9 @@ async function fetchFormInfo(data) {
     }
 }
 
-async function getCustomer(phone) {
+async function getCustomer(phone, signal = null) {
     try {
-        const response = await fetch(`${baseUrl}getCustomer/${phone}`);
+        const response = await fetch(`${baseUrl}getCustomer/${phone}`, signal ? { signal } : undefined);
 
         const responseData = await response.json();
 
@@ -2159,9 +2271,9 @@ async function buildSingleItemBaseQuote(fieldId, from, until, isAdditional = fal
 
     const nocturnalTime = await getNocturnalTime()
     const isNight = isNocturnalBooking(nocturnalTime)
-    const perBlockAmount = isNight
-        ? (Number(selectedField.ilumination_value || 0) > 0 ? Number(selectedField.ilumination_value || 0) : Number(selectedField.value || 0))
-        : Number(selectedField.value || 0)
+    const basePrice = Number(selectedField.value ?? selectedField.price ?? selectedField.amount ?? 0)
+    const nightPrice = Number(selectedField.ilumination_value ?? selectedField.night_value ?? selectedField.price_light ?? 0)
+    const perBlockAmount = isNight && nightPrice > 0 ? nightPrice : basePrice
     const blockMinutes = Number(selectedField.duration_minutes || selectedField.block_minutes || selectedField.slot_interval_minutes || selectedField.booking_interval_minutes || 60)
     const baseAmount = calculateSingleItemAmount(from, until, perBlockAmount, blockMinutes)
 

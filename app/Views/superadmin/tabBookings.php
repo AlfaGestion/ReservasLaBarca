@@ -160,11 +160,13 @@
                     <input type="text" class="form-control" name="inputMonto" id="inputMonto" value="0" aria-label="name">
                     <label for="inputMonto">Monto</label>
                 </div>
+                <div id="bookingDiscountStatus" class="form-text booking-discount-status mb-3" aria-live="polite"></div>
 
                 <div class="form-floating flex-nowrap mb-3 d-flex align-items-center justify-content-center flex-row">
                     <input type="number" class="form-control" name="telefono" id="telefono" placeholder="Ingrese el teléfono" aria-label="name">
                     <label for="telefono">Teléfono</label>
                 </div>
+                <div id="customerLookupStatus" class="form-text customer-lookup-status" aria-live="polite"></div>
 
                 <div class="form-floating flex-nowrap mb-3">
                     <input type="text" class="form-control" name="localidad" id="localidad" placeholder="Ingrese la localidad" aria-label="localidad" autocomplete="off" spellcheck="false">
