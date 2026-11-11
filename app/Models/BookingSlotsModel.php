@@ -158,25 +158,29 @@ class BookingSlotsModel extends Model
                 return false;
             }
 
-            // Reutilizar un registro huérfano evita chocar con instalaciones
-            // que tienen un índice único sobre fecha/cancha/horario/estado.
-            $orphan = $this->where('date', $date)
+            // Revisar todas las filas exactas porque algunas bases tienen
+            // históricos inactivos y una fila activa huérfana para el mismo
+            // horario. El índice único impide reactivar la histórica hasta
+            // retirar la fila activa inválida.
+            $sameSlots = $this->where('date', $date)
                 ->where('id_field', $fieldId)
                 ->where('time_from', $slotData['time_from'])
                 ->where('time_until', $slotData['time_until'])
                 ->orderBy('id', 'ASC')
-                ->first();
+                ->findAll();
 
-            if ($orphan) {
-                $pendingIsActive = ($orphan['status'] ?? '') === 'pending'
-                    && !empty($orphan['expires_at'])
-                    && strtotime($orphan['expires_at']) >= time();
+            $reusableSlot = null;
+            foreach ($sameSlots as $sameSlot) {
+                $pendingIsActive = ($sameSlot['status'] ?? '') === 'pending'
+                    && (int) ($sameSlot['active'] ?? 0) === 1
+                    && !empty($sameSlot['expires_at'])
+                    && strtotime($sameSlot['expires_at']) >= time();
 
                 $bookingIsActive = false;
-                if (!empty($orphan['booking_id'])) {
+                if (!empty($sameSlot['booking_id'])) {
                     $booking = $this->db->table('bookings')
                         ->select('id, annulled')
-                        ->where('id', (int) $orphan['booking_id'])
+                        ->where('id', (int) $sameSlot['booking_id'])
                         ->get()
                         ->getRowArray();
                     $bookingIsActive = $booking && (int) ($booking['annulled'] ?? 0) !== 1;
@@ -186,11 +190,20 @@ class BookingSlotsModel extends Model
                     return false;
                 }
 
+                if ((int) ($sameSlot['active'] ?? 0) === 1) {
+                    // Solo se elimina la fila de control sin reserva válida.
+                    $this->delete((int) $sameSlot['id']);
+                } elseif ($reusableSlot === null) {
+                    $reusableSlot = $sameSlot;
+                }
+            }
+
+            if ($reusableSlot !== null) {
                 // El booking_id anterior puede apuntar a una reserva borrada
                 // o anulada; dejarlo en NULL permite asignar el nuevo booking.
                 $slotData['booking_id'] = null;
-                $this->update((int) $orphan['id'], $slotData);
-                return (int) $orphan['id'];
+                $this->update((int) $reusableSlot['id'], $slotData);
+                return (int) $reusableSlot['id'];
             }
 
             try {
