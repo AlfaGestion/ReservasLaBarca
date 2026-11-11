@@ -4,12 +4,14 @@ namespace App\Controllers;
 
 use App\Libraries\AvailabilityService;
 use App\Libraries\CustomerOfferService;
+use App\Libraries\PrintBookings;
 use App\Libraries\PlayerDiscountService;
 use App\Libraries\PlayerPortalSettings;
 use App\Models\BookingSlotsModel;
 use App\Models\CancelReservationsModel;
 use App\Models\FieldsModel;
 use App\Models\MercadoPagoKeysModel;
+use App\Models\MercadoPagoModel;
 use App\Models\PlayerAccountsModel;
 use App\Models\PlayerBookingLinksModel;
 use App\Models\RateModel;
@@ -47,7 +49,8 @@ class PlayerBookings extends BaseController
         $services = array_values(array_filter($services, static fn ($service) => ! empty($fieldsByService[$service['code']] ?? [])));
 
         $keys = (new MercadoPagoKeysModel())->first() ?: [];
-        return $this->page('reservations', [
+        $onlyBookings = $this->request->getGet('vista') === 'mis-reservas';
+        return $this->page($onlyBookings ? 'my_reservations' : 'reservations', [
             'services' => $services,
             'fieldsByService' => $fieldsByService,
             'publicKeyMp' => (string) ($keys['public_key'] ?? ''),
@@ -60,6 +63,7 @@ class PlayerBookings extends BaseController
 
     public function availability()
     {
+        try {
         $date = trim((string) $this->request->getGet('date'));
         $fieldId = (int) $this->request->getGet('field_id');
         if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $fieldId <= 0) {
@@ -86,6 +90,10 @@ class PlayerBookings extends BaseController
         for ($cursor = $from; $cursor + $duration <= $until; $cursor += $interval) {
             $slotFrom = $this->minutesToTime($cursor);
             $slotUntil = $this->minutesToTime($cursor + $duration);
+            // No ofrecer turnos cuyo inicio ya pasó cuando se consulta el día actual.
+            if (AvailabilityService::isReservationInPast($date, $slotFrom)) {
+                continue;
+            }
             $error = $availability->availabilityError($fieldId, $date, $slotFrom, $slotUntil, null, true);
             $slots[] = [
                 'from' => $slotFrom,
@@ -107,6 +115,13 @@ class PlayerBookings extends BaseController
                     : null,
             ],
         ]);
+        } catch (\Throwable $exception) {
+            log_message('error', 'Portal: no se pudieron cargar los horarios: {message}', ['message' => $exception->getMessage()]);
+            return $this->response->setStatusCode(500)->setJSON([
+                'error' => true,
+                'message' => 'No pudimos cargar los horarios disponibles. Intenta nuevamente.',
+            ]);
+        }
     }
 
     public function quote()
@@ -194,7 +209,84 @@ class PlayerBookings extends BaseController
         if (! $booking) {
             return $this->response->setStatusCode(404)->setBody('Reserva no encontrada.');
         }
-        return $this->page('reservation_detail', ['booking' => $booking]);
+        $player = $this->player();
+        $canShare = empty($booking['match_id']) || (int) ($booking['match_organizer_player_id'] ?? 0) === (int) ($player['id'] ?? 0);
+        $sharePdfUrl = null;
+        if ($player && $canShare) {
+            $shareToken = $this->createShareToken($bookingId, (int) $player['id']);
+            if ($shareToken !== '') $sharePdfUrl = base_url('app/reservas/compartir/' . $bookingId . '/' . $shareToken);
+        }
+        return $this->page('reservation_detail', ['booking' => $booking, 'sharePdfUrl' => $sharePdfUrl]);
+    }
+
+    public function downloadPdf(int $bookingId)
+    {
+        $booking = $this->bookingForPlayer($bookingId);
+        $player = $this->player();
+        $isOrganizer = ! empty($booking['match_id'])
+            && (int) ($booking['match_organizer_player_id'] ?? 0) === (int) ($player['id'] ?? 0);
+
+        // Los participantes incorporados reciben el detalle por correo, pero no
+        // pueden descargar ni compartir el comprobante del organizador.
+        if (! $booking || (! empty($booking['match_id']) && ! $isOrganizer)) {
+            return $this->response->setStatusCode(403)->setBody('No tenés permiso para descargar esta reserva.');
+        }
+
+        return $this->pdfResponse($booking, 'attachment');
+    }
+
+    public function sharedPdf(int $bookingId, string $token)
+    {
+        $parts = explode('.', $token, 2);
+        if (count($parts) !== 2) {
+            return $this->response->setStatusCode(404)->setBody('El enlace de la reserva no es válido.');
+        }
+        $payload = base64_decode(strtr($parts[0], '-_', '+/') . str_repeat('=', (4 - strlen($parts[0]) % 4) % 4), true);
+        $data = $payload !== false ? explode('|', $payload) : [];
+        if (count($data) !== 3 || (int) $data[0] !== $bookingId || (int) $data[2] < time()) {
+            return $this->response->setStatusCode(404)->setBody('El enlace de la reserva venció o no es válido.');
+        }
+        $player = (new PlayerAccountsModel())->find((int) $data[1]);
+        if (! $player || ! hash_equals(hash_hmac('sha256', $payload, (string) ($player['password_hash'] ?? '')), $parts[1])) {
+            return $this->response->setStatusCode(404)->setBody('El enlace de la reserva no es válido.');
+        }
+        $booking = $this->bookingForPlayerId($bookingId, (int) $data[1]);
+        if (! $booking) {
+            return $this->response->setStatusCode(404)->setBody('La reserva no está disponible.');
+        }
+        $isOrganizer = empty($booking['match_id']) || (int) ($booking['match_organizer_player_id'] ?? 0) === (int) $data[1];
+        if (! $isOrganizer) {
+            return $this->response->setStatusCode(404)->setBody('El enlace de la reserva no es válido.');
+        }
+        return $this->pdfResponse($booking, 'inline');
+    }
+
+    private function pdfResponse(array $booking, string $disposition)
+    {
+        $field = (new FieldsModel())->getField((int) $booking['id_field']);
+        if (! $field) return $this->response->setStatusCode(404)->setBody('No se pudo encontrar la instalación de la reserva.');
+        $slotModel = new BookingSlotsModel();
+        $fromMinutes = $slotModel->timeToMinutes($booking['time_from']);
+        $untilMinutes = $slotModel->timeToMinutes($booking['time_until']);
+        if ($untilMinutes <= $fromMinutes) $untilMinutes += 24 * 60;
+        $mpPayment = (new MercadoPagoModel())->where('id_booking', (int) $booking['id'])->first() ?: ['payment_id' => 'N/D', 'status' => 'N/D'];
+        $pdf = (new PrintBookings())->renderBooking([
+            'nombre' => $booking['name'], 'telefono' => $booking['phone'], 'fecha' => date('d/m/Y', strtotime($booking['date'])),
+            'horario' => $slotModel->normalizeTime($booking['time_from']) . ' a ' . $slotModel->normalizeTime($booking['time_until']),
+            'duracion' => minutesToHuman($untilMinutes - $fromMinutes), 'cancha' => $field['name'],
+            'id_mercado_pago' => $mpPayment['payment_id'], 'estado_pago' => $mpPayment['status'],
+            'total_cancha' => $booking['total'], 'pagado' => $booking['payment'], 'saldo' => $booking['diference'], 'detalle' => $booking['description'] ?? '',
+        ]);
+        return $this->response->setHeader('Content-Type', 'application/pdf')->setHeader('Content-Disposition', $disposition . '; filename="' . $pdf['name'] . '"')->setBody($pdf['content']);
+    }
+
+    private function createShareToken(int $bookingId, int $playerId): string
+    {
+        $player = (new PlayerAccountsModel())->find($playerId);
+        if (! $player || trim((string) ($player['password_hash'] ?? '')) === '') return '';
+        $payload = $bookingId . '|' . $playerId . '|' . (time() + 7 * 86400);
+        $encoded = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
+        return $encoded . '.' . hash_hmac('sha256', $payload, (string) $player['password_hash']);
     }
 
     private function myBookings(): array
@@ -204,12 +296,18 @@ class PlayerBookings extends BaseController
             return [];
         }
         $db = \Config\Database::connect();
+        $matchSelect = 'pm.id AS match_id, pm.organizer_player_id AS match_organizer_player_id, pm.join_mode, pm.payment_mode, pm.payment_total, pm.participant_share, pm.max_players AS match_max_players, pm.confirmed_players AS match_confirmed_players';
+        if ($db->fieldExists('max_starters', 'player_matches')) $matchSelect .= ', pm.max_starters AS match_max_starters';
+        if ($db->fieldExists('max_substitutes', 'player_matches')) $matchSelect .= ', pm.max_substitutes AS match_max_substitutes';
+        if ($db->fieldExists('padel_category_min', 'player_matches')) $matchSelect .= ', pm.padel_category_min AS match_padel_category_min, pm.padel_category_max AS match_padel_category_max';
         return $db->table('player_booking_links l')
-            ->select('b.*, f.name AS field_name, f.service_type, s.name AS service_name, s.is_sport')
+            ->select('b.*, f.name AS field_name, f.service_type, s.name AS service_name, s.is_sport, ' . $matchSelect)
             ->join('bookings b', 'b.id = l.booking_id', 'inner')
             ->join('fields f', 'f.id = b.id_field', 'left')
             ->join('services s', 's.code = f.service_type', 'left')
+            ->join('player_matches pm', 'pm.booking_id = b.id AND pm.status IN (\'open\', \'closed\')', 'left', false)
             ->where('l.player_id', (int) $player['id'])
+            ->where('b.annulled', 0)
             ->orderBy('b.date', 'DESC')
             ->orderBy('b.time_from', 'DESC')
             ->get()->getResultArray();
@@ -221,13 +319,24 @@ class PlayerBookings extends BaseController
         if (! $player || $bookingId <= 0) {
             return null;
         }
+        return $this->bookingForPlayerId($bookingId, (int) $player['id']);
+    }
+
+    private function bookingForPlayerId(int $bookingId, int $playerId): ?array
+    {
+        if ($bookingId <= 0 || $playerId <= 0) return null;
         $db = \Config\Database::connect();
+        $matchSelect = 'pm.id AS match_id, pm.organizer_player_id AS match_organizer_player_id, pm.join_mode, pm.payment_mode, pm.payment_total, pm.participant_share, pm.max_players AS match_max_players, pm.confirmed_players AS match_confirmed_players';
+        if ($db->fieldExists('max_starters', 'player_matches')) $matchSelect .= ', pm.max_starters AS match_max_starters';
+        if ($db->fieldExists('max_substitutes', 'player_matches')) $matchSelect .= ', pm.max_substitutes AS match_max_substitutes';
+        if ($db->fieldExists('padel_category_min', 'player_matches')) $matchSelect .= ', pm.padel_category_min AS match_padel_category_min, pm.padel_category_max AS match_padel_category_max';
         return $db->table('player_booking_links l')
-            ->select('b.*, f.name AS field_name, f.service_type, s.name AS service_name, s.is_sport')
+            ->select('b.*, f.name AS field_name, f.service_type, s.name AS service_name, s.is_sport, ' . $matchSelect)
             ->join('bookings b', 'b.id = l.booking_id', 'inner')
             ->join('fields f', 'f.id = b.id_field', 'left')
             ->join('services s', 's.code = f.service_type', 'left')
-            ->where('l.player_id', (int) $player['id'])
+            ->join('player_matches pm', 'pm.booking_id = b.id AND pm.status IN (\'open\', \'closed\')', 'left', false)
+            ->where('l.player_id', $playerId)
             ->where('b.id', $bookingId)
             ->get()->getRowArray() ?: null;
     }

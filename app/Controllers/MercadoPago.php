@@ -1277,7 +1277,13 @@ class MercadoPago extends BaseController
             }
 
             $bookingArr = json_decode(json_encode($booking), true);
-            $matchOptions = is_array($bookingArr['matchOptions'] ?? null) ? $bookingArr['matchOptions'] : null;
+            // Las reservas normales no deben crear intenciones de partido. El
+            // navegador puede omitir matchOptions o enviarlo desactivado, por
+            // lo que solo se conserva cuando el checkbox fue confirmado.
+            $matchOptions = is_array($bookingArr['matchOptions'] ?? null)
+                && !empty($bookingArr['matchOptions']['enabled'])
+                ? $bookingArr['matchOptions']
+                : null;
             $bookingPhone = trim((string) ($bookingArr['telefono'] ?? $bookingArr['phone'] ?? ''));
             $customerOfferService = new CustomerOfferService();
             $bookingQuote = $customerOfferService->calculateBookingQuote(
@@ -1820,6 +1826,7 @@ class MercadoPago extends BaseController
 
             if (!empty($bookingIds)) {
                 $bookingIds = array_values(array_unique($bookingIds));
+                (new PlayerBookingLinksModel())->whereIn('booking_id', $bookingIds)->delete();
                 $bookingsModel->whereIn('id', $bookingIds)
                     ->where('approved !=', 1)
                     ->set(['annulled' => 1, 'approved' => 0, 'mp' => 0])
@@ -1869,7 +1876,8 @@ class MercadoPago extends BaseController
             // Respuesta idempotente: si no hubo excepcion, consideramos cancelacion procesada.
             return $this->response->setJSON($this->setResponse(null, null, ['cancelled' => true], 'Reserva pendiente cancelada.'));
         } catch (\Exception $e) {
-            return $this->response->setJSON($this->setResponse(500, true, null, $e->getMessage()));
+            log_message('error', 'Error al cancelar reserva pendiente de Mercado Pago: ' . $e->getMessage());
+            return $this->response->setJSON($this->setResponse(500, true, null, 'No se pudo cancelar la reserva pendiente. Intentá nuevamente.'));
         }
     }
 

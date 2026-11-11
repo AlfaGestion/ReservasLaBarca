@@ -1,9 +1,20 @@
 (function () {
+    document.querySelectorAll('a[href="#mis-reservas"]').forEach(link => {
+        link.href = `${window.location.pathname}?vista=mis-reservas#mis-reservas`
+    })
     const config = window.playerBookingConfig || {}
     const form = document.getElementById('player-booking-form')
     if (!form) return
 
     const screens = [...document.querySelectorAll('.wizard-screen[data-step]')]
+    const contextByStep = {}
+    screens.filter(screen => Number(screen.dataset.step) >= 2 && Number(screen.dataset.step) <= 5).forEach(screen => {
+        const context = document.createElement('div')
+        context.className = 'wizard-context'
+        context.hidden = true
+        screen.querySelector('.wizard-screen-heading')?.appendChild(context)
+        contextByStep[Number(screen.dataset.step)] = context
+    })
     const progress = [...document.querySelectorAll('[data-progress-step]')]
     const serviceButtons = [...document.querySelectorAll('.service-choice')]
     const date = document.getElementById('booking-date')
@@ -14,6 +25,17 @@
     const until = document.getElementById('booking-until')
     const loading = document.getElementById('booking-loading')
     const timeMessage = document.getElementById('booking-time-message')
+    const changeDateButton = document.createElement('button')
+    changeDateButton.type = 'button'
+    changeDateButton.className = 'button button-ghost'
+    changeDateButton.textContent = 'Elegir otra fecha'
+    changeDateButton.hidden = true
+    timeMessage?.after(changeDateButton)
+    if (timeMessage) {
+        new MutationObserver(() => {
+            changeDateButton.hidden = !timeMessage.textContent.includes('No hay horarios disponibles')
+        }).observe(timeMessage, { childList: true, characterData: true, subtree: true })
+    }
     const formMessage = document.getElementById('booking-form-message')
     const dateMessage = document.getElementById('booking-date-message')
     const fieldNext = document.querySelector('[data-step="3"] .wizard-next')
@@ -28,6 +50,9 @@
     const summaryError = document.getElementById('booking-summary-error')
     const confirmButton = document.getElementById('booking-confirm')
     const payment = document.getElementById('booking-payment')
+    const resultEditButton = document.getElementById('booking-result-edit')
+    const cancelUrl = config.cancelUrl || (config.createUrl ? new URL('../../mercado-pago/cancelar-pendiente', config.createUrl).toString() : '')
+    if (resultEditButton) resultEditButton.textContent = 'Cancelar reserva y volver'
     let csrf = document.querySelector('meta[name="csrf-token"]')?.content || ''
     const addonSection = document.getElementById('addon-section')
     const addonBox = document.getElementById('addon-fields')
@@ -39,6 +64,7 @@
     let selectedService = ''
     let selectedField = ''
     let quote = null
+    let pendingPayment = null
     let requestId = 0
     let calendarMonth = new Date(`${date.value}T12:00:00`)
 
@@ -121,6 +147,34 @@
         progress.forEach(item => { const number = Number(item.dataset.progressStep); item.classList.toggle('is-active', number === step); item.classList.toggle('is-complete', number < step) })
     }
 
+    function selectedServiceName() {
+        return config.fieldsByService && selectedService
+            ? (serviceButtons.find(button => button.dataset.service === selectedService)?.querySelector('strong')?.textContent || selectedService)
+            : ''
+    }
+
+    function selectedFieldName() {
+        const field = serviceFields().find(item => String(item.id) === String(selectedField))
+        return field?.name || ''
+    }
+
+    function updateStepContext() {
+        const serviceName = selectedServiceName()
+        const dateName = date.value ? date.value.split('-').reverse().join('/') : ''
+        const fieldName = selectedFieldName()
+        const schedule = from.value && until.value ? `${from.value} a ${until.value}` : ''
+        const values = {
+            2: serviceName,
+            3: [serviceName, dateName].filter(Boolean).join(' · '),
+            4: [serviceName, dateName, fieldName].filter(Boolean).join(' · '),
+            5: [serviceName, dateName, fieldName, schedule].filter(Boolean).join(' · '),
+        }
+        Object.entries(contextByStep).forEach(([number, element]) => {
+            element.textContent = values[number] || ''
+            element.hidden = !values[number]
+        })
+    }
+
     function enforceActiveScreen() {
         screens.forEach(screen => { screen.hidden = Number(screen.dataset.step) !== step })
         updateProgress()
@@ -129,6 +183,7 @@
     function showStep(nextStep) {
         step = Math.max(1, Math.min(5, nextStep))
         screens.forEach(screen => { screen.hidden = Number(screen.dataset.step) !== step })
+        updateStepContext()
         updateProgress()
         if (step === 3) renderFields()
         if (step === 4) loadPrimarySlots()
@@ -164,12 +219,25 @@
     function selectedSlot(slotFrom, slotUntil) {
         from.value = slotFrom; until.value = slotUntil; timeNext.disabled = !(slotFrom && slotUntil)
         slots?.querySelectorAll('.slot-choice').forEach(button => { const active = button.dataset.from === slotFrom && button.dataset.until === slotUntil; button.classList.toggle('selected', active); button.setAttribute('aria-checked', String(active)) })
+        updateStepContext()
     }
 
     async function loadSlots(fieldId, target, isAddon = false) {
         if (!fieldId || !date.value) return []
-        const response = await fetch(`${config.availabilityUrl}?field_id=${encodeURIComponent(fieldId)}&date=${encodeURIComponent(date.value)}`)
-        const result = await response.json()
+        const response = await fetch(`${config.availabilityUrl}?field_id=${encodeURIComponent(fieldId)}&date=${encodeURIComponent(date.value)}`, {
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        })
+        const contentType = response.headers.get('content-type') || ''
+        let result = {}
+        if (contentType.includes('application/json')) {
+            try { result = await response.json() } catch (error) { result = {} }
+        }
+        if (!contentType.includes('application/json')) {
+            throw new Error(response.status === 401 || response.redirected
+                ? 'Tu sesion vencio. Actualiza la pagina e inicia sesion nuevamente.'
+                : 'No pudimos cargar los horarios disponibles. Intenta nuevamente.')
+        }
         if (!response.ok || result.error) throw new Error(result.message || 'No pudimos cargar los horarios disponibles. Intentá nuevamente.')
         return result.data.slots || []
     }
@@ -177,7 +245,7 @@
     async function loadPrimarySlots() {
         if (!selectedField) return
         const currentRequest = ++requestId
-        loading.hidden = false; slots.innerHTML = ''; message(timeMessage, ''); selectedSlot('', '')
+        loading.hidden = false; slots.innerHTML = ''; message(timeMessage, ''); changeDateButton.hidden = true; selectedSlot('', '')
         try {
             const available = await loadSlots(selectedField, slots)
             if (currentRequest !== requestId) return
@@ -219,14 +287,34 @@
         const settings = data.match_settings
         const box = document.createElement('div'); box.id = 'booking-match-search'; box.className = 'wizard-addon';
         const paymentOptions = `${Number(settings.payment_mode_organizer_deposit) ? '<option value="organizer_deposit">El organizador paga la seña</option>' : ''}${Number(settings.payment_mode_split) && Number(settings.allow_paid_join) ? '<option value="split">Cada jugador paga su parte</option>' : ''}${Number(settings.payment_mode_venue) ? '<option value="venue">Todos pagan en la cancha</option>' : ''}`
-        box.innerHTML = `<label class="switch-line"><input id="booking-find-players" type="checkbox" checked><span>Buscar jugadores para esta reserva</span></label><div id="booking-find-players-fields"><label>Cupos totales<input id="booking-match-max" type="number" min="${Number(settings.min_players || 2)}" max="${Number(settings.max_players || 30)}" value="${Number(settings.min_players || 2)}"></label><label>Modalidad de incorporación<select id="booking-match-mode">${Number(settings.allow_auto_join) ? '<option value="auto">Ingreso automático</option>' : ''}${Number(settings.allow_approval) ? '<option value="approval">Ingreso con aprobación</option>' : ''}</select></label><label>Modalidad de pago<select id="booking-match-payment">${paymentOptions}</select></label><label>Información adicional<textarea id="booking-match-description" maxlength="500" rows="3"></textarea></label></div>`
+        const maxStarters = Math.max(Number(settings.min_players || 2), Number(settings.max_starters || settings.max_players || 30))
+        const substitutesAllowed = Number(settings.allow_substitutes || 0) === 1
+        const maxSubstitutes = substitutesAllowed ? Math.max(0, Number(settings.max_substitutes || 0)) : 0
+        const defaultSubstitutes = substitutesAllowed ? Math.min(maxSubstitutes, Math.max(0, Number(settings.default_substitutes || 0))) : 0
+        const padelCategories = '<option value="">Sin especificar</option><option value="principiante">Principiante</option><option value="8">8.ª categoría</option><option value="7">7.ª categoría</option><option value="6">6.ª categoría</option><option value="5">5.ª categoría</option><option value="4">4.ª categoría</option><option value="3">3.ª categoría</option><option value="2">2.ª categoría</option><option value="1">1.ª categoría</option><option value="sin_categoria">Sin categoría / No sé</option>'
+        const categoryFields = String(selectedService).toLowerCase() === 'padel' ? `<div class="booking-match-category-fields"><label>Categoría mínima<span class="field-help">Nivel mínimo aceptado para sumarse.</span><select id="booking-padel-category-min">${padelCategories}</select></label><label>Categoría máxima<span class="field-help">Nivel máximo aceptado para sumarse.</span><select id="booking-padel-category-max">${padelCategories}</select></label></div>` : ''
+        box.innerHTML = `<label class="switch-line"><input id="booking-find-players" type="checkbox"><span>Buscar jugadores para esta reserva</span></label><div id="booking-find-players-fields" hidden><label class="booking-match-players-field">Cantidad de jugadores que ya juegan<span class="field-help">Incluye al organizador y a las personas que ya confirmaron.</span><input id="booking-match-current" type="number" min="1" max="${maxStarters}" value="1"></label><label class="booking-match-players-field">Cantidad de jugadores a buscar<span class="field-help">Titulares faltantes más los suplentes seleccionados.</span><input id="booking-match-needed" type="number" value="${Math.max(0, maxStarters - 1)}" readonly aria-readonly="true"></label>${substitutesAllowed ? `<fieldset class="substitutes-controls"><label class="switch-line switch-line-substitutes"><input id="booking-include-substitutes" type="checkbox"><span>Agregar suplentes</span></label><label id="booking-substitutes-field" hidden>Cantidad de suplentes<span class="field-help">Podés agregar hasta ${maxSubstitutes} suplentes.</span><input id="booking-match-substitutes" type="number" min="0" max="${maxSubstitutes}" value="${defaultSubstitutes}"></label></fieldset>` : ''}${categoryFields}<label>Modalidad de incorporación<select id="booking-match-mode">${Number(settings.allow_auto_join) ? '<option value="auto">Ingreso automático</option>' : ''}${Number(settings.allow_approval) ? '<option value="approval">Ingreso con aprobación</option>' : ''}</select></label><label>Modalidad de pago<select id="booking-match-payment">${paymentOptions}</select></label><label>Información adicional<textarea id="booking-match-description" maxlength="500" rows="3"></textarea></label></div>`
         document.querySelector('.wizard-player-card')?.after(box)
+        const paymentSelect = document.getElementById('booking-match-payment')
+        if (paymentSelect && Number(settings.payment_mode_venue) === 1) paymentSelect.value = 'venue'
+        const current = document.getElementById('booking-match-current')
+        const needed = document.getElementById('booking-match-needed')
+        const substitutesToggle = document.getElementById('booking-include-substitutes')
+        const substitutes = document.getElementById('booking-match-substitutes')
+        const substitutesField = document.getElementById('booking-substitutes-field')
+        const updateNeeded = () => { const alreadyPlaying = Math.min(maxStarters, Math.max(1, Number(current.value || 1))); current.value = alreadyPlaying; const selectedSubstitutes = substitutesToggle?.checked ? Math.min(maxSubstitutes, Math.max(0, Number(substitutes?.value || 0))) : 0; if (substitutes) substitutes.value = selectedSubstitutes; needed.value = Math.max(0, maxStarters - alreadyPlaying + selectedSubstitutes) }
+        current.addEventListener('input', updateNeeded)
+        substitutes?.addEventListener('input', updateNeeded)
+        substitutesToggle?.addEventListener('change', () => { if (substitutesField) substitutesField.hidden = !substitutesToggle.checked; if (substitutesToggle.checked && substitutes) substitutes.value = defaultSubstitutes; updateNeeded() })
+        if (substitutesField) substitutesField.hidden = !substitutesToggle?.checked
         document.getElementById('booking-find-players').addEventListener('change', event => { document.getElementById('booking-find-players-fields').hidden = !event.target.checked })
     }
 
     function matchOptions() {
         const toggle = document.getElementById('booking-find-players'); if (!toggle?.checked) return null
-        return { enabled: true, max_players: Number(document.getElementById('booking-match-max')?.value || 0), join_mode: document.getElementById('booking-match-mode')?.value || '', payment_mode: document.getElementById('booking-match-payment')?.value || 'organizer_deposit', description: document.getElementById('booking-match-description')?.value || '' }
+        const currentPlayers = Number(document.getElementById('booking-match-current')?.value || 0)
+        const substitutes = document.getElementById('booking-include-substitutes')?.checked ? Number(document.getElementById('booking-match-substitutes')?.value || 0) : 0
+        return { enabled: true, max_players: Number(document.getElementById('booking-match-needed')?.value || 0) + currentPlayers, max_starters: Number(document.getElementById('booking-match-current')?.max || 0), confirmed_players: currentPlayers, confirmed_starters: currentPlayers, max_substitutes: substitutes, requested_substitutes: substitutes, padel_category_min: document.getElementById('booking-padel-category-min')?.value || '', padel_category_max: document.getElementById('booking-padel-category-max')?.value || '', join_mode: document.getElementById('booking-match-mode')?.value || '', payment_mode: document.getElementById('booking-match-payment')?.value || 'organizer_deposit', description: document.getElementById('booking-match-description')?.value || '' }
     }
 
     function splitName(fullName) { const parts = fullName.trim().split(/\s+/).filter(Boolean); return { first_name: parts.shift() || '', last_name: parts.join(' ') } }
@@ -234,7 +322,7 @@
 
     serviceButtons.forEach(button => button.addEventListener('click', () => {
         serviceButtons.forEach(item => { item.classList.remove('selected'); item.setAttribute('aria-checked', 'false') })
-        button.classList.add('selected'); button.setAttribute('aria-checked', 'true'); selectedService = button.dataset.service; selectedField = ''; quote = null
+        button.classList.add('selected'); button.setAttribute('aria-checked', 'true'); selectedService = button.dataset.service; selectedField = ''; quote = null; updateStepContext()
         button.closest('[data-step="1"]').querySelector('.wizard-next').disabled = false
     }))
     serviceButtons.forEach(button => button.addEventListener('dblclick', () => { if (selectedService === button.dataset.service) showStep(2) }))
@@ -246,6 +334,7 @@
         showStep(Number(button.dataset.next))
     }))
     document.querySelectorAll('.wizard-back').forEach(button => button.addEventListener('click', () => showStep(Number(button.dataset.back))))
+    changeDateButton.addEventListener('click', () => { message(timeMessage, ''); changeDateButton.hidden = true; showStep(2); dateTrigger?.focus() })
     date.addEventListener('change', () => { if (dateTrigger) dateTrigger.querySelector('span').textContent = formatDate(date.value); selectedSlot('', ''); selectedField = ''; quote = null; message(dateMessage, '') })
     addQuincho?.addEventListener('change', () => { addonBox.hidden = !addQuincho.checked; if (addQuincho.checked) loadAddonSlots() })
     addonField?.addEventListener('change', loadAddonSlots)
@@ -268,7 +357,7 @@
             const additional = addQuincho?.checked ? { enabled: true, field_id: addonField.value, from: addonFrom.value, until: addonUntil.value } : null
             const result = await postJson(config.quoteUrl, { date: date.value, field_id: selectedField, from: from.value, until: until.value, additional })
             quote = result.data
-            step = 5; updateProgress()
+        step = 5; updateStepContext(); updateProgress()
             const name = document.getElementById('booking-name').value
             const extra = additional ? `<div><dt>Quincho adicional</dt><dd>${escapeHtml(addonFrom.value)} a ${escapeHtml(addonUntil.value)}</dd></div>` : ''
             const discountSummary = Number(quote.discount_total || 0) > 0 ? `<div><dt>Precio original</dt><dd>${money(quote.original_total)}</dd></div><div><dt>Descuento para tu cuenta</dt><dd class="booking-discount">- ${money(quote.discount_total)}</dd></div>` : ''
@@ -288,6 +377,16 @@
             const additional = addQuincho?.checked ? { enabled: true, fecha: date.value, cancha: addonField.value, horarioDesde: addonFrom.value, horarioHasta: addonUntil.value } : null
             const result = await postJson(config.createUrl, { booking: { fecha: date.value, cancha: selectedField, horarioDesde: from.value, horarioHasta: until.value, nombre: document.getElementById('booking-name').value.trim(), first_name: name.first_name, last_name: name.last_name, telefono: document.getElementById('booking-phone').value.trim(), localidad: document.getElementById('booking-locality').value.trim(), metodoDePago: 'Mercado Pago', additionalQuincho: additional, matchOptions: matchOptions() } })
             const prefs = result.data || {}
+            pendingPayment = {
+                bookingId: prefs.bookingId || null,
+                preferenceIdParcial: prefs.preferenceIdParcial || null,
+                preferenceIdTotal: prefs.preferenceIdTotal || null,
+                fecha: date.value,
+                cancha: selectedField,
+                horarioDesde: from.value,
+                horarioHasta: until.value,
+                telefono: document.getElementById('booking-phone').value.trim(),
+            }
             summaryScreen.hidden = true; resultScreen.hidden = false; resultScreen.querySelector('#booking-result-title').textContent = 'Reserva pendiente de pago'; resultScreen.querySelector('#booking-result-message').textContent = 'La reserva fue creada y quedó pendiente de confirmación del pago.'; if (aside) aside.hidden = true; if (myBookings) myBookings.hidden = true
             if (prefs.testMode) {
                 resultScreen.querySelector('#booking-result-title').textContent = 'Reserva confirmada';
@@ -309,7 +408,22 @@
         window.requestAnimationFrame(() => myBookings.scrollIntoView({ behavior: 'smooth', block: 'start' }))
     }
     document.getElementById('booking-back').addEventListener('click', showForm)
-    document.getElementById('booking-result-edit').addEventListener('click', showForm)
+    document.getElementById('booking-result-edit').addEventListener('click', async event => {
+        if (!pendingPayment || !cancelUrl) { showForm(); return }
+        const button = event.currentTarget
+        button.disabled = true
+        button.textContent = 'Cancelando reserva…'
+        try {
+            await postJson(cancelUrl, pendingPayment)
+            pendingPayment = null
+            payment.hidden = true
+            showForm()
+        } catch (error) {
+            button.disabled = false
+            button.textContent = 'Cancelar reserva y volver'
+            resultScreen.querySelector('#booking-result-message').textContent = error.message || 'No se pudo cancelar la reserva. Intentá nuevamente.'
+        }
+    })
     window.addEventListener('hashchange', showBookingsOnly)
     enforceActiveScreen()
     showBookingsOnly()
