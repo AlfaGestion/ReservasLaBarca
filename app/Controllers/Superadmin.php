@@ -22,6 +22,36 @@ use App\Models\UsersModel;
 
 class Superadmin extends BaseController
 {
+    private function syncFieldAvailabilityWindows(int $fieldId): void
+    {
+        $db = \Config\Database::connect();
+        if ($fieldId <= 0 || ! $db->tableExists('field_availability_windows')) {
+            return;
+        }
+
+        $rows = json_decode((string) $this->request->getVar('availability_windows_json'), true);
+        $valid = [];
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $start = substr(trim((string) ($row['start'] ?? '')), 0, 5);
+            $end = substr(trim((string) ($row['end'] ?? '')), 0, 5);
+            if (! preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) || ! preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $end)) continue;
+            [$sh, $sm] = array_map('intval', explode(':', $start));
+            [$eh, $em] = array_map('intval', explode(':', $end));
+            if (($sh * 60 + $sm) >= ($eh * 60 + $em)) continue;
+            $valid[] = ['start_time' => $start . ':00', 'end_time' => $end . ':00'];
+        }
+
+        $db->table('field_availability_windows')->where('field_id', $fieldId)->update(['active' => 0, 'updated_at' => date('Y-m-d H:i:s')]);
+        foreach ($valid as $row) {
+            $db->table('field_availability_windows')->insert(array_merge($row, [
+                'field_id' => $fieldId,
+                'active' => 1,
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]));
+        }
+    }
+
     private function ensureAdminLogsTable(): void
     {
         $db = \Config\Database::connect();
@@ -483,6 +513,7 @@ class Superadmin extends BaseController
 
         try {
             $id = $fieldsModel->insert($query);
+            $this->syncFieldAvailabilityWindows((int) $id);
             $this->syncServicePrice($serviceType, $valor, $priceUnitLabel);
             $this->logAdminAction('create_field', 'field', $id, null, $query);
             if ($isAjax) {
@@ -558,6 +589,7 @@ class Superadmin extends BaseController
 
         try {
             $fieldsModel->update($id, $query);
+            $this->syncFieldAvailabilityWindows((int) $id);
             $this->syncServicePrice($serviceType, $valor, $priceUnitLabel);
             $this->logAdminAction('edit_field', 'field', $id, $oldField, $query);
             if ($isAjax) {

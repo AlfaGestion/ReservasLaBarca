@@ -128,6 +128,14 @@ class FieldsModel extends Model
         $field['offer_start_date'] = $service['offer_start_date'] ?? null;
         $field['offer_end_date'] = $service['offer_end_date'] ?? null;
 
+        $field['availability_windows'] = $db->tableExists('field_availability_windows')
+            ? $db->table('field_availability_windows')
+                ->where('field_id', (int) $field['id'])
+                ->where('active', 1)
+                ->orderBy('start_time', 'ASC')
+                ->get()->getResultArray()
+            : [];
+
         if ($db->tableExists('service_prices')) {
             $price = $db->table('service_prices')
                 ->where('service_id', $service['id'])

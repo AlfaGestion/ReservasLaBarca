@@ -627,6 +627,7 @@ document.addEventListener('submit', async (e) => {
     }
 
     try {
+        syncFieldAvailability(form)
         const formData = new FormData(form)
         const response = await fetch(form.action, {
             method: 'POST',
@@ -1722,6 +1723,15 @@ function fillDiv(field) {
     }).join('')
     const basePriceDisplay = formatPriceInputAR(field.value || 0)
     const nightPriceDisplay = formatPriceInputAR(field.ilumination_value || 0)
+    const availabilityWindows = Array.isArray(field.availability_windows) ? field.availability_windows : []
+    const availabilityRows = availabilityWindows.length > 0 ? availabilityWindows : [{ start_time: '', end_time: '' }]
+    const availabilityRowsHtml = availabilityRows.map(window => `
+                        <div class="field-availability-row d-flex gap-2 align-items-center mb-2">
+                            <input type="time" class="form-control" data-availability-start value="${escapeHtml(String(window.start_time || '').slice(0, 5))}" aria-label="Desde">
+                            <span class="text-muted">a</span>
+                            <input type="time" class="form-control" data-availability-end value="${escapeHtml(String(window.end_time || '').slice(0, 5))}" aria-label="Hasta">
+                            <button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>
+                        </div>`).join('')
 
     const div = `
         <div class="editFields" id="editFields">
@@ -1759,6 +1769,13 @@ function fillDiv(field) {
                     </div>
                 </section>
 
+                <section class="field-editor-section">
+                    <div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Disponibilidad</span><h6>Franjas horarias de la cancha</h6></div><span class="field-editor-helper">Si no cargás ninguna, se usa el horario general del servicio.</span></div>
+                    <input type="hidden" name="availability_windows_json" data-availability-json value="[]">
+                    <div data-availability-rows>${availabilityRowsHtml}</div>
+                    <button type="button" class="btn btn-sm btn-outline-primary field-availability-add"><i class="fa-solid fa-plus me-1"></i>Agregar franja</button>
+                </section>
+
                 <section class="field-editor-section field-editor-history"><div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Registro</span><h6>Historial de cambios</h6></div></div><div class="admin-history-list" data-history-entity="field" data-history-entity-id="${escapeHtml(field.id)}"><div class="text-muted small">Cargando historial...</div></div></section>
 
                 <div class="field-editor-actions"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar cambios</button></div>
@@ -1769,5 +1786,40 @@ function fillDiv(field) {
     editFieldDiv.innerHTML = div
     hydrateHistoryContainers(editFieldDiv).catch(() => {})
 }
+
+function syncFieldAvailability(form) {
+    const target = form?.querySelector('[data-availability-json]')
+    if (!target) return
+    const rows = Array.from(form.querySelectorAll('.field-availability-row')).map(row => ({
+        start: row.querySelector('[data-availability-start]')?.value || '',
+        end: row.querySelector('[data-availability-end]')?.value || '',
+    })).filter(row => row.start && row.end)
+    target.value = JSON.stringify(rows)
+}
+
+document.addEventListener('click', (event) => {
+    const add = event.target.closest?.('.field-availability-add')
+    if (add) {
+        const container = add.parentElement.querySelector('[data-availability-rows]')
+        if (!container) return
+        const row = document.createElement('div')
+        row.className = 'field-availability-row d-flex gap-2 align-items-center mb-2'
+        row.innerHTML = '<input type="time" class="form-control" data-availability-start aria-label="Desde"><span class="text-muted">a</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>'
+        container.appendChild(row)
+        return
+    }
+    const remove = event.target.closest?.('.field-availability-remove')
+    if (remove) {
+        const row = remove.closest('.field-availability-row')
+        const container = row?.parentElement
+        row?.remove()
+        if (container && !container.querySelector('.field-availability-row')) {
+            const empty = document.createElement('div')
+            empty.className = 'field-availability-row d-flex gap-2 align-items-center mb-2'
+            empty.innerHTML = '<input type="time" class="form-control" data-availability-start aria-label="Desde"><span class="text-muted">a</span><input type="time" class="form-control" data-availability-end aria-label="Hasta"><button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>'
+            container.appendChild(empty)
+        }
+    }
+})
 
 

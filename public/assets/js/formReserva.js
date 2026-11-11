@@ -1096,7 +1096,34 @@ function fillTimeSelect(select, values, placeholder = 'Seleccionar') {
     if (previous && values.includes(previous)) select.value = previous
 }
 
+function getFieldAvailabilityWindows(field) {
+    return Array.isArray(field?.availability_windows) ? field.availability_windows : []
+}
+
+function isStartInsideFieldAvailability(field, startMinutes, blockMinutes) {
+    const windows = getFieldAvailabilityWindows(field)
+    if (windows.length === 0) return true
+    return windows.some(window => {
+        const from = timeToMinutes(window.start_time)
+        const until = timeToMinutes(window.end_time)
+        return startMinutes >= from && startMinutes + blockMinutes <= until
+    })
+}
+
 function buildStartTimes(blockMinutes, stepMinutes = blockMinutes) {
+    const field = getFieldById(selectCancha?.value)
+    const windows = getFieldAvailabilityWindows(field)
+    if (windows.length > 0) {
+        const values = []
+        windows.forEach(window => {
+            const start = timeToMinutes(window.start_time)
+            const end = timeToMinutes(window.end_time)
+            for (let current = start; current + blockMinutes <= end; current += stepMinutes) {
+                values.push(minutesToTime(current))
+            }
+        })
+        return [...new Set(values)].sort((a, b) => timeToMinutes(a) - timeToMinutes(b))
+    }
     const start = getOpeningStartMinutes()
     const end = getOpeningEndMinutes()
     const values = []
@@ -1110,8 +1137,9 @@ function updateTimeOptions() {
     const block = getCurrentBlockMinutes()
     const starts = buildStartTimes(block, getCurrentSlotIntervalMinutes())
     const selectedFieldId = selectCancha?.value || ''
+    const selectedField = getFieldById(selectedFieldId)
     const availableStarts = selectedFieldId
-        ? starts.filter(start => isSlotAvailable(selectedFieldId, start, minutesToTime(timeToMinutes(start) + block)))
+        ? starts.filter(start => isStartInsideFieldAvailability(selectedField, timeToMinutes(start), block) && isSlotAvailable(selectedFieldId, start, minutesToTime(timeToMinutes(start) + block)))
         : starts
     fillTimeSelect(horarioDesde, availableStarts)
     fillTimeSelect(horarioHasta, availableStarts.map(t => minutesToTime(timeToMinutes(t) + block)))

@@ -371,6 +371,20 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                         </div>
                         <small class="text-muted d-block mb-3">Si queda vacío o en `0`, se usará automáticamente el precio base.</small>
 
+                        <section class="field-editor-section mt-3">
+                            <div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Disponibilidad</span><h6>Franja horaria de la cancha</h6></div><span class="field-editor-helper">Opcional. Sin franja se usa el horario general.</span></div>
+                            <input type="hidden" name="availability_windows_json" data-availability-json value="[]">
+                            <div data-availability-rows>
+                                <div class="field-availability-row d-flex gap-2 align-items-center mb-2">
+                                    <input type="time" class="form-control" data-availability-start aria-label="Desde">
+                                    <span class="text-muted">a</span>
+                                    <input type="time" class="form-control" data-availability-end aria-label="Hasta">
+                                    <button type="button" class="btn btn-outline-danger btn-sm field-availability-remove" aria-label="Quitar franja">&times;</button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary field-availability-add"><i class="fa-solid fa-plus me-1"></i>Agregar franja</button>
+                        </section>
+
                         <button type="submit" class="btn btn-success">Guardar</button>
                         <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancelar</button>
                     </form>

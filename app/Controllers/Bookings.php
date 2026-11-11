@@ -537,6 +537,21 @@ class Bookings extends BaseController
             if ($duration <= 0 || $duration !== max(1, $blockMinutes)) {
                 return 'La duración seleccionada no es válida para el servicio.';
             }
+            $availabilityWindows = $field['availability_windows'] ?? [];
+            if ($availabilityWindows !== []) {
+                $insideWindow = false;
+                foreach ($availabilityWindows as $window) {
+                    $windowFrom = $bookingSlotsModel->timeToMinutes($window['start_time'] ?? '00:00');
+                    $windowUntil = $bookingSlotsModel->timeToMinutes($window['end_time'] ?? '00:00');
+                    if ($from >= $windowFrom && $until <= $windowUntil) {
+                        $insideWindow = true;
+                        break;
+                    }
+                }
+                if (! $insideWindow) {
+                    return 'El horario seleccionado está fuera de la franja disponible para la cancha.';
+                }
+            }
             if (AvailabilityService::isReservationInPast($item['fecha'], $item['horarioDesde'])) {
                 return 'No se puede reservar en una fecha u horario ya pasados.';
             }

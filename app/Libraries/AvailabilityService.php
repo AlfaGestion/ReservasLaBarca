@@ -137,6 +137,11 @@ class AvailabilityService
             return 'El horario seleccionado esta fuera del horario configurado para el servicio.';
         }
 
+        $windows = $field['availability_windows'] ?? [];
+        if ($windows !== [] && ! $this->isInsideFieldAvailability($from, $to, $windows)) {
+            return 'El horario seleccionado esta fuera de la franja disponible para la cancha.';
+        }
+
         $builder = $this->bookings->where('date', $date)
             ->where('id_field', $fieldId)
             ->where('annulled', 0);
@@ -218,6 +223,14 @@ class AvailabilityService
         }
 
         return $fromMinutes >= $startMinutes && $toMinutes <= $endMinutes;
+    }
+
+    private function isInsideFieldAvailability(string $from, string $to, array $windows): bool
+    {
+        foreach ($windows as $window) {
+            if ($this->isInsideServiceHours($from, $to, (string) ($window['start_time'] ?? ''), (string) ($window['end_time'] ?? ''))) return true;
+        }
+        return false;
     }
 
     private function isClosedForDateField($date, $fieldId): bool
