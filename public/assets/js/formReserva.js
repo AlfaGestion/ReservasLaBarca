@@ -540,6 +540,16 @@ document.addEventListener('click', async (e) => {
                 const rate = await getRate()
                 const refreshedQuote = await refreshCustomerOfferPreview({ showModal: false })
                 const totalAmount = refreshedQuote?.final_total ?? getCurrentTotalAmount()
+                if (totalAmount <= 0) {
+                    data.monto = 0
+                    data.total = 0
+                    data.parcial = 0
+                    data.reservacion = 0
+                    data.pagoTotal = true
+                    data.metodoDePago = 'Sin cargo'
+                    await saveBooking(data)
+                    return
+                }
                 const mpReady = await setScriptMP(totalAmount)
                 if (!mpReady) {
                     return
@@ -1796,6 +1806,16 @@ async function saveBooking(data) {
             alert(responseData.message || 'El horario seleccionado ya no esta disponible. Elegi otro e intenta nuevamente.')
             return
         }
+
+        modalConfirmarReserva.hide()
+        modalResult.show()
+        contentBookingResult.innerHTML = `
+            <div class="modal-body modalResultPayment d-flex justify-content-center align-items-center flex-column text-center">
+                <h4 class="mb-4">Reserva confirmada</h4>
+                <p class="mb-3">La reserva se registró sin cargo.</p>
+                <i class="fa-regular fa-circle-check fa-2xl"></i>
+            </div>`
+        setTimeout(() => location.reload(), 1800)
 
     } catch (error) {
         console.error('Error:', error);

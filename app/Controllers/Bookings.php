@@ -733,6 +733,7 @@ class Bookings extends BaseController
         $finalTotal = (float) ($bookingQuote['final_total'] ?? 0);
         $originalTotal = (float) ($bookingQuote['original_total'] ?? $finalTotal);
         $discountTotal = (float) ($bookingQuote['discount_total'] ?? 0);
+        $freeBooking = $finalTotal <= 0;
         $discountPercentage = $originalTotal > 0 ? round(($discountTotal * 100) / $originalTotal, 2) : 0;
         $paymentAmount = round((float) ($data->monto ?? 0), 2);
         $reservationRate = $this->getCurrentReservationRate();
@@ -757,14 +758,14 @@ class Bookings extends BaseController
             'discount_percentage'   => $discountPercentage,
             'discount_amount'       => $discountTotal,
             'payment'               => $paymentAmount,
-            'approved'              => 0,
+            'approved'              => $freeBooking ? 1 : 0,
             'total'                 => $finalTotal,
             'parcial'               => $partialAmount,
             'reservation_rate'      => $reservationRate,
             'diference'             => max(0, $finalTotal - $paymentAmount),
             'reservation'           => $reservationAmount,
-            'total_payment'         => $data->pagoTotal,
-            'payment_method'        => $data->metodoDePago,
+            'total_payment'         => $freeBooking ? 1 : $data->pagoTotal,
+            'payment_method'        => $freeBooking ? 'Sin cargo' : $data->metodoDePago,
             'id_preference_parcial' => $data->preferenceIdParcial,
             'id_preference_total'   => $data->preferenceIdTotal,
             'use_offer'             => $customerOfferId ? 1 : 0,
@@ -814,7 +815,7 @@ class Bookings extends BaseController
             if (count($queryBooking) != 0) {
                 $db->transBegin();
 
-                $slotId = $bookingSlotsModel->createSlot($this->buildSlotData($items[0], 'pending'));
+                $slotId = $bookingSlotsModel->createSlot($this->buildSlotData($items[0], $freeBooking ? 'confirmed' : 'pending'));
                 if (!$slotId) {
                     $db->transRollback();
                     return $this->response->setJSON($this->setResponse(409, true, null, 'El horario ya está en proceso de reserva.'));
@@ -849,7 +850,7 @@ class Bookings extends BaseController
                     $additionalQuery['use_offer'] = !empty($additionalOffer['applicable']) ? 1 : 0;
                     $additionalQuery['description'] = trim(($additionalQuery['description'] ?? '') . ' Quincho adicional de la reserva #' . $bookingId);
 
-                    $additionalSlotId = $bookingSlotsModel->createSlot($this->buildSlotData($additional, 'pending'));
+                    $additionalSlotId = $bookingSlotsModel->createSlot($this->buildSlotData($additional, $freeBooking ? 'confirmed' : 'pending'));
                     if (!$additionalSlotId) {
                         $db->transRollback();
                         return $this->response->setJSON($this->setResponse(409, true, null, 'El quincho no está disponible en el horario seleccionado.'));
