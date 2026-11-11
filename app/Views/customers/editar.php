@@ -153,6 +153,10 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame' : '' ?><?= $adminMo
                                 <label for="customer_city">Localidad</label>
                                 <input type="text" id="customer_city" name="city" class="form-control" placeholder="Localidad" value="<?= esc((string) ($customer['city'] ?? '')) ?>">
                             </div>
+                            <div class="customer-editor-field">
+                                <label for="customer_email">Email</label>
+                                <input type="email" id="customer_email" name="email" class="form-control" placeholder="Email (opcional)" value="<?= esc((string) ($customer['email'] ?? '')) ?>" autocomplete="email">
+                            </div>
                         </div>
                     </div>
                 </section>

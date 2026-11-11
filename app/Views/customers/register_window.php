@@ -91,6 +91,10 @@ customer-editor-page<?= $embedded ? ' customer-editor-frame customer-register-fr
                                 <label for="customer_phone">Telefono</label>
                                 <input type="text" id="customer_phone" name="phone" class="form-control" placeholder="Telefono">
                             </div>
+                            <div class="customer-editor-field">
+                                <label for="customer_email">Email</label>
+                                <input type="email" id="customer_email" name="email" class="form-control" placeholder="Email (opcional)" autocomplete="email">
+                            </div>
                         </div>
 
                         <div class="customer-offer-helper mt-4">

@@ -222,6 +222,7 @@ class Customers extends BaseController
         }
         $dni = trim((string) $this->request->getVar('dni'));
         $city = trim((string) $this->request->getVar('city'));
+        $email = trim((string) $this->request->getVar('email'));
 
         $fail = static function (string $message, int $status = 422) use ($asJson) {
             if ($asJson) {
@@ -254,6 +255,7 @@ class Customers extends BaseController
             'phone' => $phone,
             'offer' => 0,
             'city' => $city,
+            'email' => $email !== '' ? $email : null,
         ];
 
         try {
@@ -303,6 +305,7 @@ class Customers extends BaseController
         }
         $dni = trim((string) $this->request->getVar('dni'));
         $city = trim((string) $this->request->getVar('city'));
+        $email = trim((string) $this->request->getVar('email'));
 
         if ($phone === '' || $name === '' || $lastName === '') {
             return $this->response->setStatusCode(422)->setJSON([
@@ -332,6 +335,7 @@ class Customers extends BaseController
                 'phone' => $phone,
                 'offer' => 0,
                 'city' => $city,
+                'email' => $email !== '' ? $email : null,
             ]);
             $customerId = (int) $modelCustomers->getInsertID();
 
@@ -430,6 +434,7 @@ class Customers extends BaseController
         }
         $dni = trim((string) $this->request->getVar('dni'));
         $city = trim((string) $this->request->getVar('city'));
+        $email = trim((string) $this->request->getVar('email'));
         $activeSwitch = $this->request->getVar('customer_offer_active') ? 1 : 0;
         $value = (float) parse_price_ar($this->request->getVar('customer_offer_value'));
         $description = trim((string) $this->request->getVar('customer_offer_description'));
@@ -511,6 +516,7 @@ class Customers extends BaseController
             'phone' => $phone,
             'offer' => $customerOfferActive,
             'city' => $city,
+            'email' => $email !== '' ? $email : null,
         ];
 
         try {
@@ -613,6 +619,7 @@ class Customers extends BaseController
         }
         $dni = trim((string) $this->request->getVar('dni'));
         $city = trim((string) $this->request->getVar('city'));
+        $email = trim((string) $this->request->getVar('email'));
         $activeSwitch = $this->request->getVar('customer_offer_active') ? 1 : 0;
         $value = (float) parse_price_ar($this->request->getVar('customer_offer_value'));
         $description = trim((string) $this->request->getVar('customer_offer_description'));
@@ -701,6 +708,7 @@ class Customers extends BaseController
             'phone' => $phone,
             'offer' => $customerOfferActive,
             'city' => $city,
+            'email' => $email !== '' ? $email : null,
         ];
 
         try {
