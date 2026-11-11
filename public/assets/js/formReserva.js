@@ -855,7 +855,7 @@ function prepareMercadoPagoStartButton() {
     resetMercadoPagoButtons()
     const partialContainer = document.getElementById('checkout-btn-parcial')
     if (!partialContainer) return
-    partialContainer.innerHTML = `<button type="button" class="btn btn-brand d-inline-flex align-items-center gap-2" id="startMercadoPagoButton"><img src="${baseUrl}assets/images/mercado-pago-oficial.svg" alt="Mercado Pago" width="30" height="24" style="display:block;object-fit:contain;background:#fff;border-radius:6px;padding:2px">Pagar con Mercado Pago</button>`
+    partialContainer.innerHTML = `<button type="button" class="btn btn-brand d-inline-flex align-items-center gap-2" id="startMercadoPagoButton"><img src="${baseUrl}public/assets/images/mercado-pago-oficial.svg" alt="Mercado Pago" width="30" height="24" style="display:block;object-fit:contain;background:#fff;border-radius:6px;padding:2px">Pagar con Mercado Pago</button>`
     partialContainer.style.display = 'block'
 }
 
