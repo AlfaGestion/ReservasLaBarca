@@ -96,7 +96,7 @@ class PlayerMatches extends BaseController
         $bookingId = (int) ($data['booking_id'] ?? 0);
         $booking = $this->eligibleBooking($bookingId, $playerId);
         if (! $booking) return $this->backWithError('app/partidos/crear', 'La reserva no se puede publicar como partido.');
-        $max = (int) ($data['max_players'] ?? 0);
+        $requestedMax = (int) ($data['max_players'] ?? 0);
         $confirmed = (int) ($data['confirmed_players'] ?? 1);
         $mode = in_array(($data['join_mode'] ?? ''), ['auto', 'approval'], true) ? $data['join_mode'] : '';
         $settings = array_merge($this->settings(), $this->serviceSettings((int) ($booking['service_id'] ?? 0)));
@@ -104,8 +104,19 @@ class PlayerMatches extends BaseController
         $paymentMode = (string) ($data['payment_mode'] ?? \App\Libraries\PlayerMatchPaymentService::ORGANIZER_DEPOSIT);
         $paymentService = new \App\Libraries\PlayerMatchPaymentService();
         if (! $paymentService->isEnabled($paymentMode, $settings)) return $this->backWithError('app/partidos/crear', 'La modalidad de pago seleccionada no está disponible.');
-        $minPlayers = max(2, (int) ($settings['min_players'] ?? 2)); $maxPlayers = max($minPlayers, (int) ($settings['max_players'] ?? 30));
-        if ($max < $minPlayers || $max > $maxPlayers || $confirmed < 1 || $confirmed > $max) return $this->backWithError('app/partidos/crear', 'Revisá la cantidad de jugadores.');
+        $minPlayers = max(2, (int) ($settings['min_players'] ?? 2));
+        $maxStarters = max($minPlayers, (int) ($settings['max_starters'] ?? $settings['max_players'] ?? 30));
+        $allowSubstitutes = (int) ($settings['allow_substitutes'] ?? 0) === 1;
+        $maxSubstitutes = $allowSubstitutes ? max(0, (int) ($settings['max_substitutes'] ?? 0)) : 0;
+        $requestedSubstitutes = (int) ($data['requested_substitutes'] ?? $data['max_substitutes'] ?? 0);
+        if (! $allowSubstitutes) $requestedSubstitutes = 0;
+        if ($requestedSubstitutes < 0 || $requestedSubstitutes > $maxSubstitutes) return $this->backWithError('app/partidos/crear', 'La cantidad de suplentes no es válida.');
+        $requestedSubstitutes = min($maxSubstitutes, max(0, $requestedSubstitutes));
+        $max = $maxStarters + $requestedSubstitutes;
+        $confirmedStarters = (int) ($data['confirmed_starters'] ?? $confirmed);
+        $splitCapacityRequest = array_key_exists('max_starters', $data) || array_key_exists('requested_substitutes', $data);
+        if (($splitCapacityRequest && $requestedMax !== $max) || (! $splitCapacityRequest && ($requestedMax < $minPlayers || $requestedMax > $maxStarters)) || $confirmed < 1 || $confirmed !== $confirmedStarters || $confirmed > $maxStarters) return $this->backWithError('app/partidos/crear', 'Revisá titulares y suplentes: las cantidades no son válidas.');
+        if (! $splitCapacityRequest) $max = $requestedMax;
         if (($mode === 'auto' && ! $settings['allow_auto_join']) || ($mode === 'approval' && ! $settings['allow_approval'])) return $this->backWithError('app/partidos/crear', 'Esta modalidad de ingreso no está habilitada.');
         if ((new PlayerMatchesModel())->where('booking_id', $bookingId)->whereIn('status', ['open', 'closed'])->first()) return $this->backWithError('app/partidos/crear', 'Esta reserva ya tiene un partido publicado.');
         $now = date('Y-m-d H:i:s');
@@ -113,7 +124,7 @@ class PlayerMatches extends BaseController
         $db->transStart();
         $matches = new PlayerMatchesModel();
         $amounts = $paymentService->bookingAmounts($bookingId);
-        $matches->insert(['booking_id' => $bookingId, 'organizer_player_id' => $playerId, 'max_players' => $max, 'confirmed_players' => $confirmed, 'description' => trim((string) ($data['description'] ?? '')) ?: null, 'level' => trim((string) ($data['level'] ?? '')) ?: null, 'join_mode' => $mode, 'payment_mode' => $paymentMode, 'payment_total' => $amounts['total'], 'participant_share' => round($amounts['total'] / max(1, $max), 2), 'reserved_players' => 0, 'payment_policy' => $paymentService->paymentPolicy($paymentMode), 'status' => 'open', 'created_at' => $now, 'updated_at' => $now]);
+        $matches->insert(['booking_id' => $bookingId, 'organizer_player_id' => $playerId, 'max_players' => $max, 'confirmed_players' => $confirmed, 'max_starters' => $maxStarters, 'confirmed_starters' => $confirmedStarters, 'max_substitutes' => $requestedSubstitutes, 'confirmed_substitutes' => 0, 'description' => trim((string) ($data['description'] ?? '')) ?: null, 'level' => trim((string) ($data['level'] ?? '')) ?: null, 'join_mode' => $mode, 'payment_mode' => $paymentMode, 'payment_total' => $amounts['total'], 'participant_share' => round($amounts['total'] / max(1, $max), 2), 'reserved_players' => 0, 'payment_policy' => $paymentService->paymentPolicy($paymentMode), 'status' => 'open', 'created_at' => $now, 'updated_at' => $now]);
         $matchId = (int) $matches->getInsertID();
         (new PlayerMatchParticipantsModel())->insert(['match_id' => $matchId, 'player_id' => $playerId, 'role' => 'organizer', 'status' => 'confirmed', 'created_at' => $now, 'updated_at' => $now]);
         $db->transComplete();
@@ -140,7 +151,7 @@ class PlayerMatches extends BaseController
         $requiresPayment = ($match['payment_mode'] ?? '') === \App\Libraries\PlayerMatchPaymentService::SPLIT;
         $mode = (!$requiresPayment && $match['join_mode'] === 'auto') ? 'confirmed' : 'pending';
         if ($mode === 'confirmed') {
-            $updated = $db->table('player_matches')->where('id', $matchId)->where('status', 'open')->where('confirmed_players + reserved_players <', (int) $match['max_players'])->set('confirmed_players', 'confirmed_players + 1', false)->set('updated_at', $now)->update();
+            $updated = $db->table('player_matches')->where('id', $matchId)->where('status', 'open')->where('confirmed_players + reserved_players < ' . (int) $match['max_players'], null, false)->set('confirmed_players', 'confirmed_players + 1', false)->set('updated_at', $now)->update();
             if (! $updated) { $db->transRollback(); return $this->backWithError('app/partidos/detalle/' . $matchId, 'El partido se completó. Elegí otro.'); }
             (new PlayerMatchParticipantsModel())->insert(['match_id' => $matchId, 'player_id' => $playerId, 'role' => 'participant', 'status' => 'confirmed', 'created_at' => $now, 'updated_at' => $now]);
         } else {
@@ -203,7 +214,7 @@ class PlayerMatches extends BaseController
         $db = \Config\Database::connect(); $db->transStart();
         $requiresPayment = ($match['payment_mode'] ?? '') === \App\Libraries\PlayerMatchPaymentService::SPLIT;
         $counter = $requiresPayment ? 'reserved_players' : 'confirmed_players';
-        $updated = $db->table('player_matches')->where('id', $match['id'])->where('confirmed_players + reserved_players <', (int) $match['max_players'])->set($counter, $counter . ' + 1', false)->set('updated_at', date('Y-m-d H:i:s'))->update();
+        $updated = $db->table('player_matches')->where('id', $match['id'])->where('confirmed_players + reserved_players < ' . (int) $match['max_players'], null, false)->set($counter, $counter . ' + 1', false)->set('updated_at', date('Y-m-d H:i:s'))->update();
         if (! $updated) { $db->transRollback(); return $this->backWithError('app/mis-partidos', 'No quedan lugares disponibles.'); }
         $participants = new PlayerMatchParticipantsModel();
         $existingParticipant = $participants->where('match_id', $match['id'])->where('player_id', $request['player_id'])->first();

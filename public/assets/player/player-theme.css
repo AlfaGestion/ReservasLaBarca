@@ -67,6 +67,8 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
 .player-app .button { font-size: var(--app-text-md); font-weight: 700; }
 .player-app .player-header { max-width: none; padding-left: max(24px, calc((100vw - 1180px) / 2)); padding-right: max(24px, calc((100vw - 1180px) / 2)); border-color: var(--app-border); background: var(--app-bg); position: sticky; top: 0; z-index: 20; }
 .player-app .desktop-nav, .player-app .header-login { color: var(--app-text-muted); }
+.player-app .desktop-nav a.is-active { color: var(--app-text); font-weight: 800; position: relative; }
+.player-app .desktop-nav a.is-active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -31px; height: 3px; border-radius: 999px; background: var(--app-primary); }
 .player-app .desktop-nav a:hover, .player-app .header-login:hover, .player-app .text-link:hover { color: var(--app-primary-hover); }
 .theme-toggle { width: 40px; height: 40px; border: 1px solid var(--app-border); border-radius: 50%; background: var(--app-surface); color: var(--app-text); display: inline-grid; place-items: center; cursor: pointer; transition: .2s ease; }
 .theme-toggle:hover, .theme-toggle:focus-visible { border-color: var(--app-primary); color: var(--app-primary-hover); transform: translateY(-1px); }
@@ -136,6 +138,7 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
 .player-app .flash-info { background: var(--app-surface-alt); color: var(--app-text); border: 1px solid var(--app-border); }
 .player-app .mobile-nav { background: var(--app-surface); border-color: var(--app-border); box-shadow: 0 -12px 30px rgba(0,0,0,.16); }
 .player-app .mobile-nav a { color: var(--app-text-muted); }
+.player-app .mobile-nav a.is-active { color: var(--app-primary-hover); font-weight: 800; }
 .player-app .mobile-nav a:first-child, .player-app .mobile-nav a:hover { color: var(--app-primary-hover); }
 .player-app .booking-form-section, .player-app .booking-summary-screen, .player-app .booking-result-screen, .player-app .booking-step { background: var(--app-surface); border-color: var(--app-border); box-shadow: var(--app-shadow); }
 .player-app .service-choice { background: var(--app-surface-alt); color: var(--app-text); border-color: var(--app-border); }
@@ -263,6 +266,7 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
 .player-app .home-empty-state strong { color: var(--app-text); }
 .player-app .home-empty-state p { margin: 3px 0 0; font-size: var(--app-text-sm); }
 .player-app .section-heading h2, .player-app .my-bookings h2 { font-size: var(--app-heading-md); }
+.player-app .reservations-only-page .my-bookings { padding-top: 0; }
 .player-app .sport-card strong, .player-app .booking-list-item h3 { font-size: var(--app-text-lg); }
 .player-app .sport-card small, .player-app .booking-list-item p, .player-app .booking-muted, .player-app .field-help { font-size: var(--app-text-sm); }
 .player-app .booking-screen-heading h2, .player-app .reservation-detail-card h1 { font-size: var(--app-heading-lg); }
@@ -309,11 +313,22 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
 .player-app .wizard-empty { padding: 22px; border: 1px dashed var(--app-border); border-radius: var(--app-radius-md); color: var(--app-text-muted); text-align: center; }
 .player-app .wizard-player-card { padding: var(--app-space-5); border: 1px solid var(--app-border); border-radius: var(--app-radius-md); background: var(--app-surface-alt); }
 .player-app .wizard-addon { background: var(--app-surface-alt); border: 1px solid var(--app-border); border-radius: var(--app-radius-md); color: var(--app-text); padding: var(--app-space-4); }
+.player-app .wizard-context { margin-top: var(--app-space-2); color: var(--app-text-muted); font-size: var(--app-text-sm); line-height: 1.4; overflow-wrap: anywhere; }
+.player-app .wizard-addon [hidden] { display: none !important; }
 .player-app .wizard-addon .switch-line { color: var(--app-text) !important; font-size: 1rem; font-weight: 500; }
 .player-app .wizard-addon .switch-line span { color: inherit; }
-.player-app .wizard-addon > div:not(.switch-line) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--app-space-3); margin-top: var(--app-space-4); }
+.player-app .wizard-addon .substitutes-controls { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--app-space-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.player-app .wizard-addon .booking-match-category-fields { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--app-space-3); min-width: 0; }
+.player-app .wizard-addon .switch-line-substitutes { align-self: start; margin: 0; padding-top: 0; }
+.player-app .wizard-addon > div:not(.switch-line) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--app-space-3); margin-top: var(--app-space-4); align-items: start; }
+.player-app .wizard-addon .booking-match-players-field { min-width: 0; }
+.player-app .wizard-addon .booking-match-players-field > .field-help { min-height: 2.7em; }
+.player-app .wizard-addon #booking-substitutes-field { min-width: 0; }
+.player-app .wizard-addon label:has(#booking-match-description) { grid-column: 1 / -1; }
 .player-app .wizard-addon label:not(.switch-line) { display: grid; gap: var(--app-space-2); color: var(--app-text); font-size: 0.875rem; font-weight: 600; }
+.player-app .wizard-addon label:not(.switch-line) .field-help { color: var(--app-text-muted); font-size: var(--app-text-xs); font-weight: 400; line-height: 1.35; }
 .player-app .wizard-addon input:not([type="checkbox"]), .player-app .wizard-addon select, .player-app .wizard-addon textarea { width: 100%; min-height: 48px; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-input-bg, var(--app-surface)); color: var(--app-text); padding: 0.7rem 0.85rem; font: inherit; }
+.player-app .wizard-addon input[readonly] { background: var(--app-surface); color: var(--app-primary-hover); font-weight: 800; cursor: not-allowed; }
 .player-app .wizard-addon textarea { min-height: 96px; resize: vertical; }
 .player-app .wizard-addon input:focus, .player-app .wizard-addon select:focus, .player-app .wizard-addon textarea:focus { outline: 2px solid var(--app-primary); outline-offset: 2px; }
 .player-app .wizard-player-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
@@ -338,7 +353,7 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
     .player-app .wizard-choice strong { font-size: 16px; }
     .player-app .wizard-actions .button { flex: 1; }
     .player-app .wizard-addon { padding: var(--app-space-4); }
-    .player-app .wizard-addon > div:not(.switch-line) { grid-template-columns: 1fr; }
+    .player-app .wizard-addon > div:not(.switch-line), .player-app .wizard-addon .substitutes-controls, .player-app .wizard-addon .booking-match-category-fields { grid-template-columns: 1fr; }
     .player-app .home-services .sport-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; overflow: visible; padding: 2px 0; }
     .player-app .home-services .sport-card { min-width: 0; min-height: 132px; padding: 14px; }
     .player-app .home-services .sport-icon { width: 34px; height: 34px; margin-bottom: 12px; font-size: 16px; }
@@ -419,6 +434,12 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
 .player-app .match-create-form label { color: var(--app-text); }
 .player-app .match-create-form select, .player-app .match-create-form input, .player-app .match-create-form textarea { width: 100%; }
 .player-app .selected-booking-card { display: grid; gap: 4px; margin-top: 12px; padding: 14px 16px; background: var(--app-surface-alt); border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); }
+.player-app .reservation-match-info { margin-top: var(--app-space-5); padding: var(--app-space-4); background: var(--app-surface-alt); border: 1px solid var(--app-border); border-radius: var(--app-radius-md); }
+.player-app .reservation-match-info h2 { margin: 0 0 var(--app-space-3); color: var(--app-text); font-size: var(--app-heading-md); }
+.player-app .reservation-payment-scenarios { margin: var(--app-space-4) 0; padding: var(--app-space-3); border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-surface); }
+.player-app .reservation-payment-scenarios p { margin: var(--app-space-2) 0; color: var(--app-text-muted); font-size: var(--app-text-sm); }
+.player-app .payment-scenario-list { display: grid; gap: 0; }
+.player-app .payment-scenario-list > div { display: flex; justify-content: space-between; gap: var(--app-space-3); padding: var(--app-space-2) 0; border-top: 1px solid var(--app-border); }
 .player-app .selected-booking-card strong { color: var(--app-text); }
 .player-app .selected-booking-card span, .player-app .field-help { color: var(--app-text-muted); font-size: var(--app-text-sm); }
 .player-app .places-summary { margin: 14px 0 0; color: var(--app-selection); font-size: var(--app-text-sm); font-weight: 800; }
@@ -611,3 +632,17 @@ body.player-app { background: var(--app-bg); color: var(--app-text); font-family
     .player-app .match-request-actions { width: 100%; padding-left: 42px; }
 }
 .player-app .booking-discount{color:var(--app-selection)!important;font-weight:700}
+.player-app .reservation-detail-actions { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0 4px; }
+.player-app .reservation-detail-actions .button { margin:0; }
+.player-app .reservation-share-message { margin:0; padding:10px 12px; border:1px solid var(--app-border); border-radius:var(--app-radius-md); background:var(--app-surface-alt); color:var(--app-text); font-size:var(--app-text-sm); }
+@media (max-width:760px) { .player-app .reservation-detail-actions { display:grid; grid-template-columns:1fr; } .player-app .reservation-detail-actions .button { width:100%; } }
+.player-app .sport-profile-settings { display:grid; gap:10px; padding:0; border:0; }
+.player-app .sport-profile-settings legend { margin-bottom:0; }
+.player-app .sport-profile-settings .field-help { margin:0; color:var(--app-text-muted); font-size:var(--app-text-sm); }
+.player-app .sport-profile-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
+.player-app .sport-profile-card { display:grid; gap:12px; padding:16px; border:1px solid var(--app-border); border-radius:var(--app-radius-md); background:var(--app-surface-alt); }
+.player-app .sport-profile-card[hidden] { display:none; }
+.player-app .sport-profile-card h3 { margin:0; color:var(--app-text); font-size:var(--app-text-lg); }
+.player-app .sport-profile-card label { color:var(--app-text); }
+.player-app .sport-profile-empty { margin:0; padding:12px 14px; border:1px dashed var(--app-border); border-radius:var(--app-radius-md); background:var(--app-surface-alt); color:var(--app-text-muted); font-size:var(--app-text-sm); }
+@media (max-width:760px) { .player-app .sport-profile-grid { grid-template-columns:1fr; } }

@@ -27,7 +27,8 @@ class Cookie extends BaseConfig
      *
      * @var DateTimeInterface|int|string
      */
-    public $expires = 0;
+    // Mantener la sesión del portal al recargar o navegar entre sus pasos.
+    public $expires = 86400;
 
     /**
      * --------------------------------------------------------------------------

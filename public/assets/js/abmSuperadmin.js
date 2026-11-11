@@ -28,6 +28,12 @@ const fieldFormModalElement = document.getElementById('fieldFormModal')
 const fieldFormModal = fieldFormModalElement ? new bootstrap.Modal(fieldFormModalElement) : null
 const fieldFormModalTitle = document.getElementById('fieldFormModalTitle')
 const fieldFormMessage = document.getElementById('fieldFormMessage')
+const serviceFormModalElement = document.getElementById('serviceFormModal')
+const serviceFormModal = serviceFormModalElement ? new bootstrap.Modal(serviceFormModalElement) : null
+const serviceFormModalTitle = document.getElementById('serviceFormModalTitle')
+const serviceFormModalBody = document.getElementById('serviceFormModalBody')
+let activeServiceForm = null
+let activeServiceFormPlaceholder = null
 const serviceFieldsTableBody = document.getElementById('serviceFieldsTableBody')
 const adminTabs = new bootstrap.Tab(document.getElementById('nav-tab'))
 const toggleCancelReservations = document.getElementById('toggleCancelReservations')
@@ -172,6 +178,37 @@ function initServiceConfigForms(scope = document) {
 
 initServiceConfigForms()
 hydrateHistoryContainers().catch(() => {})
+
+function openServiceFormModal(form, title) {
+    if (!form || !serviceFormModal || !serviceFormModalBody) return
+    activeServiceForm = form
+    activeServiceFormPlaceholder = document.createComment('service-form-placeholder')
+    form.parentNode.insertBefore(activeServiceFormPlaceholder, form)
+    serviceFormModalBody.replaceChildren(form)
+    const serviceName = form.querySelector('[name="name"]')?.value?.trim() || ''
+    if (serviceFormModalTitle) serviceFormModalTitle.textContent = serviceName ? `${title}: ${serviceName}` : title
+    const serviceNameInput = form.querySelector('[name="name"]')
+    if (serviceNameInput) {
+        serviceNameInput.oninput = () => {
+            const currentName = serviceNameInput.value.trim()
+            if (serviceFormModalTitle) serviceFormModalTitle.textContent = currentName ? `${title}: ${currentName}` : title
+        }
+    }
+    initServiceConfigForms(serviceFormModalBody)
+    serviceFormModal.show()
+}
+
+if (serviceFormModalElement) {
+    serviceFormModalElement.addEventListener('hidden.bs.modal', () => {
+        if (activeServiceForm && activeServiceFormPlaceholder?.isConnected) {
+            activeServiceFormPlaceholder.parentNode.insertBefore(activeServiceForm, activeServiceFormPlaceholder)
+            activeServiceFormPlaceholder.remove()
+        }
+        activeServiceForm = null
+        activeServiceFormPlaceholder = null
+        if (serviceFormModalBody) serviceFormModalBody.replaceChildren()
+    })
+}
 
 function getServiceTypeOptions() {
     return Array.from(document.querySelectorAll('[name="createServiceTypeOption"]')).map(option => ({
@@ -354,6 +391,7 @@ function showFieldFormMessage(type, message) {
     fieldFormMessage.className = `alert alert-${type}`
     fieldFormMessage.textContent = message
     fieldFormMessage.classList.remove('d-none')
+    fieldFormMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 }
 
 function clearFieldFormMessage() {
@@ -530,8 +568,13 @@ document.addEventListener('submit', async (e) => {
     const serviceForm = e.target.closest('.service-config-form')
     if (serviceForm) {
         e.preventDefault()
+        const feedback = serviceForm.querySelector('.service-form-message')
         const submitButton = serviceForm.querySelector('[type="submit"]')
         const originalText = submitButton ? submitButton.textContent : ''
+        if (feedback) {
+            feedback.className = 'service-form-message alert alert-info'
+            feedback.textContent = 'Guardando servicio...'
+        }
         if (submitButton) {
             submitButton.disabled = true
             submitButton.textContent = 'Guardando...'
@@ -550,9 +593,16 @@ document.addEventListener('submit', async (e) => {
                 throw new Error('No se pudo guardar el servicio.')
             }
             await refreshServicesPanelFromServer()
+            if (serviceFormModalElement && serviceFormModalElement.classList.contains('show')) {
+                serviceFormModal.hide()
+            }
         } catch (error) {
             console.error('Error:', error)
-            alert('No se pudo guardar el servicio. Intenta nuevamente.')
+            if (feedback) {
+                feedback.className = 'service-form-message alert alert-danger'
+                feedback.textContent = 'No se pudo guardar el servicio. Intenta nuevamente.'
+                feedback.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+            }
         } finally {
             if (submitButton) {
                 submitButton.disabled = false
@@ -629,13 +679,8 @@ document.addEventListener('click', async (e) => {
         if (serviceEditAction) {
             const panel = document.getElementById(`serviceEditPanel${serviceEditAction.dataset.serviceId}`)
             if (!panel) return
-            document.querySelectorAll('.service-edit-panel').forEach(row => {
-                if (row !== panel) row.classList.add('d-none')
-            })
-            panel.classList.toggle('d-none')
-            if (!panel.classList.contains('d-none')) {
-                panel.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            }
+            const form = panel.querySelector('.service-config-form')
+            openServiceFormModal(form, 'Editar servicio')
             return
         }
 
@@ -645,11 +690,8 @@ document.addEventListener('click', async (e) => {
             if (servicesPanelIsActive) {
                 const currentNewServicePanel = document.getElementById('newServicePanel')
                 if (!currentNewServicePanel) return
-                currentNewServicePanel.classList.toggle('d-none')
-                document.querySelectorAll('.service-edit-panel').forEach(row => row.classList.add('d-none'))
-                if (!currentNewServicePanel.classList.contains('d-none')) {
-                    currentNewServicePanel.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                }
+                const form = currentNewServicePanel.querySelector('.service-config-form')
+                openServiceFormModal(form, 'Nuevo servicio')
                 return
             }
             setFieldModalMode('create')
@@ -1640,78 +1682,43 @@ function fillDiv(field) {
 
     const div = `
         <div class="editFields" id="editFields">
-            <form action="${webBaseUrl}editField/${field.id}" method="POST" class="field-ajax-form">
-
-                <div class="form-check form-switch mt-4">
-                    <input class="form-check-input" type="checkbox" role="switch" name="disabled" id="disableField" ${disabledCheck}>
-                    <label class="form-check-label" for="disableField">Deshabilitar servicio</label>
-                </div>
-
-                <div class="input-group mt-3 mb-3">
-                    <span class="input-group-text" id="basic-addon1">Nombre servicio</span>
-                    <input type="text" class="form-control" value="${escapeHtml(field.name)}" name="nombre" placeholder="Ingrese el nombre del servicio" aria-label="Nombre servicio" aria-describedby="basic-addon1">
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label d-block mb-2">Tipo de reserva</label>
-                    <select class="form-select visually-hidden" name="serviceType" id="${serviceSelectId}" aria-hidden="true" tabindex="-1">
-${serviceSelectOptions}
-                    </select>
-                    <div class="service-type-options">
-${serviceRadioOptions}
+            <form action="${webBaseUrl}editField/${field.id}" method="POST" class="field-ajax-form field-editor-form">
+                <section class="field-editor-section field-editor-section--main">
+                    <div class="field-editor-section-heading">
+                        <div><span class="field-editor-eyebrow">Configuración</span><h6>Datos principales</h6></div>
+                        <label class="field-editor-switch"><input class="form-check-input" type="checkbox" role="switch" name="disabled" id="disableField" ${disabledCheck}><span>Servicio deshabilitado</span></label>
                     </div>
-                </div>
-
-                <div class="edit-field-frame mb-3">
-                    <div class="edit-field-frame-title">Servicio</div>
-                    <div class="input-group mb-3">
-                        <span class="input-group-text">Duracion del servicio</span>
-                        <input type="number" class="form-control" id="${blockMinutesId}" value="${blockMinutes}" name="blockMinutes" min="30" step="30" aria-label="Duracion del servicio">
+                    <div class="field-editor-grid field-editor-grid--identity">
+                        <label class="field-editor-field field-editor-field--wide"><span>Nombre del servicio</span><input type="text" class="form-control" value="${escapeHtml(field.name)}" name="nombre" placeholder="Ej.: Cancha 1" required></label>
+                        <div class="field-editor-field"><span>Tipo de reserva</span>
+                            <select class="form-select visually-hidden" name="serviceType" id="${serviceSelectId}" aria-hidden="true" tabindex="-1">${serviceSelectOptions}</select>
+                            <div class="service-type-options field-editor-service-types">${serviceRadioOptions}</div>
+                        </div>
                     </div>
+                </section>
 
-                    <div class="input-group mb-3">
-                        <span class="input-group-text" id="basic-addon3">Medidas</span>
-                        <input type="text" class="form-control" value="${escapeHtml(field.sizes || '')}" name="medidas" placeholder="Ingrese las medidas de la cancha" aria-label="Medidas" aria-describedby="basic-addon3">
+                <section class="field-editor-section">
+                    <div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Información</span><h6>Características del recurso</h6></div><span class="field-editor-helper">Completá solo lo que quieras mostrar.</span></div>
+                    <div class="field-editor-grid">
+                        <label class="field-editor-field"><span>Duración del servicio <small>(minutos)</small></span><input type="number" class="form-control" id="${blockMinutesId}" value="${blockMinutes}" name="blockMinutes" min="30" step="30" required></label>
+                        <label class="field-editor-field"><span>Medidas</span><input type="text" class="form-control" value="${escapeHtml(field.sizes || '')}" name="medidas" placeholder="Ej.: 40 x 20 m"></label>
+                        <label class="field-editor-field"><span>Tipo de piso</span><input type="text" class="form-control" value="${escapeHtml(field.floor_type || '')}" name="tipoPiso" placeholder="Ej.: Sintético"></label>
+                        <label class="field-editor-field"><span>Detalle <small>(opcional)</small></span><input type="text" class="form-control" value="${escapeHtml(field.field_type || '')}" name="tipoCancha" placeholder="Ej.: Con iluminación"></label>
                     </div>
+                    <label class="field-editor-check"><input class="form-check-input" type="checkbox" name="tipoTecho" role="switch" id="tipoTechoEdit${field.id}" ${roofedCheck}><span>Cancha techada</span></label>
+                </section>
 
-                    <div class="input-group mb-3">
-                        <span class="input-group-text" id="basic-addon2">Tipo de piso</span>
-                        <input type="text" class="form-control" value="${escapeHtml(field.floor_type || '')}" name="tipoPiso" placeholder="Ingrese el tipo de piso de la cancha" aria-label="Tipo piso" aria-describedby="basic-addon2">
+                <section class="field-editor-section field-editor-section--prices">
+                    <div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Tarifas</span><h6>Precios del servicio</h6></div><span class="field-editor-helper">Valores en pesos argentinos.</span></div>
+                    <div class="field-editor-price-grid">
+                        <label class="field-editor-price"><span>Precio base</span><div class="field-editor-price-input"><b>$</b><input type="text" class="form-control" value="${escapeHtml(basePriceDisplay)}" name="valor" placeholder="0,00" inputmode="decimal" aria-label="Valor base" required></div><small>Se aplica durante el horario normal.</small></label>
+                        <label class="field-editor-price"><span>Precio nocturno</span><div class="field-editor-price-input"><b>$</b><input type="text" class="form-control" value="${escapeHtml(nightPriceDisplay)}" name="valorIluminacion" placeholder="0,00" inputmode="decimal" aria-label="Valor nocturno"></div><small>Si queda vacío, usa el precio base.</small></label>
                     </div>
+                </section>
 
-                    <div class="input-group mb-0">
-                        <span class="input-group-text" id="basic-addon4">Detalle</span>
-                        <input type="text" class="form-control" value="${escapeHtml(field.field_type || '')}" name="tipoCancha" placeholder="Detalle opcional" aria-label="Detalle" aria-describedby="basic-addon4">
-                    </div>
-                </div>
+                <section class="field-editor-section field-editor-history"><div class="field-editor-section-heading"><div><span class="field-editor-eyebrow">Registro</span><h6>Historial de cambios</h6></div></div><div class="admin-history-list" data-history-entity="field" data-history-entity-id="${escapeHtml(field.id)}"><div class="text-muted small">Cargando historial...</div></div></section>
 
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="tipoTecho" role="switch" id="tipoTechoEdit${field.id}" ${roofedCheck}>
-                    <label class="form-check-label" for="tipoTechoEdit${field.id}">Es techada</label>
-                </div>
-
-                <div class="edit-field-frame mb-3 mt-3">
-                    <div class="edit-field-frame-title">Precios</div>
-                    <div class="input-group mb-3">
-                        <span class="input-group-text">Base</span>
-                        <input type="text" class="form-control" value="${escapeHtml(basePriceDisplay)}" name="valor" placeholder="Ej: 40,00" inputmode="decimal" aria-label="Valor base">
-                    </div>
-
-                    <div class="input-group mb-0">
-                        <span class="input-group-text">Nocturno</span>
-                        <input type="text" class="form-control" value="${escapeHtml(nightPriceDisplay)}" name="valorIluminacion" placeholder="Ej: 50,00 (opcional)" inputmode="decimal" aria-label="Valor nocturno">
-                    </div>
-                </div>
-
-                <div class="service-config-section mb-3">
-                    <h6>Historial de cambios</h6>
-                    <div class="admin-history-list" data-history-entity="field" data-history-entity-id="${escapeHtml(field.id)}">
-                        <div class="text-muted small">Cargando historial...</div>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn btn-success">Guardar</button>
-                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancelar</button>
+                <div class="field-editor-actions"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar cambios</button></div>
             </form>
         </div>
         `

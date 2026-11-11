@@ -7,6 +7,11 @@ if ($leaveAllowed && $settings['leave_hours_limit'] !== null && $settings['leave
 $profileUrl = static function (int $playerId) use ($match): string {
     return base_url('app/jugadores/' . $playerId . '?partido=' . (int) $match['id']);
 };
+$categoryLabel = static function ($value): string {
+    $labels = ['principiante' => 'Principiante', 'sin_categoria' => 'Sin categoría / No sé'];
+    $value = (string) $value;
+    return $labels[$value] ?? ($value !== '' ? $value . '.ª categoría' : 'Cualquier categoría');
+};
 ?>
 <section class="match-detail-page">
     <a class="back-link" href="<?= base_url('app/partidos') ?>">← Volver a partidos</a>
@@ -18,8 +23,25 @@ $profileUrl = static function (int $playerId) use ($match): string {
         <div class="match-capacity detail-capacity"><strong><?= (int) $match['confirmed_players'] + (int) ($match['reserved_players'] ?? 0) ?>/<?= (int) $match['max_players'] ?></strong><span>lugares ocupados · <?= max(0, (int) $match['max_players'] - (int) $match['confirmed_players'] - (int) ($match['reserved_players'] ?? 0)) ?> lugares libres</span></div>
         <?php if (! empty($match['description'])): ?><p class="match-description"><?= esc($match['description']) ?></p><?php endif; ?>
         <p class="match-join-note"><?= $match['join_mode'] === 'auto' ? 'Podés incorporarte directamente si hay lugar.' : 'Tu solicitud será revisada por el organizador.' ?></p>
+        <?php if (! empty($match['padel_category_min']) || ! empty($match['padel_category_max'])): ?><p class="match-join-note"><strong>Categoría de pádel:</strong> <?= esc($categoryLabel($match['padel_category_min'] ?? '')) ?> a <?= esc($categoryLabel($match['padel_category_max'] ?? '')) ?></p><?php endif; ?>
         <?php if (($match['payment_mode'] ?? '') === 'organizer_deposit'): ?><p class="match-join-note">La seña de la reserva la abona el organizador. Los participantes no pagan online.</p><?php elseif (($match['payment_mode'] ?? '') === 'venue'): ?><p class="match-join-note">Cada jugador debe abonar $<?= number_format((float) ($match['participant_share'] ?? 0), 2, ',', '.') ?> en la cancha. El administrador registrará el pago.</p><?php elseif (($match['payment_mode'] ?? '') === 'split'): ?><p class="match-join-note">Tu parte estimada es de $<?= number_format((float) ($participant['amount_due'] ?? $match['participant_share'] ?? 0), 2, ',', '.') ?>. Los pagos se confirman únicamente con Mercado Pago.</p><?php endif; ?>
         <?php if (!empty($participant) && ($participant['payment_status'] ?? '') === 'pending' && ($match['payment_mode'] ?? '') === 'split'): ?><form method="post" action="<?= base_url('app/partidos/' . $match['id'] . '/pago/crear') ?>"><input type="hidden" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>"><button class="button button-primary button-full" type="submit">Pagar mi parte con Mercado Pago</button></form><?php elseif (!empty($participant) && ($participant['payment_status'] ?? '') === 'paid'): ?><div class="match-success">Tu pago está registrado.</div><?php endif; ?>
+        <?php if (($match['payment_mode'] ?? '') !== 'organizer_deposit' && (float) ($match['payment_total'] ?? 0) > 0): ?>
+            <?php
+            $matchTotal = (float) $match['payment_total'];
+            $matchCapacity = max(1, (int) ($match['max_players'] ?? 0));
+            $matchStarters = min($matchCapacity, max(1, (int) ($match['max_starters'] ?? $matchCapacity)));
+            ?>
+            <section class="reservation-payment-scenarios" aria-labelledby="match-payment-scenarios-title">
+                <strong id="match-payment-scenarios-title">Importe según cantidad de jugadores</strong>
+                <p>El total se reparte entre los participantes. Cuantos más jugadores se sumen, menor es el importe individual.</p>
+                <div class="payment-scenario-list">
+                    <?php for ($playersCount = $matchStarters; $playersCount <= $matchCapacity; $playersCount++): ?>
+                        <div><span><?= $playersCount ?> <?= $playersCount === 1 ? 'jugador' : 'jugadores' ?></span><strong>$ <?= esc(number_format(round($matchTotal / $playersCount, 2), 2, ',', '.')) ?> por jugador</strong></div>
+                    <?php endfor; ?>
+                </div>
+            </section>
+        <?php endif; ?>
         <?php if (! $isOrganizer && $match['status'] === 'open'): ?>
             <?php if (! empty($request) && $request['status'] === 'pending'): ?><form method="post" action="<?= base_url('app/partidos/' . $match['id'] . '/solicitud/cancelar') ?>"><input type="hidden" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>"><button class="button button-ghost button-full" type="submit">Cancelar solicitud</button></form>
             <?php elseif (! empty($request) && $request['status'] === 'accepted'): ?><div class="match-success">Ya estás incorporado a este partido.</div>

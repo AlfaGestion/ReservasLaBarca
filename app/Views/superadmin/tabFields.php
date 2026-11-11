@@ -27,18 +27,16 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
     $code = (string)($service['code'] ?? '');
     $offerActive = !empty($service['offer_active']);
     ?>
-    <form action="<?= $action ?>" method="POST" class="service-config-card service-config-form">
-        <div class="service-config-header">
-            <div>
-                <div class="text-uppercase small text-muted fw-semibold">Servicio</div>
-                <h5 class="mb-1"><?= esc($service['name'] ?? 'Nuevo servicio') ?></h5>
-            </div>
+    <form action="<?= $action ?>" method="POST" class="service-config-card service-config-form field-editor-form">
+        <div class="service-config-header field-editor-actions">
             <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar</button>
         </div>
 
+        <div class="service-form-message alert d-none" role="alert"></div>
+
         <input type="hidden" name="code" value="<?= esc($code) ?>">
 
-        <div class="row g-3">
+        <div class="row g-3 field-editor-section service-editor-main">
             <div class="col-lg-5">
                 <label class="form-label">Nombre visible</label>
                 <input class="form-control" name="name" value="<?= esc($service['name'] ?? '') ?>" required>
@@ -52,21 +50,21 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
                     <h6>Estados</h6>
                     <div class="row g-2">
                         <div class="col-md-4">
-                            <div class="form-check">
+                            <div class="form-check form-switch service-state-option">
                                 <input class="form-check-input" type="checkbox" id="active<?= esc($code) ?>" name="active" <?= !array_key_exists('active', $service) || !empty($service['active']) ? 'checked' : '' ?>>
                                 <label class="form-check-label fw-semibold" for="active<?= esc($code) ?>">Activo</label>
                                 <div class="small text-muted">Permite usar este servicio en el sistema.</div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="form-check">
+                            <div class="form-check form-switch service-state-option">
                                 <input class="form-check-input" type="checkbox" id="online<?= esc($code) ?>" name="online_available" <?= !array_key_exists('online_available', $service) || !empty($service['online_available']) ? 'checked' : '' ?>>
                                 <label class="form-check-label fw-semibold" for="online<?= esc($code) ?>">Visible online</label>
                                 <div class="small text-muted">Lo muestra en la web para que los clientes lo puedan reservar.</div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="form-check">
+                            <div class="form-check form-switch service-state-option">
                                 <input class="form-check-input" type="checkbox" id="quinchoAddon<?= esc($code) ?>" name="allows_quincho_addon" <?= !array_key_exists('allows_quincho_addon', $service) || !empty($service['allows_quincho_addon']) ? 'checked' : '' ?>>
                                 <label class="form-check-label fw-semibold" for="quinchoAddon<?= esc($code) ?>">Permite quincho adicional</label>
                                 <div class="small text-muted">Después de reservar este servicio, ofrece agregar quincho si está disponible.</div>
@@ -77,7 +75,7 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
             </div>
         </div>
 
-        <div class="service-config-section">
+        <div class="service-config-section field-editor-section">
             <h6>Horarios y duración</h6>
             <div class="row g-3 align-items-end">
                 <div class="col-md-3">
@@ -102,7 +100,7 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
             </div>
         </div>
 
-        <div class="service-config-section service-offer-section">
+        <div class="service-config-section service-offer-section field-editor-section">
             <h6>Oferta</h6>
             <div class="form-check form-switch mb-3">
                 <input class="form-check-input service-offer-toggle" type="checkbox" role="switch" id="offer<?= esc($code) ?>" name="offer_active" <?= $offerActive ? 'checked' : '' ?>>
@@ -141,7 +139,7 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
         </div>
 
         <?php if (!$isCreate && !empty($service['id'])) : ?>
-            <div class="service-config-section">
+            <div class="service-config-section field-editor-section">
                 <h6>Historial de cambios</h6>
                 <div class="admin-history-list" data-history-entity="service" data-history-entity-id="<?= esc($service['id']) ?>">
                     <div class="text-muted small">Cargando historial...</div>
@@ -291,18 +289,30 @@ $renderServiceForm = static function (array $service, bool $isCreate = false) us
 </div>
 </div>
 
+<div class="modal fade" id="serviceFormModal" tabindex="-1" aria-labelledby="serviceFormModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable field-editor-dialog">
+        <div class="modal-content field-editor-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="serviceFormModalTitle">Editar servicio</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body field-editor-body" id="serviceFormModalBody"></div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="fieldFormModal" tabindex="-1" aria-labelledby="fieldFormModalTitle" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable field-editor-dialog">
+        <div class="modal-content field-editor-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="fieldFormModalTitle">Precio</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body field-editor-body">
                 <div id="fieldFormMessage" class="alert d-none"></div>
 
                 <div class="enterFields d-none" id="enterFields">
-                    <form action="<?= base_url('saveField') ?>" method="POST" class="field-ajax-form">
+                    <form action="<?= base_url('saveField') ?>" method="POST" class="field-ajax-form field-editor-form">
                         <div class="input-group mt-3 mb-3">
                             <span class="input-group-text">Nombre servicio</span>
                             <input type="text" class="form-control" name="nombre" placeholder="Ingrese el nombre del servicio" aria-label="Nombre servicio">

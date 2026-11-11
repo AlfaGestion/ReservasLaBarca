@@ -89,7 +89,9 @@ class PlayerPortal extends BaseController
             'player_email' => $player['email'],
             'player_session_version' => (int) ($player['session_version'] ?? 0),
         ]);
-        return redirect()->to(base_url('app'))->with('player_msg', [
+        $rememberPayload = implode('|', [(int) $player['id'], (int) ($player['session_version'] ?? 0), time() + 86400]);
+        $rememberToken = rtrim(strtr(base64_encode($rememberPayload), '+/', '-_'), '=') . '.' . hash_hmac('sha256', $rememberPayload, (string) $player['password_hash']);
+        return redirect()->to(base_url('app'))->setCookie('player_portal_auth', $rememberToken, 86400, '', '/', '', null, true, 'Lax')->with('player_msg', [
             'type' => 'success',
             'body' => '¡Bienvenido, ' . trim($player['first_name'] . ' ' . $player['last_name']) . '! Nos alegra volver a verte.',
         ]);
@@ -288,6 +290,31 @@ class PlayerPortal extends BaseController
             'notify_favorite_matches' => $this->request->getPost('notify_favorite_matches') ? 1 : 0,
             'updated_at' => date('Y-m-d H:i:s'),
         ];
+        $sportProfiles = json_decode((string) ($player['sport_profiles'] ?? '{}'), true);
+        $sportProfiles = is_array($sportProfiles) ? $sportProfiles : [];
+        $footballPositions = ['arquero', 'defensor', 'mediocampista', 'delantero', 'cualquier'];
+        $footballLevels = ['principiante', 'intermedio', 'avanzado'];
+        $padelSides = ['drive', 'reves', 'ambos'];
+        $padelCategories = ['principiante', '8', '7', '6', '5', '4', '3', '2', '1', 'sin_categoria'];
+        if ($this->request->getPost('football_position') !== null || $this->request->getPost('football_level') !== null) {
+            $footballPosition = trim((string) $this->request->getPost('football_position'));
+            $footballLevel = trim((string) $this->request->getPost('football_level'));
+            $sportProfiles['football'] = array_merge($sportProfiles['football'] ?? [], [
+                'position' => in_array($footballPosition, $footballPositions, true) ? $footballPosition : null,
+                'level' => in_array($footballLevel, $footballLevels, true) ? $footballLevel : null,
+            ]);
+        }
+        if ($this->request->getPost('padel_position') !== null || $this->request->getPost('padel_category') !== null) {
+            $padelPosition = trim((string) $this->request->getPost('padel_position'));
+            $padelCategory = trim((string) $this->request->getPost('padel_category'));
+            $sportProfiles['padel'] = array_merge($sportProfiles['padel'] ?? [], [
+                'position' => in_array($padelPosition, $padelSides, true) ? $padelPosition : null,
+                'category' => in_array($padelCategory, $padelCategories, true) ? $padelCategory : null,
+            ]);
+        }
+        if (\Config\Database::connect()->fieldExists('sport_profiles', 'player_accounts')) {
+            $data['sport_profiles'] = json_encode($sportProfiles, JSON_UNESCAPED_UNICODE);
+        }
         if (! $player || $data['first_name'] === '' || $data['last_name'] === '') {
             return $this->redirectWithError('app/perfil', 'Nombre y apellido son obligatorios.');
         }
@@ -298,7 +325,7 @@ class PlayerPortal extends BaseController
     public function logout()
     {
         session()->remove(['player_logged_in', 'player_id', 'player_email', 'player_session_version']);
-        return redirect()->to(base_url('app'));
+        return redirect()->to(base_url('app'))->setCookie('player_portal_auth', '', -1, '', '/', '', null, true, 'Lax');
     }
 
     private function validFavoriteSports($values): array

@@ -1,5 +1,6 @@
 <div class="container-fluid py-4 portal-admin">
     <div class="d-flex justify-content-between align-items-center mb-4"><div><span class="text-uppercase small text-warning fw-bold">Administración</span><h1 class="mb-1">Pagos de partidos abiertos</h1><p class="text-muted mb-0">Modalidades y vencimiento de aportes independientes de la reserva.</p></div><a class="btn btn-outline-secondary" href="<?= base_url('admin/portal') ?>">Volver</a></div>
+    <?= view('player_portal_admin/_nav', ['section' => 'configuracion']) ?>
     <?php if (session('msg')): ?><div class="alert alert-<?= esc(session('msg.type')) ?>"><?= esc(session('msg.body')) ?></div><?php endif; ?><form method="post" action="<?= base_url('admin/portal/configuracion/pagos/guardar') ?>" class="card"><div class="card-body">
         <?= csrf_field() ?><h2 class="h5">Modalidades habilitadas</h2>
         <label class="form-check"><input class="form-check-input" type="checkbox" name="payment_mode_organizer_deposit" value="1" <?= !empty($settings['payment_mode_organizer_deposit']) ? 'checked' : '' ?>> <span class="form-check-label">El organizador paga la seña</span></label>

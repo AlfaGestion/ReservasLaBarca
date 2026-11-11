@@ -2,6 +2,14 @@
 $player = $player ?? null;
 $message = session('player_msg');
 helper('url');
+$currentPath = trim((string) service('uri')->getPath(), '/');
+$navActive = static function (string $section) use ($currentPath): bool {
+    if ($section === 'inicio') return $currentPath === 'app';
+    if ($section === 'partidos') return strpos($currentPath, 'app/partidos') === 0 || strpos($currentPath, 'app/mis-partidos') === 0;
+    if ($section === 'reservas') return strpos($currentPath, 'app/reservas') === 0;
+    if ($section === 'perfil') return strpos($currentPath, 'app/perfil') === 0;
+    return false;
+};
 $playerNotifications = [];
 $playerUnreadNotifications = 0;
 $playerLastNotificationId = 0;
@@ -47,9 +55,12 @@ if ($player) {
 <header class="player-header">
     <a class="brand" href="<?= base_url('app') ?>"><img class="brand-logo" src="<?= base_url(PUBLIC_FOLDER . 'assets/images/logo.png') ?>" alt="La Barca Centro Deportivo"></a>
     <nav class="desktop-nav" aria-label="Navegación principal">
-        <a href="<?= base_url('app') ?>">Inicio</a>
-        <a href="<?= base_url('app/partidos') ?>">Partidos</a>
-        <?php if ($player): ?><a href="<?= base_url('app/perfil') ?>">Mi perfil</a><?php endif; ?>
+        <a class="<?= $navActive('inicio') ? 'is-active' : '' ?>" href="<?= base_url('app') ?>" <?= $navActive('inicio') ? 'aria-current="page"' : '' ?>>Inicio</a>
+        <a class="<?= $navActive('partidos') ? 'is-active' : '' ?>" href="<?= base_url('app/partidos') ?>" <?= $navActive('partidos') ? 'aria-current="page"' : '' ?>>Partidos</a>
+        <?php if ($player): ?>
+            <a class="<?= $navActive('reservas') ? 'is-active' : '' ?>" href="<?= base_url('app/reservas?vista=mis-reservas#mis-reservas') ?>" <?= $navActive('reservas') ? 'aria-current="page"' : '' ?>>Mis reservas</a>
+            <a class="<?= $navActive('perfil') ? 'is-active' : '' ?>" href="<?= base_url('app/perfil') ?>" <?= $navActive('perfil') ? 'aria-current="page"' : '' ?>>Mi perfil</a>
+        <?php endif; ?>
     </nav>
     <div class="header-actions">
         <button class="theme-toggle" type="button" data-theme-toggle aria-label="Cambiar tema" title="Cambiar tema">
@@ -93,10 +104,10 @@ if ($player) {
 </main>
 <?php if ($player): ?><div class="player-notification-toast" data-notification-toast role="status" aria-live="polite" hidden></div><?php endif; ?>
 <nav class="mobile-nav" aria-label="Navegación móvil">
-    <a href="<?= base_url('app') ?>"><span>⌂</span>Inicio</a>
-    <a href="<?= base_url('app/partidos') ?>"><span>◉</span>Partidos</a>
-    <a href="<?= base_url('app/reservas') ?>"><span>▣</span>Reservas</a>
-    <a href="<?= base_url($player ? 'app/perfil' : 'app/login') ?>"><span>●</span><?= $player ? 'Perfil' : 'Ingresar' ?></a>
+    <a class="<?= $navActive('inicio') ? 'is-active' : '' ?>" href="<?= base_url('app') ?>"><span>⌂</span>Inicio</a>
+    <a class="<?= $navActive('partidos') ? 'is-active' : '' ?>" href="<?= base_url('app/partidos') ?>"><span>◉</span>Partidos</a>
+    <?php if ($player): ?><a class="<?= $navActive('reservas') ? 'is-active' : '' ?>" href="<?= base_url('app/reservas?vista=mis-reservas#mis-reservas') ?>"><span>▣</span>Mis reservas</a><?php else: ?><a class="<?= $navActive('reservas') ? 'is-active' : '' ?>" href="<?= base_url('app/reservas') ?>"><span>▣</span>Reservas</a><?php endif; ?>
+    <a class="<?= $navActive('perfil') ? 'is-active' : '' ?>" href="<?= base_url($player ? 'app/perfil' : 'app/login') ?>"><span>●</span><?= $player ? 'Perfil' : 'Ingresar' ?></a>
 </nav>
 </body>
 </html>

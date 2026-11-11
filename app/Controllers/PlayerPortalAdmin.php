@@ -320,10 +320,10 @@ class PlayerPortalAdmin extends BaseController
             return redirect()->to(base_url('admin/portal/servicios/' . $serviceId))->with('msg', ['type' => 'danger', 'body' => 'Revisá apertura, cierre y duración: deben formar turnos válidos dentro del horario del servicio.']);
         }
 
-        $maxPlayers = max(2, (int) $this->request->getPost('max_players'));
         $allowSubstitutes = $this->request->getPost('allow_substitutes') ? 1 : 0;
-        $maxStarters = min($maxPlayers, max(1, (int) $this->request->getPost('max_starters')));
-        $maxSubstitutes = $allowSubstitutes ? max(0, min($maxPlayers - $maxStarters, (int) $this->request->getPost('max_substitutes'))) : 0;
+        $maxStarters = max(2, (int) $this->request->getPost('max_starters'));
+        $maxSubstitutes = $allowSubstitutes ? max(0, (int) $this->request->getPost('max_substitutes')) : 0;
+        $maxPlayers = $maxStarters + $maxSubstitutes;
         $oldPortal = $this->db()->table('player_service_match_settings')->where('service_id', $serviceId)->get()->getRowArray() ?: [];
         $serviceData = [
             'name' => trim((string) $this->request->getPost('name')),
